@@ -22,14 +22,14 @@ export function Overview({ d }: Props) {
     <>
       <div className="hero">
         <div>
-          <span className="eyebrow">A LITTLE RIDE. A GREENER CAMPUS.</span>
+          <span className="eyebrow">BEIHANG · XUEYUAN ROAD CAMPUS</span>
           <h2>
             风经过校园，
             <br />
             也经过你的每一程。
           </h2>
-          <p>找到附近的自行车，让下一次出发更轻盈。</p>
-          <span className="hero-tag">绿色出行 · 从青行开始 ↗</span>
+          <p>从北航主楼到新主楼，在学院路校区找到附近的自行车。</p>
+          <span className="hero-tag">学院路校区 · 绿色出行从青行开始 ↗</span>
         </div>
         <div className="hero-bike">
           <Bike size={190} strokeWidth={1.1} />

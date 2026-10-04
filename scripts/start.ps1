@@ -16,10 +16,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Database account setup failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Database schema setup failed.' }
 & $nodeExecutable (Join-Path $PSScriptRoot 'seed.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'Demo data setup failed.' }
-if (-not (Test-Path -LiteralPath (Join-Path $projectRoot 'dist\index.html'))) {
-    & $npmExecutable run build
-    if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed.' }
-}
+& $npmExecutable run build
+if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed.' }
 $runtimePath = Join-Path $projectRoot '.runtime'
 $entryPath = Join-Path $projectRoot 'server\index.mjs'
 $pidPath = Join-Path $runtimePath 'app.pid'

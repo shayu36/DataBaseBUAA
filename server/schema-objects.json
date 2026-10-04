@@ -1,10 +1,10 @@
 {
   "database": "campus_bike",
-  "generated_at": "2026-10-04T16:44:47.464Z",
+  "generated_at": "2026-10-04T17:09:11.947Z",
   "views": [
+    "v_zone_inventory",
     "v_ride_details",
-    "v_user_carbon",
-    "v_zone_inventory"
+    "v_user_carbon"
   ],
   "triggers": [
     "trg_payment_guard",

@@ -1,4 +1,6 @@
 import bcrypt from "bcryptjs";
+import campus from "../database/campus-map.json" with { type: "json" };
+import { installCampusRoads, upgradeCampusMap } from "../server/campus.mjs";
 import { createPool, ledgerTransaction } from "../server/db.mjs";
 import { routeForZones, carbonKilograms } from "../server/business.mjs";
 const pool = createPool();
@@ -31,23 +33,20 @@ try {
     await c.query(
       "INSERT INTO staff(id,user_id,name,phone,job) VALUES(1,3,'郑一凡','13800000003','BOTH')",
     );
-    const zones = [
-      [1, "东门驿站", "校园东门 · 主入口", 160, 440, 24, 16],
-      [2, "图书馆", "图书馆南侧 · 知行广场", 450, 180, 24, 2],
-      [3, "教学楼", "第一教学楼 · 东侧", 760, 210, 20, 10],
-      [4, "学生公寓", "学生生活区 · 榕树路", 210, 750, 28, 25],
-      [5, "中心食堂", "中心食堂 · 北广场", 530, 550, 18, 9],
-      [6, "运动场", "体育中心 · 西门", 850, 700, 16, 4],
-    ];
+    const zones = campus.zones.map((z) => [
+      z.id,
+      z.name,
+      z.location,
+      z.x,
+      z.y,
+      z.capacity,
+      z.count,
+    ]);
     let bikeId = 1;
     for (const [id, name, location, x, y, capacity, count] of zones) {
       await c.query(
-        "INSERT INTO parking_zones(id,name,location,x,y,radius,capacity) VALUES(?,?,?,?,?,45,?)",
+        "INSERT INTO parking_zones(id,name,location,x,y,radius,capacity) VALUES(?,?,?,?,?,35,?)",
         [id, name, location, x, y, capacity],
-      );
-      await c.query(
-        "INSERT INTO road_nodes(id,name,x,y,zone_id) VALUES(?,?,?,?,?)",
-        [id, name, x, y, id],
       );
       for (let i = 0; i < count; i++)
         await c.query(
@@ -60,29 +59,7 @@ try {
           ],
         );
     }
-    await c.query(
-      "INSERT INTO road_nodes(id,name,x,y) VALUES(7,'银杏路口',420,400),(8,'湖畔绿道',730,460)",
-    );
-    for (const [a, b, d, s, f] of [
-      [1, 2, 390, 4, 3],
-      [1, 4, 320, 1, 2],
-      [1, 7, 265, 1, 1],
-      [2, 3, 320, 3, 2],
-      [2, 7, 225, 1, 1],
-      [3, 8, 255, 1, 1],
-      [4, 5, 385, 2, 1],
-      [4, 7, 410, 1, 2],
-      [5, 6, 365, 3, 2],
-      [5, 7, 190, 1, 1],
-      [5, 8, 235, 1, 1],
-      [6, 8, 275, 1, 1],
-      [7, 8, 320, 1, 1],
-    ]) {
-      await c.query(
-        "INSERT INTO road_edges(from_node_id,to_node_id,distance_m,safety_cost,comfort_cost) VALUES(?,?,?,?,?)",
-        [a, b, d, s, f],
-      );
-    }
+    await installCampusRoads(c);
     const now = new Date(),
       base = new Date(now);
     base.setUTCHours(0, 0, 0, 0);
@@ -180,6 +157,11 @@ try {
       "Seeded: 6 parking zones, 66 bikes, 4 accounts, connected road network and labeled demo history.",
     );
   });
+  const migrated = await ledgerTransaction(pool, upgradeCampusMap);
+  if (migrated)
+    console.log(
+      "Updated campus map to Beihang Xueyuan Road; historical ledgers preserved.",
+    );
 } finally {
   await pool.end();
 }

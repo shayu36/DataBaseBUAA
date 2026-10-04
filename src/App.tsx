@@ -70,10 +70,10 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
             青行<small>QINGXING</small>
           </div>
         </a>
-        <span className="eyebrow">YOUR CAMPUS. YOUR WAY.</span>
+        <span className="eyebrow">BEIHANG · XUEYUAN ROAD CAMPUS</span>
         <h1>让校园的每一程，更轻盈。</h1>
         <p>
-          从图书馆到课堂，从宿舍到操场。
+          从主楼到新主楼，从图书馆到体育场。
           <br />
           一辆自行车，连接校园里的美好日常。
         </p>
@@ -83,7 +83,9 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
           <Bike size={220} strokeWidth={1.2} />
           <span>RIDE A LITTLE. CHANGE A LOT.</span>
         </div>
-        <small>校园共享自行车课程系统 · 本地地图 / 模拟支付 / 模拟碳积分</small>
+        <small>
+          北航学院路校区共享自行车课程系统 · 校园地图 / 模拟支付 / 模拟碳积分
+        </small>
       </section>
       <section className="login-form">
         <div>
@@ -339,7 +341,9 @@ export default function App() {
       <main>
         <header>
           <div>
-            <span className="breadcrumb">青行校园 / {current.name}</span>
+            <span className="breadcrumb">
+              北航学院路校区 · 青行 / {current.name}
+            </span>
             <h1>{current.name}</h1>
           </div>
           <div className="header-right">

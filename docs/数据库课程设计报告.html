@@ -5,7 +5,7 @@
 <p>需求来源为当前任务提供的截图要求、可取得的聊天缓存摘要、旧课程报告和实际仓库。引用 ChatGPT 会话的完整正文、课程 PPT 原文在本次环境不可取得；本报告不声称逐页核对，也不自行编造评分细则。旧报告仅沿用四人名单与分工框架，交易与钱包业务已全部改为校园自行车业务。</p>
 <h2 id="section-3">2. 需求分析与系统边界</h2>
 <p>学生需要查看各停车区可借车辆、借用车辆、选择归还停车区并完成支付，也可提交故障报修。管理员负责车辆、停车区、员工、账户状态及任务分配；运维人员处理本人被分配的调度和维修。分析模块辅助观察热点、调度建议、风险及绿色出行记录。</p>
-<p>本地地图使用米为单位的平面示意坐标，并以圆形围栏模拟停车范围；不是 GPS 地图或移动端定位系统。支付是 SIMULATED，不连接银行、第三方支付或真实资金。碳减排是按固定系数估算的教学指标，不构成碳核证。系统不包含智能硬件开锁、实时轨迹和机器学习预测。</p>
+<p>本地地图参考北京航空航天大学官网发布的学院路校区平面图，整理主楼、图书馆、合一楼、新主楼、体育馆等建筑和道路的相对方位；系统使用米制示意坐标，并以圆形围栏模拟停车范围。建筑轮廓、停车点和路网并非测绘成果，不能作为 GPS 地图或真实导航。支付是 SIMULATED，不连接银行、第三方支付或真实资金。碳减排是按固定系数估算的教学指标，不构成碳核证。系统不包含智能硬件开锁、实时轨迹和机器学习预测。</p>
 <table>
 <thead>
 <tr>
@@ -1271,6 +1271,7 @@ CHECK(distance_m&gt;=0 AND points&gt;=0 AND carbon_kg&gt;=0)
 <li><a href="https://github.com/Rivertxx/lushu/blob/master/README.md">Rivertxx/lushu 项目说明</a>：自行车社团活动与路线管理，非共享单车租还模型。</li>
 <li><a href="https://github.com/Rivertxx/lushu/blob/master/road_book.sql">路书数据库 SQL</a>：routes、keypoints、activities、participants 与复合关联键。</li>
 <li><a href="https://github.com/oNya685/BUAA-Database-Shared-Bicycle/blob/main/scripts/01_init_database.sql">共享自行车初始化 SQL</a>：停车区容量、空间范围、订单及调度人员模型。</li>
+<li><a href="https://www.buaa.edu.cn/xygk/xydt1/xylxq.htm">北京航空航天大学学院路校区地图</a>：校区道路、功能分区与主要建筑的相对方位。</li>
 <li><a href="https://github.com/oNya685/BUAA-Database-Shared-Bicycle/blob/main/scripts/05_dispatch_task_procedure.sql">共享自行车调度过程</a>：库存比例、候选车辆锁定与任务生成。</li>
 <li><a href="https://dev.mysql.com/doc/refman/8.0/en/create-table.html">MySQL 8.0 CREATE TABLE 官方手册</a>、<a href="https://dev.mysql.com/doc/refman/8.0/en/innodb-locking-reads.html">InnoDB 锁定读</a>、<a href="https://dev.mysql.com/doc/refman/8.0/en/locking-functions.html">命名锁</a>。</li>
 </ol>

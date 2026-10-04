@@ -1,4 +1,58 @@
 import { test, expect } from "@playwright/test";
+
+test("Beihang map names landmarks and keeps coordinate picking correct after zoom", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "管理员 · 贾鑫洋" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  const map = page.locator(".map-shell");
+  await expect(
+    map.getByRole("heading", { name: "北京航空航天大学 · 学院路校区" }),
+  ).toBeVisible();
+  for (const name of [
+    "主楼",
+    "图书馆",
+    "新主楼",
+    "合一楼",
+    "北航体育馆",
+    "航空航天博物馆",
+    "绿园",
+    "学院路",
+    "知春路",
+  ]) {
+    await expect(
+      map.locator("svg text").filter({ hasText: new RegExp(`^${name}$`) }),
+    ).toBeVisible();
+  }
+  await expect(
+    map.getByRole("link", { name: "北航官方校区地图" }),
+  ).toHaveAttribute("href", "https://www.buaa.edu.cn/xygk/xydt1/xylxq.htm");
+  await page.getByRole("button", { name: "骑行与归还", exact: true }).click();
+  await page.getByRole("button", { name: "放大地图" }).click();
+  const svg = map.locator("svg.campus-svg");
+  await svg.scrollIntoViewIfNeeded();
+  const point = await svg.evaluate((element) => {
+    const svg = element as SVGSVGElement;
+    const p = svg.createSVGPoint();
+    p.x = 110;
+    p.y = 105;
+    const screen = p.matrixTransform(svg.getScreenCTM()!);
+    return { x: screen.x, y: screen.y };
+  });
+  await page.mouse.click(point.x, point.y);
+  await expect(page.getByLabel("归还横坐标（米）")).toHaveValue(/^(109|110)$/);
+  await expect(page.getByLabel("归还纵坐标（米）")).toHaveValue(/^(104|105)$/);
+  const station = page.getByRole("button", { name: /东门.*可借/ });
+  await station.focus();
+  await station.press("Space");
+  await expect(page.getByLabel("归还横坐标（米）")).toHaveValue(
+    /^900(?:\.0+)?$/,
+  );
+  await expect(page.getByLabel("归还纵坐标（米）")).toHaveValue(
+    /^330(?:\.0+)?$/,
+  );
+});
 test("login form validates and demo account opens campus dashboard", async ({
   page,
 }) => {
@@ -56,10 +110,10 @@ test("ride preserves running order outside fence, then returns and pays once", a
   await expect(page.getByText(/正在骑行/).first()).toBeVisible();
   await page.getByRole("button", { name: /东门.*可借/ }).click();
   await expect(page.getByLabel("归还横坐标（米）")).toHaveValue(
-    /^160(?:\.0+)?$/,
+    /^900(?:\.0+)?$/,
   );
   await expect(page.getByLabel("归还纵坐标（米）")).toHaveValue(
-    /^440(?:\.0+)?$/,
+    /^330(?:\.0+)?$/,
   );
   await page.getByRole("button", { name: "确认归还", exact: true }).click();
   await expect(
