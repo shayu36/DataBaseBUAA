@@ -1,0 +1,23 @@
+-- Least privilege review template; intentionally inert. No users/passwords/grants are executed.
+-- MySQL roles are NOT the application's STUDENT / OPERATOR / ADMIN business roles.
+-- A DBA must replace campus_bike with the verified deployment schema and review each privilege.
+-- CREATE ROLE 'campus_bike_reader', 'campus_bike_runtime', 'campus_bike_backup';
+-- Analytics role: use restricted views, avoid users.password_hash and private contact fields.
+-- GRANT SELECT ON campus_bike.v_zone_inventory TO 'campus_bike_reader';
+-- Application account needs parameterized DML across these tables; API enforces row ownership.
+-- GRANT SELECT, INSERT, UPDATE ON campus_bike.users TO 'campus_bike_runtime';
+-- Repeat only needed SELECT/INSERT/UPDATE per business table (no global privileges).
+-- GRANT SELECT ON campus_bike.parking_zones TO 'campus_bike_reader';
+-- Review whether raw zone locations are needed before granting this optional example.
+-- GRANT EXECUTE ON PROCEDURE campus_bike.sp_capture_zone_snapshots TO 'campus_bike_runtime';
+-- SQL SECURITY INVOKER also requires SELECT on inventory underlying tables and INSERT on snapshots.
+-- Backup account: SELECT on verified schema; SHOW VIEW, TRIGGER, and routine metadata permissions
+-- depend on the MySQL version and mysqldump options. Add only the demonstrated requirements.
+-- Do not grant FILE, SUPER, GRANT OPTION, or ALL PRIVILEGES to the application account.
+-- Create deployment users outside source control using secret input and local host restrictions.
+-- GRANT 'campus_bike_runtime' TO 'deployment_user'@'127.0.0.1';
+-- SET DEFAULT ROLE 'campus_bike_runtime' TO 'deployment_user'@'127.0.0.1';
+-- Independently review backup/recovery account grants and log their use.
+-- Read-only self-check permitted when this file is sourced:
+SELECT CURRENT_USER() authenticated_database_account, DATABASE() selected_database;
+SHOW GRANTS FOR CURRENT_USER;

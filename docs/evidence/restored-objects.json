@@ -1,0 +1,16 @@
+{
+  "database": "campus_bike_restore_20261005",
+  "tables": [
+    {
+      "kind": "BASE TABLE",
+      "count": 16
+    },
+    {
+      "kind": "VIEW",
+      "count": 3
+    }
+  ],
+  "triggers_count": 2,
+  "procedures_count": 1,
+  "views_reference_only_restore": true
+}

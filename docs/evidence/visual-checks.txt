@@ -1,0 +1,127 @@
+{
+  "completed": true,
+  "generated_at": "2026-10-04T16:21:27.860Z",
+  "errors": [],
+  "checks": [
+    {
+      "name": "校园总览",
+      "width": 1440,
+      "overflow": false,
+      "alerts": []
+    },
+    {
+      "name": "骑行与归还",
+      "width": 1440,
+      "overflow": false,
+      "alerts": []
+    },
+    {
+      "name": "路线规划",
+      "width": 1440,
+      "overflow": false,
+      "alerts": []
+    },
+    {
+      "name": "碳积分",
+      "width": 1440,
+      "overflow": false,
+      "alerts": []
+    },
+    {
+      "name": "运营分析",
+      "width": 1440,
+      "overflow": false,
+      "alerts": []
+    },
+    {
+      "name": "维修报修",
+      "width": 1440,
+      "overflow": false,
+      "alerts": []
+    },
+    {
+      "name": "车辆调度",
+      "width": 1440,
+      "overflow": false,
+      "alerts": []
+    },
+    {
+      "name": "基础资料",
+      "width": 1440,
+      "overflow": false,
+      "alerts": []
+    },
+    {
+      "name": "数据库设计",
+      "width": 1440,
+      "overflow": false,
+      "alerts": []
+    },
+    {
+      "name": "骑行订单",
+      "width": 1440,
+      "overflow": false,
+      "alerts": []
+    },
+    {
+      "name": "校园总览",
+      "width": 390,
+      "overflow": false,
+      "alerts": []
+    },
+    {
+      "name": "骑行与归还",
+      "width": 390,
+      "overflow": false,
+      "alerts": []
+    },
+    {
+      "name": "路线规划",
+      "width": 390,
+      "overflow": false,
+      "alerts": []
+    },
+    {
+      "name": "碳积分",
+      "width": 390,
+      "overflow": false,
+      "alerts": []
+    },
+    {
+      "name": "运营分析",
+      "width": 390,
+      "overflow": false,
+      "alerts": []
+    },
+    {
+      "name": "维修报修",
+      "width": 390,
+      "overflow": false,
+      "alerts": []
+    },
+    {
+      "name": "车辆调度",
+      "width": 390,
+      "overflow": false,
+      "alerts": []
+    },
+    {
+      "name": "基础资料",
+      "width": 390,
+      "overflow": false,
+      "alerts": []
+    },
+    {
+      "name": "数据库设计",
+      "width": 390,
+      "overflow": false,
+      "alerts": []
+    },
+    {
+      "name": "骑行订单",
+      "width": 390,
+      "overflow": false,
+      "alerts": []
+    }
+  ]
+}

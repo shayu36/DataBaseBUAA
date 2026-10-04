@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+.runtime/
+test-results/
+playwright-report/
+backups/
+*.tsbuildinfo
+deliverables/

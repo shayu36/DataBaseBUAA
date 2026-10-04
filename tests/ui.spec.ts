@@ -1,0 +1,330 @@
+import { test, expect } from "@playwright/test";
+test("login form validates and demo account opens campus dashboard", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "让校园的每一程，更轻盈。" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "管理员 · 贾鑫洋" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "校园总览", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "骑行与归还", exact: true }).click();
+  await expect(page.getByLabel("归还横坐标（米）")).toBeVisible();
+  await page.getByRole("button", { name: "数据库设计", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "数据库设计", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/trg_payment_guard/)).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "核心关系", exact: true }),
+  ).toBeVisible();
+});
+test("student sees personal rides and responsive navigation", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "校园总览", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "碳积分", exact: true }).click();
+  await expect(page.getByText("模拟减排系数 0.21 kg/km")).toBeVisible();
+});
+
+test("ride preserves running order outside fence, then returns and pays once", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "学生 · 王奕" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "校园总览", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "骑行与归还", exact: true }).click();
+  const borrow = page.getByRole("button", { name: "借用自行车 ↗" }).first();
+  if (await borrow.isEnabled()) await borrow.click();
+  await expect(page.getByText(/正在骑行/).first()).toBeVisible();
+  await page.getByLabel("归还横坐标（米）").fill("0");
+  await page.getByLabel("归还纵坐标（米）").fill("0");
+  await page.getByRole("button", { name: "确认归还", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("OUTSIDE_FENCE");
+  await expect(page.getByText(/正在骑行/).first()).toBeVisible();
+  await page.getByRole("button", { name: /东门.*可借/ }).click();
+  await expect(page.getByLabel("归还横坐标（米）")).toHaveValue(
+    /^160(?:\.0+)?$/,
+  );
+  await expect(page.getByLabel("归还纵坐标（米）")).toHaveValue(
+    /^440(?:\.0+)?$/,
+  );
+  await page.getByRole("button", { name: "确认归还", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "模拟支付", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "模拟支付", exact: true }).click();
+  await expect(page.getByText("没有待支付订单")).toBeVisible();
+  await page.getByRole("button", { name: "骑行订单", exact: true }).click();
+  await expect(page.getByText("已支付", { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByText("OUTSIDE_FENCE", { exact: true }).last(),
+  ).toBeVisible();
+});
+test("admin can create and finish maintenance and dispatch tasks", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "管理员 · 贾鑫洋" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "校园总览", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "维修报修", exact: true }).click();
+  await page.getByLabel("车辆", { exact: true }).selectOption({ index: 1 });
+  const description = "UI验收：后轮漏气 " + Date.now();
+  await page.getByLabel("问题描述").fill(description);
+  await page.getByRole("button", { name: "提交报修", exact: true }).click();
+  const ticket = page.getByRole("row").filter({ hasText: description });
+  await expect(ticket).toBeVisible();
+  await ticket.getByRole("button", { name: "分配", exact: true }).click();
+  await page.getByLabel("维修结果").fill("UI验收：已更换内胎，试骑正常");
+  await ticket.getByRole("button", { name: "完成维修", exact: true }).click();
+  await expect(ticket.getByText("已完成", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "车辆调度", exact: true }).click();
+  await page.getByRole("checkbox").first().check();
+  await page
+    .getByRole("button", { name: "确认调度 1 辆", exact: true })
+    .click();
+  const task = page
+    .getByRole("row")
+    .filter({
+      has: page.getByRole("button", { name: "开始执行", exact: true }),
+    })
+    .last();
+  await task.getByRole("button", { name: "开始执行", exact: true }).click();
+  const running = page
+    .getByRole("row")
+    .filter({
+      has: page.getByRole("button", { name: "确认完成", exact: true }),
+    })
+    .last();
+  await running.getByRole("button", { name: "确认完成", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("操作已保存");
+  await expect(page.getByText("已完成", { exact: true }).last()).toBeVisible();
+});
+
+const regressionDashboard = {
+  zones: [
+    {
+      id: 1,
+      name: "测试源站",
+      location: "测试",
+      x: 100,
+      y: 100,
+      radius: 50,
+      capacity: 20,
+      status: "ACTIVE",
+      available: 2,
+      occupied: 2,
+      reserved: 0,
+    },
+    {
+      id: 2,
+      name: "测试目标站",
+      location: "测试",
+      x: 200,
+      y: 200,
+      radius: 50,
+      capacity: 20,
+      status: "ACTIVE",
+      available: 0,
+      occupied: 0,
+      reserved: 0,
+    },
+  ],
+  bikes: [
+    {
+      id: 1,
+      code: "QX-REGRESSION",
+      status: "AVAILABLE",
+      current_zone_id: 1,
+      zone_name: "测试源站",
+      deployed_at: "2026-09-01T00:00:00.000Z",
+      last_service_at: null,
+    },
+  ],
+  staff: [
+    {
+      id: 1,
+      user_id: 3,
+      name: "测试员工",
+      phone: "13800000000",
+      email: "operator@test.local",
+      job: "BOTH",
+      status: "ACTIVE",
+    },
+  ],
+  rides: [],
+  payments: [],
+  dispatches: [],
+  tickets: [],
+  attempts: [],
+  carbon: { points: 0, carbon_kg: 0, distance_m: 0, entries: [] },
+  summary: {
+    total_bikes: 1,
+    available_bikes: 1,
+    active_rides: 0,
+    today_rides: 0,
+    carbon_kg: 0,
+    open_tickets: 0,
+  },
+};
+test("admin draft survives rejection; edited bike date and blank staff password are normalized", async ({
+  page,
+}) => {
+  const submissions: { path: string; body: any }[] = [];
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/auth/me")
+      return route.fulfill({
+        status: 200,
+        json: {
+          user: {
+            id: 1,
+            name: "测试管理员",
+            email: "admin@test.local",
+            role: "ADMIN",
+            status: "ACTIVE",
+          },
+        },
+      });
+    if (path === "/api/dashboard")
+      return route.fulfill({ json: regressionDashboard });
+    if (path === "/api/admin/users")
+      return route.fulfill({ json: { users: [] } });
+    const body = route.request().postDataJSON();
+    submissions.push({ path, body });
+    if (path === "/api/admin/bikes" && body.code === "INVALID-CODE")
+      return route.fulfill({
+        status: 400,
+        json: { error: "测试保存失败", code: "INVALID_INPUT" },
+      });
+    return route.fulfill({ json: { id: 1 } });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "基础资料", exact: true }).click();
+  await page.getByRole("button", { name: "车辆管理", exact: true }).click();
+  await page
+    .getByRole("row")
+    .filter({ hasText: "QX-REGRESSION" })
+    .getByRole("button", { name: "编辑", exact: true })
+    .click();
+  await page.getByLabel("车辆编号").fill("INVALID-CODE");
+  await page.getByRole("button", { name: "保存资料", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("测试保存失败");
+  await expect(page.getByLabel("车辆编号")).toHaveValue("INVALID-CODE");
+  await expect(
+    page.getByRole("heading", { name: "编辑 #1", exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("车辆编号").fill("QX-REGRESSION-EDITED");
+  await page.getByRole("button", { name: "保存资料", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "新增资料", exact: true }),
+  ).toBeVisible();
+  expect(
+    submissions.filter((s) => s.path === "/api/admin/bikes").at(-1)?.body,
+  ).toMatchObject({
+    id: 1,
+    code: "QX-REGRESSION-EDITED",
+    status: "AVAILABLE",
+    deployed_at: "2026-09-01",
+  });
+  await page.getByRole("button", { name: "员工管理", exact: true }).click();
+  await page
+    .getByRole("row")
+    .filter({ hasText: "测试员工" })
+    .getByRole("button", { name: "编辑", exact: true })
+    .click();
+  await page.getByLabel("密码（编辑时可留空）").fill("temporary-password");
+  await page.getByLabel("密码（编辑时可留空）").fill("");
+  await page.getByRole("button", { name: "保存资料", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "新增资料", exact: true }),
+  ).toBeVisible();
+  expect(
+    submissions.find((s) => s.path === "/api/admin/staff")?.body,
+  ).not.toHaveProperty("password");
+});
+test("analytics refetches after suggestion creation and manual refresh while retaining selected period", async ({
+  page,
+}) => {
+  let created = false;
+  const analyticsRequests: string[] = [];
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: 1,
+            name: "测试管理员",
+            email: "admin@test.local",
+            role: "ADMIN",
+            status: "ACTIVE",
+          },
+        },
+      });
+    if (url.pathname === "/api/dashboard")
+      return route.fulfill({ json: regressionDashboard });
+    if (url.pathname === "/api/dispatches") {
+      created = true;
+      return route.fulfill({ json: { id: 1 } });
+    }
+    if (url.pathname === "/api/analytics") {
+      analyticsRequests.push(url.search);
+      return route.fulfill({
+        json: {
+          hotspots: [],
+          hourly: [],
+          weekday: [],
+          risks: [],
+          snapshot_count: 0,
+          suggestions: created
+            ? []
+            : [
+                {
+                  source_zone_id: 1,
+                  target_zone_id: 2,
+                  source_name: "测试源站",
+                  target_name: "测试目标站",
+                  quantity: 1,
+                  reason: "回归测试调度建议",
+                },
+              ],
+        },
+      });
+    }
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "运营分析", exact: true }).click();
+  await page.getByLabel("统计周期").selectOption("30");
+  await expect(
+    page.getByText("回归测试调度建议", { exact: true }),
+  ).toBeVisible();
+  const before = analyticsRequests.length;
+  await page.getByRole("button", { name: "确认创建任务", exact: true }).click();
+  await expect(
+    page.getByText("当前没有可执行调度建议", { exact: true }),
+  ).toBeVisible();
+  expect(analyticsRequests.length).toBeGreaterThan(before);
+  await expect(page.getByLabel("统计周期")).toHaveValue("30");
+  const after = analyticsRequests.length;
+  await page.getByRole("button", { name: "刷新数据", exact: true }).click();
+  await expect.poll(() => analyticsRequests.length).toBeGreaterThan(after);
+  await expect(page.getByLabel("统计周期")).toHaveValue("30");
+  expect(analyticsRequests.at(-1)).toBe("?days=30");
+});

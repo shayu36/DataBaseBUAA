@@ -1,0 +1,6 @@
+
+> qingxing-campus-bike@1.0.0 format:check
+> prettier --check "src/**/*.{ts,tsx,css}" "server/**/*.mjs" "scripts/**/*.mjs" "tests/*.{mjs,ts}"
+
+Checking formatting...
+All matched files use Prettier code style!

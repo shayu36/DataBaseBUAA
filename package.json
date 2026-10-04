@@ -1,0 +1,48 @@
+{
+  "name": "qingxing-campus-bike",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build",
+    "start": "node server/index.mjs",
+    "db:setup": "node scripts/setup.mjs",
+    "db:seed": "node scripts/seed.mjs",
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs",
+    "test:e2e": "playwright test",
+    "backup": "node scripts/backup.mjs",
+    "check": "node scripts/check.mjs",
+    "report": "node scripts/render-report.mjs",
+    "screenshots": "node scripts/screenshots.mjs",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"server/**/*.mjs\" \"scripts/**/*.mjs\" \"tests/*.{mjs,ts}\""
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cookie-parser": "^1.4.7",
+    "decimal.js": "^10.6.0",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "lucide-react": "^0.468.0",
+    "mysql2": "^3.15.3",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.0.4",
+    "marked": "^18.0.14",
+    "prettier": "^3.9.9",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.12"
+  }
+}

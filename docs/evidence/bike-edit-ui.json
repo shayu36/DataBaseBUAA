@@ -1,0 +1,8 @@
+{
+  "status": "passed",
+  "original_code": "QX-001",
+  "edited_code": "QX-001-UI",
+  "restored": true,
+  "flow": "真实管理员UI编辑AVAILABLE车辆编号并保存，再恢复原编号",
+  "at": "2026-10-04T16:13:56.145Z"
+}

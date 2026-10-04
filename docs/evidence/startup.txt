@@ -1,0 +1,8 @@
+Project application stopped.
+Project MySQL shut down cleanly.
+Project MySQL ready on 127.0.0.1:3377.
+Local credentials configured; application user is restricted to campus_bike.
+Schema ready: 16 tables, 3 views, 2 triggers, 1 procedure; read-only object catalogue refreshed.
+Campus demo already seeded; existing data preserved.
+Qingxing is ready: http://127.0.0.1:5188
+Demo account: jia@qingxing.local / Qingxing2026!

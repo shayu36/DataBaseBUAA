@@ -1,0 +1,58 @@
+
+> qingxing-campus-bike@1.0.0 test
+> node --test --test-concurrency=1 tests/*.test.mjs
+
+✔ admin authorization on all operations (2435.027ms)
+✔ zone capacity, closing and geometry protect occupied bikes and reservations (2044.3427ms)
+✔ new zone connects to nearest road node and empty zone edits sync graph (1974.8328ms)
+✔ radius-only updates preserve road lengths while coordinate moves update them (2037.2973ms)
+✔ bike date strictness, capacity, retirement and reactivation (2086.1732ms)
+✔ active bikes cannot be moved or retired (1927.1735ms)
+✔ staff creation hashes password and email collision never promotes student (2862.1181ms)
+✔ assigned work blocks off duty, incompatible job changes and suspension (2390.5452ms)
+✔ suspend cannot block active ride or self; plain student status can change (2282.5367ms)
+✔ dispatch locks prevent bike edits and reserved slots reject new bikes (2106.4841ms)
+✔ unpaid suspension denied and user update cannot escalate role (2120.5395ms)
+✔ assigned maintenance blocks off duty and job changes; duplicate phone rolls back (2093.0698ms)
+✔ route modes use weighted undirected paths and actual distance (2.3497ms)
+✔ dispatch shares supply and respects occupied and reserved capacity (0.5519ms)
+✔ risk explains repeated recent faults and maintenance gap (0.2779ms)
+✔ hotspots clip short intervals, skip gaps, use occupied fullness and Shanghai events (0.3497ms)
+✔ leaderboard uses Shanghai Monday and joins ledger only to qualifying paid rides (0.2414ms)
+✔ hotspot reporting boundary clips a predecessor and never extends last sample (0.1135ms)
+✔ leaderboard monthly boundary and ties are deterministic and future rows excluded (0.109ms)
+✔ demand changes dispatch allocation and empty inputs are safe (0.1579ms)
+✔ concurrent borrowers cannot both acquire one bike (2582.5915ms)
+✔ one user cannot run two rides and failed start leaves second bike available (2182.0665ms)
+✔ outside geofence rejection commits violation but leaves order running (2169.0437ms)
+✔ full station rejects return without losing bike (1961.1997ms)
+✔ return computes server route and fee; duplicate payment gives one payment and credit (2078.8519ms)
+✔ ownership enforced for return and payment even for admin (2317.0884ms)
+✔ unpaid orders block further borrowing (2211.4974ms)
+✔ dispatch reserves vehicles and destination slots, progresses atomically (2082.0813ms)
+✔ dispatch cannot overbook target or include duplicate bikes (2094.8519ms)
+✔ reserved destination cannot accept a return that would steal dispatch slot (2263.2387ms)
+✔ cancelling pending dispatch releases reservation and vehicles (2311.4217ms)
+✔ report removes vehicle from lending, duplicate open ticket rejected, repair restores it (1964.6613ms)
+✔ fault reported during own ride remains unavailable after return until repair (2193.0541ms)
+✔ student cannot dispatch or assign repairs (2107.0257ms)
+✔ off-duty staff cannot be assigned tasks (2314.0851ms)
+✔ invalid numeric coordinates are rejected without changing order (2339.0664ms)
+✔ suspended actor cannot execute a write queued before suspension committed (2126.6674ms)
+✔ carbon half-unit rounding follows exact decimal half-up rule (2063.3705ms)
+✔ health identifies campus bike and protected routes need login (2416.2576ms)
+✔ session uses HttpOnly SameSite and login never returns password hash (6.9781ms)
+✔ registration cannot choose admin role; duplicate phone rejected (111.2343ms)
+✔ students cannot list users or mutate administrator resources (6.2975ms)
+✔ cross origin writes rejected before mutation (1.6722ms)
+✔ HTTP lifecycle has private orders and one payment (162.3936ms)
+✔ route API validates modes and schema endpoint reflects real objects (33.598ms)
+✔ SQL constraints enforce foreign keys, active ride uniqueness and payment amount (23.7393ms)
+ℹ tests 46
+ℹ suites 0
+ℹ pass 46
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 69240.8345
