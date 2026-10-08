@@ -1,1 +1,2 @@
-Restored into NEW database campus_bike_restore_20261005: {"users":4,"rides":165,"payments":165}
+{"database":"campus_bike","tables":18,"views":4,"triggers":2,"routines":1,"users":4,"bikes":66,"rides":171,"payments":171,"carbon":{"entries":171,"points":816,"carbon":18.8195}}
+{"database":"campus_bike_restore_20261008_final","tables":18,"views":4,"triggers":2,"routines":1,"users":4,"bikes":66,"rides":171,"payments":171,"carbon":{"entries":171,"points":816,"carbon":18.8195}}

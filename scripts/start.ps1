@@ -14,6 +14,8 @@ if ($LASTEXITCODE -ne 0) { throw 'MySQL startup failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Database account setup failed.' }
 & $nodeExecutable (Join-Path $PSScriptRoot 'setup.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'Database schema setup failed.' }
+& $nodeExecutable (Join-Path $PSScriptRoot 'migrate-features.mjs')
+if ($LASTEXITCODE -ne 0) { throw 'Feature migration failed.' }
 & $nodeExecutable (Join-Path $PSScriptRoot 'seed.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'Demo data setup failed.' }
 & $npmExecutable run build

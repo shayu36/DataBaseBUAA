@@ -183,7 +183,7 @@ export function Rides({ d, run }: Props) {
             </select>
           </Field>
           <p className="muted">
-            圈外或车位已满时，服务器会记录尝试并保留骑行订单，请重新选择停车位置。
+            系统会同时提交定位采集时间和来源。圈外、定位过期或车位已满时会记录尝试并保留骑行订单。
           </p>
           <button
             disabled={!active}
@@ -194,6 +194,8 @@ export function Rides({ d, run }: Props) {
                 x,
                 y,
                 route_mode: mode,
+                captured_at: new Date().toISOString(),
+                location_source: "MAP_SIMULATION",
               })
             }
           >
@@ -329,6 +331,11 @@ export function Orders({ d }: Props) {
           { label: "订单", render: (r) => "#" + r.order_id },
           { label: "坐标（米）", render: (r) => r.x + ", " + r.y },
           { label: "拒绝原因", render: (r) => r.reason },
+          { label: "定位来源", render: (r) => r.location_source || "历史数据" },
+          {
+            label: "复核状态",
+            render: (r) => <Badge value={r.review_status || "PENDING"} />,
+          },
           { label: "时间", render: (r) => date(r.created_at) },
         ]}
       />
@@ -656,22 +663,219 @@ export function Remote({
     <div className="loading">正在读取数据…</div>
   );
 }
+function InventoryChart({ series, zones }: { series: Row[]; zones: Row[] }) {
+  if (!series?.length) return <Empty text="所选区间没有库存快照" />;
+  const zoneIds = [...new Set(series.map((s) => Number(s.zone_id)))].slice(
+      0,
+      6,
+    ),
+    times = series.map((s) => new Date(s.captured_at).getTime()),
+    start = Math.min(...times),
+    end = Math.max(...times),
+    maximum = Math.max(
+      1,
+      ...series.map((s) => Number(s.capacity || s.available)),
+    ),
+    colors = ["#315fb7", "#e8753d", "#7552ad", "#1d8b82", "#d04f77", "#947120"],
+    x = (time: any) =>
+      55 +
+      ((new Date(time).getTime() - start) / Math.max(1, end - start)) * 790,
+    y = (value: any) => 185 - (Number(value) / maximum) * 145;
+  return (
+    <div className="inventory-chart">
+      <svg
+        viewBox="0 0 900 225"
+        role="img"
+        aria-label="停车区可用车辆库存时间序列"
+      >
+        <line x1="55" y1="40" x2="55" y2="185" />
+        <line x1="55" y1="185" x2="845" y2="185" />
+        <text x="18" y="45">
+          {maximum} 辆
+        </text>
+        <text x="30" y="190">
+          0
+        </text>
+        {zoneIds.map((zoneId, index) => {
+          const points = series
+            .filter((s) => Number(s.zone_id) === zoneId)
+            .sort(
+              (a, b) =>
+                new Date(a.captured_at).getTime() -
+                new Date(b.captured_at).getTime(),
+            )
+            .map((s) => `${x(s.captured_at)},${y(s.available)}`)
+            .join(" ");
+          return (
+            <polyline
+              key={zoneId}
+              points={points}
+              fill="none"
+              stroke={colors[index]}
+              strokeWidth="3"
+            />
+          );
+        })}
+        <text x="55" y="212">
+          {new Date(start).toLocaleString("zh-CN", {
+            month: "numeric",
+            day: "numeric",
+            hour: "2-digit",
+          })}
+        </text>
+        <text x="845" y="212" textAnchor="end">
+          {new Date(end).toLocaleString("zh-CN", {
+            month: "numeric",
+            day: "numeric",
+            hour: "2-digit",
+          })}
+        </text>
+      </svg>
+      <div className="chart-legend">
+        {zoneIds.map((id, index) => (
+          <span key={id}>
+            <i style={{ background: colors[index] }} />
+            {zones.find((z) => z.id === id)?.name || `停车区 ${id}`}
+          </span>
+        ))}
+      </div>
+      <p className="muted">
+        折线表示各停车区快照中的可借车辆数；断档不补值，详细覆盖率见下表。
+      </p>
+    </div>
+  );
+}
 export function Analytics({ d, run }: Props) {
-  const [days, setDays] = useState(7);
+  const today = new Date().toISOString().slice(0, 10),
+    weekAgo = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10),
+    [scope, setScope] = useState("preset"),
+    [days, setDays] = useState(7),
+    [start, setStart] = useState(weekAgo),
+    [end, setEnd] = useState(today),
+    [dayType, setDayType] = useState("ALL"),
+    [startHour, setStartHour] = useState(0),
+    [endHour, setEndHour] = useState(24),
+    [zoneId, setZoneId] = useState(0);
+  const filter =
+      scope === "preset"
+        ? { days }
+        : {
+            start,
+            end,
+            dayType,
+            startHour,
+            endHour,
+            ...(zoneId ? { zoneId } : {}),
+          },
+    query = new URLSearchParams(
+      Object.entries(filter).map(([k, v]) => [k, String(v)]),
+    ).toString();
+  const parseReasons = (value: any) => {
+    if (Array.isArray(value)) return value;
+    try {
+      return JSON.parse(value || "[]");
+    } catch {
+      return [];
+    }
+  };
   return (
     <>
-      <div className="toolbar">
-        <p>演示历史＋运行期间每分钟实测快照；时长按有覆盖样本估算。</p>
-        <select
-          aria-label="统计周期"
-          value={days}
-          onChange={(e) => setDays(Number(e.target.value))}
-        >
-          <option value={7}>近 7 日</option>
-          <option value={30}>近 30 日</option>
-        </select>
-      </div>
-      <Remote path={"/analytics?days=" + days} refreshKey={d}>
+      <section className="panel analytics-filter">
+        <div className="section-head">
+          <div>
+            <h2>热点分析条件</h2>
+            <p className="muted">
+              北京时间统计；库存持续时长只按有效快照区间计算。
+            </p>
+          </div>
+          <div className="tabs">
+            <button
+              className={scope === "preset" ? "" : "secondary"}
+              onClick={() => setScope("preset")}
+            >
+              快速周期
+            </button>
+            <button
+              className={scope === "custom" ? "" : "secondary"}
+              onClick={() => setScope("custom")}
+            >
+              自定义筛选
+            </button>
+          </div>
+        </div>
+        <div className="form-row">
+          {scope === "preset" ? (
+            <Field label="统计周期">
+              <select
+                value={days}
+                onChange={(e) => setDays(Number(e.target.value))}
+              >
+                <option value={7}>近 7 日</option>
+                <option value={30}>近 30 日</option>
+              </select>
+            </Field>
+          ) : (
+            <>
+              <Field label="开始日期">
+                <input
+                  type="date"
+                  value={start}
+                  onChange={(e) => setStart(e.target.value)}
+                />
+              </Field>
+              <Field label="结束日期">
+                <input
+                  type="date"
+                  value={end}
+                  onChange={(e) => setEnd(e.target.value)}
+                />
+              </Field>
+              <Field label="日期类型">
+                <select
+                  value={dayType}
+                  onChange={(e) => setDayType(e.target.value)}
+                >
+                  <option value="ALL">全部日期</option>
+                  <option value="WEEKDAY">仅工作日</option>
+                  <option value="WEEKEND">仅周末</option>
+                </select>
+              </Field>
+              <Field label="开始小时">
+                <input
+                  type="number"
+                  min="0"
+                  max="23"
+                  value={startHour}
+                  onChange={(e) => setStartHour(Number(e.target.value))}
+                />
+              </Field>
+              <Field label="结束小时">
+                <input
+                  type="number"
+                  min="1"
+                  max="24"
+                  value={endHour}
+                  onChange={(e) => setEndHour(Number(e.target.value))}
+                />
+              </Field>
+              <Field label="停车区">
+                <select
+                  value={zoneId}
+                  onChange={(e) => setZoneId(Number(e.target.value))}
+                >
+                  <option value={0}>全部停车区</option>
+                  {d.zones.map((z) => (
+                    <option key={z.id} value={z.id}>
+                      {z.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </>
+          )}
+        </div>
+      </section>
+      <Remote path={"/analytics?" + query} refreshKey={d}>
         {(v) => (
           <>
             <section className="panel">
@@ -729,6 +933,28 @@ export function Analytics({ d, run }: Props) {
             </section>
             <section className="panel">
               <h2>停车区热点与覆盖</h2>
+              <InventoryChart
+                series={v.inventory_series || []}
+                zones={d.zones}
+              />
+              <div className="inventory-strip">
+                {(v.hotspots || []).slice(0, 6).map((h: any) => (
+                  <article key={h.zone_id}>
+                    <strong>{h.name}</strong>
+                    <span>
+                      {h.borrow_count} 借 / {h.return_count} 还
+                    </span>
+                    <i
+                      style={{
+                        width: Math.min(100, h.coverage_ratio * 100) + "%",
+                      }}
+                    />
+                    <small>
+                      快照覆盖率 {(h.coverage_ratio * 100).toFixed(0)}%
+                    </small>
+                  </article>
+                ))}
+              </div>
               <Table
                 rows={v.hotspots}
                 columns={[
@@ -770,7 +996,17 @@ export function Analytics({ d, run }: Props) {
               />
             </section>
             <section className="panel">
-              <h2>智能调度建议</h2>
+              <div className="section-head">
+                <div>
+                  <h2>可追溯调度建议</h2>
+                  <p className="muted">
+                    保存生成窗口、库存基线、需求量和算法版本，确认时再次校验车位。
+                  </p>
+                </div>
+                <button onClick={() => run("/analytics/suggestions", filter)}>
+                  生成并保存本次建议
+                </button>
+              </div>
               {!v.suggestions.length && <Empty text="当前没有可执行调度建议" />}
               {v.suggestions.map((s: any, i: number) => (
                 <div className="list-row" key={i}>
@@ -780,47 +1016,130 @@ export function Analytics({ d, run }: Props) {
                     </strong>
                     <p className="muted">{s.reason}</p>
                   </div>
-                  <button
-                    onClick={() =>
-                      run("/dispatches", {
-                        source_zone_id: s.source_zone_id,
-                        target_zone_id: s.target_zone_id,
-                        bike_ids: d.bikes
-                          .filter(
-                            (b) =>
-                              b.current_zone_id === s.source_zone_id &&
-                              b.status === "AVAILABLE",
-                          )
-                          .slice(0, s.quantity)
-                          .map((b) => b.id),
-                      })
-                    }
-                  >
-                    确认创建任务
-                  </button>
+                  <Badge value="PREVIEW" />
                 </div>
               ))}
+              <h3>已保存建议</h3>
+              <Table
+                rows={v.saved_suggestions || []}
+                columns={[
+                  {
+                    label: "建议",
+                    render: (r) =>
+                      r.source_name +
+                      " → " +
+                      r.target_name +
+                      " · " +
+                      r.quantity +
+                      " 辆",
+                  },
+                  {
+                    label: "依据",
+                    render: (r) =>
+                      `借 ${r.borrow_count} / 还 ${r.return_count} · 目标库存 ${r.desired_inventory}`,
+                  },
+                  { label: "版本", render: (r) => r.algorithm_version },
+                  { label: "状态", render: (r) => <Badge value={r.status} /> },
+                  {
+                    label: "操作",
+                    render: (r) =>
+                      r.status === "OPEN" ? (
+                        <button
+                          className="tiny"
+                          onClick={() =>
+                            run("/dispatches/from-suggestion/" + r.id, {})
+                          }
+                        >
+                          复核并创建任务
+                        </button>
+                      ) : (
+                        "已处理"
+                      ),
+                  },
+                ]}
+              />
             </section>
             <section className="panel">
-              <h2>车辆风险预警</h2>
-              <p className="muted">
-                基于报修次数、复发类型与维修间隔的可解释规则，非学习模型。
-              </p>
+              <div className="section-head">
+                <div>
+                  <h2>车辆风险预警与处置</h2>
+                  <p className="muted">
+                    基于报修次数、复发类型与维修间隔的可解释规则，非学习模型。
+                  </p>
+                </div>
+                <button onClick={() => run("/risks/refresh", {})}>
+                  运行规则并保存告警
+                </button>
+              </div>
               <Table
-                rows={v.risks}
+                rows={v.risk_alerts || []}
                 columns={[
-                  { label: "车辆", render: (r) => r.code },
+                  { label: "车辆", render: (r) => r.bike_code },
                   { label: "风险分", render: (r) => r.score },
-                  { label: "等级", render: (r) => r.level },
+                  {
+                    label: "等级 / 状态",
+                    render: (r) => (
+                      <>
+                        <Badge value={r.level} /> <Badge value={r.status} />
+                      </>
+                    ),
+                  },
                   {
                     label: "判定原因",
                     render: (r) => (
                       <ul>
-                        {r.reasons.map((s: string) => (
-                          <li key={s}>{s}</li>
+                        {parseReasons(r.reasons).map((s: any, i: number) => (
+                          <li key={i}>
+                            {typeof s === "string"
+                              ? s
+                              : s.message ||
+                                s.label ||
+                                s.reason ||
+                                JSON.stringify(s)}
+                          </li>
                         ))}
                       </ul>
                     ),
+                  },
+                  {
+                    label: "处置",
+                    render: (r) =>
+                      ["RESOLVED", "DISMISSED"].includes(r.status) ? (
+                        "已结束"
+                      ) : (
+                        <div className="actions">
+                          <button
+                            className="tiny"
+                            onClick={() =>
+                              run("/risks/" + r.id + "/acknowledge", {
+                                note: "已核对风险规则与历史工单",
+                              })
+                            }
+                          >
+                            确认
+                          </button>
+                          <button
+                            className="tiny secondary"
+                            onClick={() =>
+                              run("/risks/" + r.id + "/create_ticket", {
+                                note: "依据风险告警创建检查工单",
+                              })
+                            }
+                          >
+                            生成工单
+                          </button>
+                          <button
+                            className="tiny secondary"
+                            onClick={() =>
+                              run("/risks/" + r.id + "/resolve", {
+                                note: "现场检查完成，风险已处置",
+                              })
+                            }
+                          >
+                            解决
+                          </button>
+                        </div>
+                      ),
                   },
                 ]}
               />
@@ -863,6 +1182,33 @@ export function Routes({ d }: Props) {
           </Field>
         </div>
       </section>
+      <div className="route-options">
+        {[
+          ["shortest", "最短路线", "以可通行距离为主要依据"],
+          ["safe", "安全优先", "综合交叉口、照明与机动车混行"],
+          ["comfortable", "舒适优先", "综合坡度、路面与遮阴"],
+        ].map(([key, title, detail]) => (
+          <Remote
+            key={key}
+            path={"/routes?from=" + from + "&to=" + to + "&mode=" + key}
+          >
+            {(route) => (
+              <button
+                className={
+                  mode === key ? "route-option active" : "route-option"
+                }
+                onClick={() => setMode(key)}
+              >
+                <span>{title}</span>
+                <strong>{(route.distance_m / 1000).toFixed(2)} km</strong>
+                <small>
+                  {route.duration_minutes} 分钟 · {detail}
+                </small>
+              </button>
+            )}
+          </Remote>
+        ))}
+      </div>
       <Remote
         path={"/routes?from=" + from + "&to=" + to + "&mode=" + mode}
         refreshKey={d}
@@ -875,7 +1221,24 @@ export function Routes({ d }: Props) {
             </div>
             <CampusMap zones={d.zones} bikes={d.bikes} route={v} />
             <section className="panel">
-              <h2>途经道路节点</h2>
+              <h2>路线依据与途经道路</h2>
+              <p>{v.explanation}</p>
+              <div className="route-facts">
+                <span>
+                  交叉口风险合计{" "}
+                  <strong>{v.attribute_totals.intersection_risk}</strong>
+                </span>
+                <span>
+                  机动车较多路段{" "}
+                  <strong>{v.attribute_totals.motor_heavy_edges}</strong>
+                </span>
+                <span>
+                  较粗糙路段 <strong>{v.attribute_totals.rough_edges}</strong>
+                </span>
+                <span>
+                  高遮阴路段 <strong>{v.attribute_totals.shaded_edges}</strong>
+                </span>
+              </div>
               <p>
                 {v.path
                   .map(
@@ -884,6 +1247,36 @@ export function Routes({ d }: Props) {
                   )
                   .join(" → ")}
               </p>
+              <p className="muted">
+                道路属性来源：课程演示模拟数据；封闭和禁骑道路不会参与计算。
+              </p>
+              <Table
+                rows={v.segments}
+                columns={[
+                  {
+                    label: "路段",
+                    render: (r) =>
+                      `${v.nodes.find((n: Row) => n.id === r.from_node_id)?.name} → ${v.nodes.find((n: Row) => n.id === r.to_node_id)?.name}`,
+                  },
+                  {
+                    label: "方向 / 状态",
+                    render: (r) => `${r.direction} / ${r.status}`,
+                  },
+                  {
+                    label: "长度 / 坡度",
+                    render: (r) =>
+                      `${r.distance_m} m / ${Number(r.slope_percent).toFixed(1)}%`,
+                  },
+                  {
+                    label: "路面 / 交通",
+                    render: (r) => `${r.surface} / ${r.traffic_mix}`,
+                  },
+                  {
+                    label: "遮阴 / 照明",
+                    render: (r) => `${r.shade_level} / ${r.lighting_level}`,
+                  },
+                ]}
+              />
             </section>
           </>
         )}
@@ -891,9 +1284,11 @@ export function Routes({ d }: Props) {
     </>
   );
 }
-export function Carbon({ d }: Props) {
+export function Carbon({ d, user, run }: Props) {
   const [period, setPeriod] = useState("week"),
-    [metric, setMetric] = useState("points");
+    [metric, setMetric] = useState("points"),
+    [alias, setAlias] = useState(user.leaderboard_alias || "骑行者"),
+    [visible, setVisible] = useState(Boolean(user.leaderboard_visible));
   return (
     <>
       <div className="hero carbon-hero">
@@ -930,7 +1325,12 @@ export function Carbon({ d }: Props) {
       </div>
       <section className="panel">
         <div className="section-head">
-          <h2>校园绿色排行榜</h2>
+          <div>
+            <h2>自愿参与的校园绿色排行榜</h2>
+            <p className="muted">
+              默认不公开真实姓名；你可以设置公开昵称并随时退出展示。
+            </p>
+          </div>
           <div className="actions">
             <select
               aria-label="排行榜周期"
@@ -956,36 +1356,92 @@ export function Carbon({ d }: Props) {
           refreshKey={d}
         >
           {(v) => (
-            <Table
-              rows={v.rows}
-              columns={[
-                { label: "排名", render: (r) => "#" + r.rank },
-                { label: "骑行者", render: (r) => r.name },
-                { label: "次数", render: (r) => r.rides },
-                {
-                  label: "里程",
-                  render: (r) => (r.distance_m / 1000).toFixed(2) + " km",
-                },
-                { label: "积分", render: (r) => r.points },
-                {
-                  label: "模拟减排",
-                  render: (r) => Number(r.carbon_kg).toFixed(2) + " kg",
-                },
-              ]}
-            />
+            <>
+              {v.me && (
+                <div className="leaderboard-me">
+                  <span>{v.me.private ? "仅自己可见" : "已参与公开榜单"}</span>
+                  <strong>我的排名 #{v.me.rank}</strong>
+                  <small>
+                    {v.me.points} 分 · {(v.me.distance_m / 1000).toFixed(2)} km
+                  </small>
+                </div>
+              )}
+              <Table
+                rows={v.rows}
+                columns={[
+                  { label: "排名", render: (r) => "#" + r.rank },
+                  { label: "骑行者", render: (r) => r.name },
+                  { label: "次数", render: (r) => r.rides },
+                  {
+                    label: "里程",
+                    render: (r) => (r.distance_m / 1000).toFixed(2) + " km",
+                  },
+                  { label: "积分", render: (r) => r.points },
+                  {
+                    label: "模拟减排",
+                    render: (r) => Number(r.carbon_kg).toFixed(2) + " kg",
+                  },
+                ]}
+              />
+            </>
           )}
         </Remote>
+        <form
+          className="privacy-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            run("/profile/leaderboard", { alias, visible });
+          }}
+        >
+          <Field label="榜单昵称">
+            <input
+              minLength={2}
+              maxLength={20}
+              value={alias}
+              onChange={(e) => setAlias(e.target.value)}
+            />
+          </Field>
+          <label className="check-line">
+            <input
+              type="checkbox"
+              checked={visible}
+              onChange={(e) => setVisible(e.target.checked)}
+            />
+            将昵称和统计结果显示在公开榜单
+          </label>
+          <button>保存隐私设置</button>
+        </form>
       </section>
       <section className="panel">
-        <h2>我的碳积分账本</h2>
+        <h2>我的碳积分流水</h2>
+        <p className="muted">
+          发放与人工调整均新增流水，不覆盖历史记录；每条记录保留规则版本和原因。
+        </p>
         <Table
           rows={d.carbon.entries}
           columns={[
             { label: "关联订单", render: (r) => "#" + r.order_id },
-            { label: "积分", render: (r) => "+" + r.points },
+            { label: "类型", render: (r) => <Badge value={r.entry_type} /> },
             {
-              label: "模拟减排",
-              render: (r) => Number(r.carbon_kg).toFixed(2) + " kg",
+              label: "积分变动",
+              render: (r) => (r.points > 0 ? "+" : "") + r.points,
+            },
+            {
+              label: "减排变动",
+              render: (r) =>
+                (Number(r.carbon_kg) > 0 ? "+" : "") +
+                Number(r.carbon_kg).toFixed(4) +
+                " kg",
+            },
+            {
+              label: "规则 / 原因",
+              render: (r) => (
+                <>
+                  <code>{r.rule_version}</code>
+                  <br />
+                  <small>{r.reason}</small>
+                </>
+              ),
             },
             { label: "记录时间", render: (r) => date(r.created_at) },
           ]}
@@ -1064,11 +1520,27 @@ export function Admin({ d, run }: Props) {
   const [kind, setKind] = useState("zones"),
     [edit, setEdit] = useState<any>({});
   const [users, setUsers] = useState<Row[]>([]),
+    [roads, setRoads] = useState<Row[]>([]),
+    [road, setRoad] = useState<any>(),
+    [attempts, setAttempts] = useState<Row[]>([]),
+    [reviews, setReviews] = useState<Row[]>([]),
+    [adjustOrder, setAdjustOrder] = useState(""),
+    [adjustPoints, setAdjustPoints] = useState(0),
+    [adjustCarbon, setAdjustCarbon] = useState(0),
+    [adjustReason, setAdjustReason] = useState("课程演示人工校正"),
     [userError, setUserError] = useState("");
   useEffect(() => {
-    api("/admin/users")
-      .then((v) => {
-        setUsers(v.users);
+    Promise.all([
+      api("/admin/users"),
+      api("/admin/roads"),
+      api("/return-attempts"),
+      api("/admin/orders/review"),
+    ])
+      .then(([u, r, a, q]) => {
+        setUsers(u.users);
+        setRoads(r.roads || []);
+        setAttempts(a.attempts || []);
+        setReviews(q.orders || []);
         setUserError("");
       })
       .catch((e) => setUserError(e.message));
@@ -1249,6 +1721,312 @@ export function Admin({ d, run }: Props) {
             },
           ]}
         />
+      </section>
+      <section className="panel">
+        <div className="section-head">
+          <div>
+            <h2>校园路网属性维护</h2>
+            <p className="muted">
+              方向、禁骑状态、坡度、路面、遮阴、照明和混行属性会直接影响三种路线方案。
+            </p>
+          </div>
+        </div>
+        {road && (
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (await run("/admin/roads", road)) setRoad(undefined);
+            }}
+          >
+            <h3>
+              编辑路段 #{road.id} · {road.from_name} → {road.to_name}
+            </h3>
+            <div className="form-row">
+              <Field label="方向">
+                <select
+                  value={road.direction}
+                  onChange={(e) =>
+                    setRoad({ ...road, direction: e.target.value })
+                  }
+                >
+                  {["BOTH", "FORWARD", "REVERSE"].map((v) => (
+                    <option key={v}>{v}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="通行状态">
+                <select
+                  value={road.status}
+                  onChange={(e) => setRoad({ ...road, status: e.target.value })}
+                >
+                  {["OPEN", "CLOSED", "NO_RIDE"].map((v) => (
+                    <option key={v}>{v}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="坡度 %">
+                <input
+                  type="number"
+                  step="0.1"
+                  min="-30"
+                  max="30"
+                  value={road.slope_percent}
+                  onChange={(e) =>
+                    setRoad({ ...road, slope_percent: Number(e.target.value) })
+                  }
+                />
+              </Field>
+              <Field label="路面">
+                <select
+                  value={road.surface}
+                  onChange={(e) =>
+                    setRoad({ ...road, surface: e.target.value })
+                  }
+                >
+                  {["SMOOTH", "AVERAGE", "ROUGH"].map((v) => (
+                    <option key={v}>{v}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="遮阴 0–5">
+                <input
+                  type="number"
+                  min="0"
+                  max="5"
+                  value={road.shade_level}
+                  onChange={(e) =>
+                    setRoad({ ...road, shade_level: Number(e.target.value) })
+                  }
+                />
+              </Field>
+              <Field label="照明 0–5">
+                <input
+                  type="number"
+                  min="0"
+                  max="5"
+                  value={road.lighting_level}
+                  onChange={(e) =>
+                    setRoad({ ...road, lighting_level: Number(e.target.value) })
+                  }
+                />
+              </Field>
+              <Field label="交通混行">
+                <select
+                  value={road.traffic_mix}
+                  onChange={(e) =>
+                    setRoad({ ...road, traffic_mix: e.target.value })
+                  }
+                >
+                  {["BIKE_ONLY", "MIXED", "MOTOR_HEAVY"].map((v) => (
+                    <option key={v}>{v}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="交叉口风险 0–5">
+                <input
+                  type="number"
+                  min="0"
+                  max="5"
+                  value={road.intersection_risk}
+                  onChange={(e) =>
+                    setRoad({
+                      ...road,
+                      intersection_risk: Number(e.target.value),
+                    })
+                  }
+                />
+              </Field>
+            </div>
+            <button>保存路网属性</button>
+          </form>
+        )}
+        <Table
+          rows={roads}
+          columns={[
+            { label: "路段", render: (r) => `${r.from_name} → ${r.to_name}` },
+            {
+              label: "方向 / 状态",
+              render: (r) => `${r.direction} / ${r.status}`,
+            },
+            {
+              label: "坡度 / 路面",
+              render: (r) =>
+                `${Number(r.slope_percent).toFixed(1)}% / ${r.surface}`,
+            },
+            {
+              label: "交通 / 风险",
+              render: (r) => `${r.traffic_mix} / ${r.intersection_risk}`,
+            },
+            { label: "属性来源", render: (r) => r.attribute_source },
+            {
+              label: "操作",
+              render: (r) => (
+                <button
+                  className="tiny secondary"
+                  onClick={() => setRoad({ ...r })}
+                >
+                  编辑
+                </button>
+              ),
+            },
+          ]}
+        />
+      </section>
+      <section className="panel">
+        <h2>电子围栏违规复核</h2>
+        <Table
+          rows={attempts}
+          columns={[
+            {
+              label: "订单 / 车辆",
+              render: (r) => `#${r.order_id} · ${r.bike_code}`,
+            },
+            {
+              label: "停车区 / 坐标",
+              render: (r) => `${r.zone_name} · ${r.x}, ${r.y}`,
+            },
+            {
+              label: "原因 / 来源",
+              render: (r) => `${r.reason} / ${r.location_source || "历史"}`,
+            },
+            { label: "状态", render: (r) => <Badge value={r.review_status} /> },
+            {
+              label: "操作",
+              render: (r) =>
+                r.review_status === "PENDING" ? (
+                  <div className="actions">
+                    <button
+                      className="tiny"
+                      onClick={() =>
+                        run("/returns/" + r.id + "/review", {
+                          action: "RESOLVE",
+                          note: "已核对定位时间、坐标与停车区范围",
+                        })
+                      }
+                    >
+                      标记已处理
+                    </button>
+                    <button
+                      className="tiny secondary"
+                      onClick={() =>
+                        run("/returns/" + r.id + "/review", {
+                          action: "DISMISS",
+                          note: "复核后确认该记录无需继续处理",
+                        })
+                      }
+                    >
+                      撤销记录
+                    </button>
+                  </div>
+                ) : (
+                  r.review_note
+                ),
+            },
+          ]}
+        />
+      </section>
+      <section className="panel">
+        <h2>异常行程资格复核</h2>
+        <p className="muted">
+          短时间内出现异常长距离的订单不会立即发放积分，经人工确认后再记入流水。
+        </p>
+        <Table
+          rows={reviews}
+          columns={[
+            {
+              label: "订单 / 用户",
+              render: (r) => `#${r.id} · ${r.user_name}`,
+            },
+            {
+              label: "车辆 / 里程",
+              render: (r) =>
+                `${r.bike_code} · ${(r.distance_m / 1000).toFixed(2)} km`,
+            },
+            { label: "异常依据", render: (r) => r.qualification_reason },
+            {
+              label: "操作",
+              render: (r) => (
+                <div className="actions">
+                  <button
+                    className="tiny"
+                    onClick={() =>
+                      run("/orders/" + r.id + "/qualification", {
+                        decision: "VALID",
+                        reason: "人工复核确认行程数据有效",
+                      })
+                    }
+                  >
+                    确认有效
+                  </button>
+                  <button
+                    className="tiny secondary"
+                    onClick={() =>
+                      run("/orders/" + r.id + "/qualification", {
+                        decision: "EXCLUDED",
+                        reason: "人工复核确认不参与积分统计",
+                      })
+                    }
+                  >
+                    排除
+                  </button>
+                </div>
+              ),
+            },
+          ]}
+        />
+      </section>
+      <section className="panel">
+        <h2>碳积分人工调整</h2>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            run("/carbon/adjustments", {
+              order_id: Number(adjustOrder),
+              points_change: adjustPoints,
+              carbon_kg_change: adjustCarbon,
+              reason: adjustReason,
+              idempotency_key: `manual-${adjustOrder}-${Date.now()}`,
+            });
+          }}
+        >
+          <div className="form-row">
+            <Field label="已支付订单 ID">
+              <input
+                required
+                type="number"
+                min="1"
+                value={adjustOrder}
+                onChange={(e) => setAdjustOrder(e.target.value)}
+              />
+            </Field>
+            <Field label="积分变动">
+              <input
+                type="number"
+                value={adjustPoints}
+                onChange={(e) => setAdjustPoints(Number(e.target.value))}
+              />
+            </Field>
+            <Field label="减排变动 kg">
+              <input
+                type="number"
+                step="0.0001"
+                value={adjustCarbon}
+                onChange={(e) => setAdjustCarbon(Number(e.target.value))}
+              />
+            </Field>
+            <Field label="调整原因">
+              <input
+                required
+                minLength={2}
+                value={adjustReason}
+                onChange={(e) => setAdjustReason(e.target.value)}
+              />
+            </Field>
+          </div>
+          <button disabled={adjustPoints === 0 && adjustCarbon === 0}>
+            新增调整流水
+          </button>
+        </form>
       </section>
     </>
   );

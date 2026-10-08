@@ -3,7 +3,9 @@ CREATE TABLE IF NOT EXISTS users (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
  name VARCHAR(40) NOT NULL, email VARCHAR(160) NOT NULL UNIQUE, phone VARCHAR(20) NOT NULL UNIQUE,
  password_hash VARCHAR(100) NOT NULL, role ENUM('STUDENT','ADMIN','OPERATOR') NOT NULL DEFAULT 'STUDENT',
- status ENUM('ACTIVE','SUSPENDED') NOT NULL DEFAULT 'ACTIVE', created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+ status ENUM('ACTIVE','SUSPENDED') NOT NULL DEFAULT 'ACTIVE',
+ leaderboard_alias VARCHAR(40) NOT NULL DEFAULT '骑行者', leaderboard_visible BOOLEAN NOT NULL DEFAULT FALSE,
+ created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 ) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS parking_zones (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, name VARCHAR(60) NOT NULL UNIQUE, location VARCHAR(160) NOT NULL,
@@ -24,13 +26,21 @@ CREATE TABLE IF NOT EXISTS ride_orders (
  started_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), ended_at DATETIME(3) NULL,
  amount_cents INT NOT NULL DEFAULT 0, distance_m INT NOT NULL DEFAULT 0,
  distance_source ENUM('ROUTE_ESTIMATE') NOT NULL DEFAULT 'ROUTE_ESTIMATE', route_mode ENUM('shortest','safe','comfortable') NOT NULL DEFAULT 'shortest',
+ qualification_status ENUM('VALID','UNDER_REVIEW','EXCLUDED') NOT NULL DEFAULT 'VALID',
+ qualification_reason VARCHAR(300) NULL, reviewed_by BIGINT UNSIGNED NULL, reviewed_at DATETIME(3) NULL,
+ return_x DECIMAL(10,2) NULL, return_y DECIMAL(10,2) NULL,
+ location_captured_at DATETIME(3) NULL, location_source ENUM('MAP_SIMULATION','DEVICE_GPS','MANUAL') NULL,
  status ENUM('RUNNING','UNPAID','PAID') NOT NULL DEFAULT 'RUNNING',
  active_user BIGINT UNSIGNED GENERATED ALWAYS AS (CASE WHEN status='RUNNING' THEN user_id END) STORED UNIQUE,
  active_bike BIGINT UNSIGNED GENERATED ALWAYS AS (CASE WHEN status='RUNNING' THEN bike_id END) STORED UNIQUE,
  FOREIGN KEY(user_id) REFERENCES users(id), FOREIGN KEY(bike_id) REFERENCES bikes(id),
- FOREIGN KEY(start_zone_id) REFERENCES parking_zones(id), FOREIGN KEY(end_zone_id) REFERENCES parking_zones(id),
+ FOREIGN KEY(start_zone_id) REFERENCES parking_zones(id), FOREIGN KEY(end_zone_id) REFERENCES parking_zones(id), FOREIGN KEY(reviewed_by) REFERENCES users(id),
  INDEX idx_ride_start(start_zone_id,started_at), INDEX idx_ride_end(end_zone_id,ended_at), INDEX idx_ride_user(user_id,started_at),
- CHECK(amount_cents>=0), CHECK(distance_m>=0),
+ CHECK(amount_cents>=0), CHECK(distance_m>=0), CONSTRAINT chk_ride_return_pair CHECK((return_x IS NULL)=(return_y IS NULL)),
+ CONSTRAINT chk_ride_qualification_review CHECK(
+   (qualification_status='UNDER_REVIEW' AND reviewed_by IS NULL AND reviewed_at IS NULL) OR
+   (qualification_status='VALID' AND ((reviewed_by IS NULL AND reviewed_at IS NULL) OR (reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL))) OR
+   (qualification_status='EXCLUDED' AND reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL)),
  CHECK((status='RUNNING' AND ended_at IS NULL AND end_zone_id IS NULL) OR (status<>'RUNNING' AND ended_at IS NOT NULL AND end_zone_id IS NOT NULL AND ended_at>=started_at))
 ) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS payments (
@@ -75,8 +85,13 @@ CREATE TABLE IF NOT EXISTS zone_snapshots (
 ) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS return_attempts (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, order_id BIGINT UNSIGNED NOT NULL, zone_id BIGINT UNSIGNED NOT NULL,
- x DECIMAL(10,2) NOT NULL, y DECIMAL(10,2) NOT NULL, reason ENUM('OUTSIDE_FENCE','ZONE_FULL','ZONE_CLOSED') NOT NULL,
- created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), FOREIGN KEY(order_id) REFERENCES ride_orders(id), FOREIGN KEY(zone_id) REFERENCES parking_zones(id)
+ x DECIMAL(10,2) NOT NULL, y DECIMAL(10,2) NOT NULL,
+ reason ENUM('OUTSIDE_FENCE','ZONE_FULL','ZONE_CLOSED','LOCATION_STALE','INVALID_LOCATION') NOT NULL,
+ location_captured_at DATETIME(3) NOT NULL, location_source ENUM('MAP_SIMULATION','DEVICE_GPS','MANUAL','HISTORICAL_SIMULATION') NOT NULL,
+ review_status ENUM('PENDING','RESOLVED','DISMISSED') NOT NULL DEFAULT 'PENDING',
+ reviewer_id BIGINT UNSIGNED NULL, review_note VARCHAR(300) NULL, reviewed_at DATETIME(3) NULL,
+ created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), FOREIGN KEY(order_id) REFERENCES ride_orders(id), FOREIGN KEY(zone_id) REFERENCES parking_zones(id), FOREIGN KEY(reviewer_id) REFERENCES users(id),
+ CONSTRAINT chk_return_review_state CHECK((review_status='PENDING' AND reviewer_id IS NULL AND reviewed_at IS NULL) OR (review_status<>'PENDING' AND reviewer_id IS NOT NULL AND reviewed_at IS NOT NULL AND review_note IS NOT NULL))
 ) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS road_nodes (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, name VARCHAR(60) NOT NULL, x DECIMAL(10,2) NOT NULL,y DECIMAL(10,2) NOT NULL,
@@ -85,13 +100,43 @@ CREATE TABLE IF NOT EXISTS road_nodes (
 CREATE TABLE IF NOT EXISTS road_edges (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, from_node_id BIGINT UNSIGNED NOT NULL,to_node_id BIGINT UNSIGNED NOT NULL,
  distance_m INT NOT NULL, safety_cost DECIMAL(6,2) NOT NULL DEFAULT 1, comfort_cost DECIMAL(6,2) NOT NULL DEFAULT 1,
+ direction ENUM('BOTH','FORWARD','REVERSE') NOT NULL DEFAULT 'BOTH', status ENUM('OPEN','CLOSED','NO_RIDE') NOT NULL DEFAULT 'OPEN',
+ slope_percent DECIMAL(5,2) NOT NULL DEFAULT 0, surface ENUM('SMOOTH','AVERAGE','ROUGH') NOT NULL DEFAULT 'SMOOTH',
+ shade_level TINYINT UNSIGNED NOT NULL DEFAULT 3, lighting_level TINYINT UNSIGNED NOT NULL DEFAULT 3,
+ traffic_mix ENUM('BIKE_ONLY','MIXED','MOTOR_HEAVY') NOT NULL DEFAULT 'MIXED', intersection_risk TINYINT UNSIGNED NOT NULL DEFAULT 1,
+ attribute_source ENUM('SIMULATED_COURSE_DATA','MEASURED') NOT NULL DEFAULT 'SIMULATED_COURSE_DATA',
  FOREIGN KEY(from_node_id) REFERENCES road_nodes(id), FOREIGN KEY(to_node_id) REFERENCES road_nodes(id),
- UNIQUE(from_node_id,to_node_id), CHECK(from_node_id<to_node_id), CHECK(distance_m>0 AND safety_cost>=1 AND comfort_cost>=1)
+ UNIQUE(from_node_id,to_node_id), CHECK(from_node_id<to_node_id), CHECK(distance_m>0 AND safety_cost>=1 AND comfort_cost>=1),
+ CONSTRAINT chk_road_attributes CHECK(slope_percent BETWEEN -30 AND 30 AND shade_level BETWEEN 0 AND 5 AND lighting_level BETWEEN 0 AND 5 AND intersection_risk BETWEEN 0 AND 5)
 ) ENGINE=InnoDB;
-CREATE TABLE IF NOT EXISTS carbon_ledger (
- id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, order_id BIGINT UNSIGNED NOT NULL UNIQUE, distance_m INT NOT NULL,
- points INT NOT NULL, carbon_kg DECIMAL(12,4) NOT NULL, factor_kg_per_km DECIMAL(5,3) NOT NULL DEFAULT 0.210,
- created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), FOREIGN KEY(order_id) REFERENCES ride_orders(id), CHECK(distance_m>=0 AND points>=0 AND carbon_kg>=0)
+CREATE TABLE IF NOT EXISTS dispatch_suggestions (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, source_zone_id BIGINT UNSIGNED NOT NULL, target_zone_id BIGINT UNSIGNED NOT NULL,
+ quantity INT NOT NULL, source_available INT NOT NULL, target_occupied INT NOT NULL, target_capacity INT NOT NULL, target_reserved INT NOT NULL,
+ borrow_count INT NOT NULL, return_count INT NOT NULL, desired_inventory INT NOT NULL,
+ window_start DATETIME(3) NOT NULL, window_end DATETIME(3) NOT NULL, reason VARCHAR(500) NOT NULL, algorithm_version VARCHAR(30) NOT NULL,
+ status ENUM('OPEN','CONFIRMED','STALE','DISMISSED') NOT NULL DEFAULT 'OPEN', task_id BIGINT UNSIGNED NULL, created_by BIGINT UNSIGNED NOT NULL,
+ resolution_note VARCHAR(500) NULL, created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), resolved_at DATETIME(3) NULL,
+ FOREIGN KEY(source_zone_id) REFERENCES parking_zones(id), FOREIGN KEY(target_zone_id) REFERENCES parking_zones(id),
+ FOREIGN KEY(task_id) REFERENCES dispatch_tasks(id), FOREIGN KEY(created_by) REFERENCES users(id), CHECK(quantity>0 AND source_zone_id<>target_zone_id),
+ CONSTRAINT chk_suggestion_state CHECK((status='OPEN' AND task_id IS NULL AND resolved_at IS NULL) OR (status='CONFIRMED' AND task_id IS NOT NULL AND resolved_at IS NOT NULL) OR (status IN('STALE','DISMISSED') AND task_id IS NULL AND resolved_at IS NOT NULL))
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS risk_alerts (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, bike_id BIGINT UNSIGNED NOT NULL, score INT NOT NULL,
+ level ENUM('MEDIUM','HIGH') NOT NULL, reasons JSON NOT NULL, ticket_ids JSON NOT NULL,
+ fingerprint CHAR(64) NOT NULL, open_fingerprint CHAR(64) GENERATED ALWAYS AS (CASE WHEN status IN('OPEN','ACKNOWLEDGED') THEN fingerprint END) STORED UNIQUE,
+ rule_version VARCHAR(30) NOT NULL, status ENUM('OPEN','ACKNOWLEDGED','RESOLVED','DISMISSED') NOT NULL DEFAULT 'OPEN',
+ recommendation VARCHAR(300) NOT NULL, handler_id BIGINT UNSIGNED NULL, maintenance_ticket_id BIGINT UNSIGNED NULL,
+ resolution_note VARCHAR(500) NULL, triggered_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), acknowledged_at DATETIME(3) NULL, resolved_at DATETIME(3) NULL,
+ FOREIGN KEY(bike_id) REFERENCES bikes(id), FOREIGN KEY(handler_id) REFERENCES users(id), FOREIGN KEY(maintenance_ticket_id) REFERENCES maintenance_tickets(id), CHECK(score BETWEEN 0 AND 100),
+ CONSTRAINT chk_risk_state CHECK((status='OPEN' AND handler_id IS NULL AND acknowledged_at IS NULL AND resolved_at IS NULL) OR (status='ACKNOWLEDGED' AND handler_id IS NOT NULL AND acknowledged_at IS NOT NULL AND resolved_at IS NULL) OR (status IN('RESOLVED','DISMISSED') AND handler_id IS NOT NULL AND resolved_at IS NOT NULL))
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS carbon_transactions (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, order_id BIGINT UNSIGNED NOT NULL,
+ entry_type ENUM('AWARD','ADJUSTMENT') NOT NULL, award_order_id BIGINT UNSIGNED GENERATED ALWAYS AS (CASE WHEN entry_type='AWARD' THEN order_id END) STORED UNIQUE,
+ idempotency_key VARCHAR(100) NOT NULL UNIQUE, distance_m INT NOT NULL DEFAULT 0,
+ points_change INT NOT NULL, carbon_kg_change DECIMAL(12,4) NOT NULL, factor_kg_per_km DECIMAL(5,3) NOT NULL DEFAULT 0.210,
+ rule_version VARCHAR(30) NOT NULL, reason VARCHAR(300) NOT NULL, actor_id BIGINT UNSIGNED NULL,
+ created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), FOREIGN KEY(order_id) REFERENCES ride_orders(id), FOREIGN KEY(actor_id) REFERENCES users(id), CHECK(distance_m>=0)
 ) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS audit_logs (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, actor_id BIGINT UNSIGNED NULL, action VARCHAR(60) NOT NULL,
@@ -107,7 +152,9 @@ CREATE OR REPLACE VIEW v_zone_inventory AS
 CREATE OR REPLACE VIEW v_ride_details AS
  SELECT r.*,b.code bike_code,s.name start_zone_name,e.name end_zone_name FROM ride_orders r JOIN bikes b ON b.id=r.bike_id JOIN parking_zones s ON s.id=r.start_zone_id LEFT JOIN parking_zones e ON e.id=r.end_zone_id;
 CREATE OR REPLACE VIEW v_user_carbon AS
- SELECT u.id user_id,COALESCE(SUM(c.points),0) points,COALESCE(SUM(c.carbon_kg),0) carbon_kg,COALESCE(SUM(c.distance_m),0) distance_m FROM users u LEFT JOIN ride_orders r ON r.user_id=u.id LEFT JOIN carbon_ledger c ON c.order_id=r.id GROUP BY u.id;
+ SELECT u.id user_id,COALESCE(SUM(c.points_change),0) points,COALESCE(SUM(c.carbon_kg_change),0) carbon_kg,COALESCE(SUM(CASE WHEN c.entry_type='AWARD' THEN c.distance_m ELSE 0 END),0) distance_m FROM users u LEFT JOIN ride_orders r ON r.user_id=u.id LEFT JOIN carbon_transactions c ON c.order_id=r.id GROUP BY u.id;
+CREATE OR REPLACE VIEW carbon_ledger AS
+ SELECT id,order_id,distance_m,points_change points,carbon_kg_change carbon_kg,factor_kg_per_km,created_at FROM carbon_transactions WHERE entry_type='AWARD';
 DROP TRIGGER IF EXISTS trg_payment_guard;
 DELIMITER $$
 CREATE TRIGGER trg_payment_guard BEFORE INSERT ON payments FOR EACH ROW
@@ -120,11 +167,12 @@ END$$
 DELIMITER ;
 DROP TRIGGER IF EXISTS trg_carbon_guard;
 DELIMITER $$
-CREATE TRIGGER trg_carbon_guard BEFORE INSERT ON carbon_ledger FOR EACH ROW
+CREATE TRIGGER trg_carbon_guard BEFORE INSERT ON carbon_transactions FOR EACH ROW
 BEGIN
  DECLARE paid_count INT;
  SELECT COUNT(*) INTO paid_count FROM payments WHERE order_id=NEW.order_id;
- IF paid_count<>1 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Carbon credit requires successful payment'; END IF;
+ IF paid_count<>1 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Carbon transaction requires successful payment'; END IF;
+ IF NEW.entry_type='AWARD' AND (NEW.points_change<0 OR NEW.carbon_kg_change<0) THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Carbon award cannot be negative'; END IF;
 END$$
 DELIMITER ;
 DROP PROCEDURE IF EXISTS sp_capture_zone_snapshots;

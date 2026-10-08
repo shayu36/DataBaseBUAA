@@ -129,22 +129,22 @@
 +----+-----------------+--------------+
 | id | name            | borrow_count |
 +----+-----------------+--------------+
-|  2 | 图书馆站        |           16 |
-|  5 | 合一楼站        |           14 |
-|  4 | 学生公寓站      |           14 |
-|  3 | 新主楼站        |           14 |
-|  1 | 东门驿站        |           13 |
-|  6 | 体育场站        |           13 |
+|  2 | 图书馆站        |           10 |
+|  6 | 体育场站        |            7 |
+|  5 | 合一楼站        |            7 |
+|  1 | 东门驿站        |            6 |
+|  4 | 学生公寓站      |            6 |
+|  3 | 新主楼站        |            4 |
 +----+-----------------+--------------+
 +----+-----------------+--------------+
 | id | name            | return_count |
 +----+-----------------+--------------+
-|  1 | 东门驿站        |           17 |
-|  6 | 体育场站        |           14 |
-|  5 | 合一楼站        |           14 |
-|  2 | 图书馆站        |           13 |
-|  4 | 学生公寓站      |           13 |
-|  3 | 新主楼站        |           13 |
+|  1 | 东门驿站        |           13 |
+|  6 | 体育场站        |            7 |
+|  5 | 合一楼站        |            7 |
+|  2 | 图书馆站        |            5 |
+|  4 | 学生公寓站      |            5 |
+|  3 | 新主楼站        |            5 |
 +----+-----------------+--------------+
 +------------+--------------+
 | local_hour | borrow_count |
@@ -152,15 +152,16 @@
 |          0 |            2 |
 |          1 |            1 |
 |          9 |           56 |
+|         11 |            1 |
 |         14 |           56 |
 |         17 |            1 |
-|         19 |           52 |
+|         19 |           54 |
 +------------+--------------+
 +---------+------------+-------------+
 | bike_id | fault_type | occurrences |
 +---------+------------+-------------+
 |       1 | BRAKE      |           3 |
-|       2 | BRAKE      |           5 |
+|       2 | BRAKE      |           8 |
 +---------+------------+-------------+
 +----+--------+
 | id | code   |
@@ -243,53 +244,51 @@
 |  3 | COMPLETED | 东门驿站     | 图书馆站     | QX-001 |
 |  4 | COMPLETED | 东门驿站     | 图书馆站     | QX-001 |
 |  5 | COMPLETED | 东门驿站     | 图书馆站     | QX-001 |
+|  6 | COMPLETED | 东门驿站     | 图书馆站     | QX-001 |
+|  7 | COMPLETED | 东门驿站     | 图书馆站     | QX-001 |
+|  8 | COMPLETED | 东门驿站     | 图书馆站     | QX-001 |
 +----+-----------+--------------+--------------+--------+
-+-------------+-------------+---------+-------+------------+--------+
-| points_rank | masked_name | user_id | rides | distance_m | points |
-+-------------+-------------+---------+-------+------------+--------+
-|           1 | 王**        |       4 |    45 |      23265 |    212 |
-|           2 | 欧**        |       2 |    41 |      22005 |    201 |
-|           3 | 贾**        |       1 |    41 |      21860 |    200 |
-|           4 | 郑**        |       3 |    41 |      21315 |    194 |
-+-------------+-------------+---------+-------+------------+--------+
 +---------+-----------+----------+----------+-------------------------+--------+
 | zone_id | available | occupied | capacity | captured_at             | source |
 +---------+-----------+----------+----------+-------------------------+--------+
-|       1 |        13 |       14 |       24 | 2026-10-04 17:11:17.257 | LIVE   |
-|       2 |         4 |        4 |       24 | 2026-10-04 17:11:17.257 | LIVE   |
-|       3 |        10 |       10 |       20 | 2026-10-04 17:11:17.257 | LIVE   |
-|       4 |        25 |       25 |       28 | 2026-10-04 17:11:17.257 | LIVE   |
-|       5 |         9 |        9 |       18 | 2026-10-04 17:11:17.257 | LIVE   |
-|       6 |         3 |        4 |       16 | 2026-10-04 17:11:17.257 | LIVE   |
+|       1 |        13 |       14 |       24 | 2026-10-08 11:35:44.892 | LIVE   |
+|       2 |         4 |        4 |       24 | 2026-10-08 11:35:44.892 | LIVE   |
+|       3 |        10 |       10 |       20 | 2026-10-08 11:35:44.892 | LIVE   |
+|       4 |        25 |       25 |       28 | 2026-10-08 11:35:44.892 | LIVE   |
+|       5 |         9 |        9 |       18 | 2026-10-08 11:35:44.892 | LIVE   |
+|       6 |         3 |        4 |       16 | 2026-10-08 11:35:44.892 | LIVE   |
 +---------+-----------+----------+----------+-------------------------+--------+
-+---------------+----------+
-| reason        | attempts |
-+---------------+----------+
-| OUTSIDE_FENCE |        6 |
-+---------------+----------+
-+---------------------+------------+
-| TABLE_NAME          | TABLE_TYPE |
-+---------------------+------------+
-| audit_logs          | BASE TABLE |
-| bikes               | BASE TABLE |
-| carbon_ledger       | BASE TABLE |
-| dispatch_bikes      | BASE TABLE |
-| dispatch_tasks      | BASE TABLE |
-| maintenance_tickets | BASE TABLE |
-| parking_zones       | BASE TABLE |
-| payments            | BASE TABLE |
-| return_attempts     | BASE TABLE |
-| ride_orders         | BASE TABLE |
-| road_edges          | BASE TABLE |
-| road_nodes          | BASE TABLE |
-| staff               | BASE TABLE |
-| system_settings     | BASE TABLE |
-| users               | BASE TABLE |
-| zone_snapshots      | BASE TABLE |
-| v_ride_details      | VIEW       |
-| v_user_carbon       | VIEW       |
-| v_zone_inventory    | VIEW       |
-+---------------------+------------+
++---------------+---------------+----------+
+| reason        | review_status | attempts |
++---------------+---------------+----------+
+| OUTSIDE_FENCE | PENDING       |        9 |
++---------------+---------------+----------+
++----------------------+------------+
+| TABLE_NAME           | TABLE_TYPE |
++----------------------+------------+
+| audit_logs           | BASE TABLE |
+| bikes                | BASE TABLE |
+| carbon_transactions  | BASE TABLE |
+| dispatch_bikes       | BASE TABLE |
+| dispatch_suggestions | BASE TABLE |
+| dispatch_tasks       | BASE TABLE |
+| maintenance_tickets  | BASE TABLE |
+| parking_zones        | BASE TABLE |
+| payments             | BASE TABLE |
+| return_attempts      | BASE TABLE |
+| ride_orders          | BASE TABLE |
+| risk_alerts          | BASE TABLE |
+| road_edges           | BASE TABLE |
+| road_nodes           | BASE TABLE |
+| staff                | BASE TABLE |
+| system_settings      | BASE TABLE |
+| users                | BASE TABLE |
+| zone_snapshots       | BASE TABLE |
+| carbon_ledger        | VIEW       |
+| v_ride_details       | VIEW       |
+| v_user_carbon        | VIEW       |
+| v_zone_inventory     | VIEW       |
++----------------------+------------+
 +-------------------+---------------+--------------------+
 | TRIGGER_NAME      | ACTION_TIMING | EVENT_MANIPULATION |
 +-------------------+---------------+--------------------+
@@ -306,3 +305,243 @@
 +----+-------------+-------+------------+------+----------------------+----------------------+---------+-------------+------+----------+-----------------------+
 |  1 | SIMPLE      | bikes | NULL       | ref  | idx_bike_zone_status | idx_bike_zone_status | 10      | const,const |   13 |   100.00 | Using index condition |
 +----+-------------+-------+------------+------+----------------------+----------------------+---------+-------------+------+----------+-----------------------+
++----+-----------------------+-----------------------+-----------+--------+---------------+---------+-------------+----------------+-------------+-------------------+-----------------------+
+| id | from_node             | to_node               | direction | status | slope_percent | surface | shade_level | lighting_level | traffic_mix | intersection_risk | attribute_source      |
++----+-----------------------+-----------------------+-----------+--------+---------------+---------+-------------+----------------+-------------+-------------------+-----------------------+
+| 14 | 东门驿站              | 主楼东路口            | BOTH      | OPEN   |          3.00 | AVERAGE |           4 |              3 | MOTOR_HEAVY |                 2 | SIMULATED_COURSE_DATA |
+| 15 | 东门驿站              | 东侧中路口            | BOTH      | OPEN   |         -3.00 | ROUGH   |           5 |              5 | BIKE_ONLY   |                 3 | SIMULATED_COURSE_DATA |
+| 16 | 东门驿站              | 科研区东路口          | BOTH      | OPEN   |         -1.50 | AVERAGE |           2 |              4 | MIXED       |                 0 | SIMULATED_COURSE_DATA |
+| 17 | 图书馆站              | 绿园东南路口          | BOTH      | OPEN   |          0.00 | SMOOTH  |           3 |              3 | MIXED       |                 1 | SIMULATED_COURSE_DATA |
+| 18 | 图书馆站              | 主楼南路口            | BOTH      | OPEN   |          1.50 | AVERAGE |           4 |              5 | BIKE_ONLY   |                 2 | SIMULATED_COURSE_DATA |
+| 19 | 新主楼站              | 新主楼西南路口        | BOTH      | OPEN   |          3.00 | SMOOTH  |           5 |              4 | MIXED       |                 3 | SIMULATED_COURSE_DATA |
+| 20 | 新主楼站              | 新主楼东南路口        | BOTH      | OPEN   |         -3.00 | ROUGH   |           2 |              3 | MIXED       |                 0 | SIMULATED_COURSE_DATA |
+| 21 | 学生公寓站            | 北路西路口            | BOTH      | OPEN   |         -1.50 | SMOOTH  |           3 |              5 | MOTOR_HEAVY |                 1 | SIMULATED_COURSE_DATA |
+| 22 | 学生公寓站            | 北路中路口            | BOTH      | OPEN   |          0.00 | AVERAGE |           4 |              4 | MIXED       |                 2 | SIMULATED_COURSE_DATA |
+| 23 | 合一楼站              | 生活区西路口          | BOTH      | OPEN   |          1.50 | SMOOTH  |           5 |              3 | MIXED       |                 3 | SIMULATED_COURSE_DATA |
+| 24 | 合一楼站              | 生活区东路口          | BOTH      | OPEN   |          3.00 | AVERAGE |           2 |              5 | BIKE_ONLY   |                 0 | SIMULATED_COURSE_DATA |
+| 25 | 体育场站              | 体育场西北路口        | BOTH      | OPEN   |         -3.00 | ROUGH   |           3 |              4 | MIXED       |                 1 | SIMULATED_COURSE_DATA |
+| 26 | 体育场站              | 体育场东北路口        | BOTH      | OPEN   |         -1.50 | AVERAGE |           4 |              3 | MIXED       |                 2 | SIMULATED_COURSE_DATA |
+| 27 | 主楼东路口            | 主楼南路口            | BOTH      | OPEN   |          0.00 | SMOOTH  |           5 |              5 | BIKE_ONLY   |                 3 | SIMULATED_COURSE_DATA |
+| 28 | 主楼东路口            | 科研区西路口          | BOTH      | OPEN   |          1.50 | AVERAGE |           2 |              4 | MOTOR_HEAVY |                 0 | SIMULATED_COURSE_DATA |
+| 29 | 绿园东南路口          | 北路中路口            | BOTH      | OPEN   |          3.00 | SMOOTH  |           3 |              3 | MIXED       |                 1 | SIMULATED_COURSE_DATA |
+| 30 | 绿园东南路口          | 生活区东路口          | BOTH      | OPEN   |         -3.00 | ROUGH   |           4 |              5 | BIKE_ONLY   |                 2 | SIMULATED_COURSE_DATA |
+| 31 | 绿园东南路口          | 绿园西南路口          | BOTH      | OPEN   |         -1.50 | SMOOTH  |           5 |              4 | MIXED       |                 3 | SIMULATED_COURSE_DATA |
+| 32 | 主楼南路口            | 东侧中路口            | BOTH      | OPEN   |          0.00 | AVERAGE |           2 |              3 | MIXED       |                 0 | SIMULATED_COURSE_DATA |
+| 33 | 主楼南路口            | 博物馆西南路口        | BOTH      | OPEN   |          1.50 | SMOOTH  |           3 |              5 | BIKE_ONLY   |                 1 | SIMULATED_COURSE_DATA |
+| 34 | 北路西路口            | 绿园西南路口          | BOTH      | OPEN   |          3.00 | AVERAGE |           4 |              4 | MIXED       |                 2 | SIMULATED_COURSE_DATA |
+| 35 | 北路中路口            | 科研区西路口          | BOTH      | OPEN   |         -3.00 | ROUGH   |           5 |              3 | MOTOR_HEAVY |                 3 | SIMULATED_COURSE_DATA |
+| 36 | 生活区西路口          | 体育场西北路口        | BOTH      | OPEN   |         -1.50 | AVERAGE |           2 |              5 | BIKE_ONLY   |                 0 | SIMULATED_COURSE_DATA |
+| 37 | 生活区西路口          | 绿园西南路口          | BOTH      | OPEN   |          0.00 | SMOOTH  |           3 |              4 | MIXED       |                 1 | SIMULATED_COURSE_DATA |
+| 38 | 生活区东路口          | 体育场东北路口        | BOTH      | OPEN   |          1.50 | AVERAGE |           4 |              3 | MIXED       |                 2 | SIMULATED_COURSE_DATA |
+| 39 | 新主楼西南路口        | 体育馆南路口          | BOTH      | OPEN   |          3.00 | SMOOTH  |           5 |              5 | BIKE_ONLY   |                 3 | SIMULATED_COURSE_DATA |
+| 40 | 新主楼西南路口        | 博物馆西南路口        | BOTH      | OPEN   |         -3.00 | ROUGH   |           2 |              4 | MIXED       |                 0 | SIMULATED_COURSE_DATA |
+| 41 | 新主楼东南路口        | 博物馆东南路口        | BOTH      | OPEN   |         -1.50 | SMOOTH  |           3 |              3 | MIXED       |                 1 | SIMULATED_COURSE_DATA |
+| 42 | 体育场东北路口        | 体育馆南路口          | BOTH      | OPEN   |          0.00 | AVERAGE |           4 |              5 | MOTOR_HEAVY |                 2 | SIMULATED_COURSE_DATA |
+| 43 | 体育场东北路口        | 博物馆西南路口        | BOTH      | OPEN   |          1.50 | SMOOTH  |           5 |              4 | MIXED       |                 3 | SIMULATED_COURSE_DATA |
+| 44 | 东侧中路口            | 博物馆东南路口        | BOTH      | OPEN   |          3.00 | AVERAGE |           2 |              3 | MIXED       |                 0 | SIMULATED_COURSE_DATA |
+| 45 | 科研区西路口          | 科研区东路口          | BOTH      | OPEN   |         -3.00 | ROUGH   |           3 |              5 | BIKE_ONLY   |                 1 | SIMULATED_COURSE_DATA |
+| 46 | 博物馆西南路口        | 博物馆东南路口        | BOTH      | OPEN   |         -1.50 | AVERAGE |           4 |              4 | MIXED       |                 2 | SIMULATED_COURSE_DATA |
++----+-----------------------+-----------------------+-----------+--------+---------------+---------+-------------+----------------+-------------+-------------------+-----------------------+
++----+----------+------+------+---------------+-------------------------+-----------------------+---------------+-------------+-------------+
+| id | order_id | x    | y    | reason        | location_captured_at    | location_source       | review_status | review_note | reviewed_at |
++----+----------+------+------+---------------+-------------------------+-----------------------+---------------+-------------+-------------+
+|  9 |      171 | 0.00 | 0.00 | OUTSIDE_FENCE | 2026-10-08 11:36:12.121 | MAP_SIMULATION        | PENDING       | NULL        | NULL        |
+|  8 |      170 | 0.00 | 0.00 | OUTSIDE_FENCE | 2026-10-08 11:31:59.502 | MAP_SIMULATION        | PENDING       | NULL        | NULL        |
+|  7 |      169 | 0.00 | 0.00 | OUTSIDE_FENCE | 2026-10-08 03:25:16.599 | MAP_SIMULATION        | PENDING       | NULL        | NULL        |
+|  6 |      168 | 0.00 | 0.00 | OUTSIDE_FENCE | 2026-10-04 17:10:37.201 | HISTORICAL_SIMULATION | PENDING       | NULL        | NULL        |
+|  5 |      167 | 0.00 | 0.00 | OUTSIDE_FENCE | 2026-10-04 16:19:44.143 | HISTORICAL_SIMULATION | PENDING       | NULL        | NULL        |
+|  4 |      166 | 0.00 | 0.00 | OUTSIDE_FENCE | 2026-10-04 16:15:24.294 | HISTORICAL_SIMULATION | PENDING       | NULL        | NULL        |
+|  3 |      165 | 0.00 | 0.00 | OUTSIDE_FENCE | 2026-10-04 09:48:28.384 | HISTORICAL_SIMULATION | PENDING       | NULL        | NULL        |
+|  2 |      165 | 0.00 | 0.00 | OUTSIDE_FENCE | 2026-10-04 09:47:13.732 | HISTORICAL_SIMULATION | PENDING       | NULL        | NULL        |
+|  1 |      165 | 0.00 | 0.00 | OUTSIDE_FENCE | 2026-10-04 09:44:58.658 | HISTORICAL_SIMULATION | PENDING       | NULL        | NULL        |
++----+----------+------+------+---------------+-------------------------+-----------------------+---------------+-------------+-------------+
++----------+------------+------------+---------+-----------------+
+| order_id | net_points | net_carbon | entries | lineage         |
++----------+------------+------------+---------+-----------------+
+|        1 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|        2 |          4 |     0.1029 |       1 | AWARD:legacy-v1 |
+|        3 |          8 |     0.1838 |       1 | AWARD:legacy-v1 |
+|        4 |          7 |     0.1575 |       1 | AWARD:legacy-v1 |
+|        5 |          3 |     0.0809 |       1 | AWARD:legacy-v1 |
+|        6 |          4 |     0.0956 |       1 | AWARD:legacy-v1 |
+|        7 |          3 |     0.0767 |       1 | AWARD:legacy-v1 |
+|        8 |          7 |     0.1638 |       1 | AWARD:legacy-v1 |
+|        9 |          8 |     0.1838 |       1 | AWARD:legacy-v1 |
+|       10 |          7 |     0.1575 |       1 | AWARD:legacy-v1 |
+|       11 |          4 |     0.0872 |       1 | AWARD:legacy-v1 |
+|       12 |          3 |     0.0809 |       1 | AWARD:legacy-v1 |
+|       13 |          4 |     0.0956 |       1 | AWARD:legacy-v1 |
+|       14 |          5 |     0.1113 |       1 | AWARD:legacy-v1 |
+|       15 |          3 |     0.0767 |       1 | AWARD:legacy-v1 |
+|       16 |          7 |     0.1638 |       1 | AWARD:legacy-v1 |
+|       17 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|       18 |          8 |     0.1722 |       1 | AWARD:legacy-v1 |
+|       19 |          7 |     0.1491 |       1 | AWARD:legacy-v1 |
+|       20 |          4 |     0.0872 |       1 | AWARD:legacy-v1 |
+|       21 |          3 |     0.0809 |       1 | AWARD:legacy-v1 |
+|       22 |          4 |     0.0956 |       1 | AWARD:legacy-v1 |
+|       23 |          5 |     0.1113 |       1 | AWARD:legacy-v1 |
+|       24 |          3 |     0.0767 |       1 | AWARD:legacy-v1 |
+|       25 |          7 |     0.1638 |       1 | AWARD:legacy-v1 |
+|       26 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|       27 |          8 |     0.1722 |       1 | AWARD:legacy-v1 |
+|       28 |          7 |     0.1491 |       1 | AWARD:legacy-v1 |
+|       29 |          4 |     0.0872 |       1 | AWARD:legacy-v1 |
+|       30 |          3 |     0.0819 |       1 | AWARD:legacy-v1 |
+|       31 |          6 |     0.1334 |       1 | AWARD:legacy-v1 |
+|       32 |          5 |     0.1113 |       1 | AWARD:legacy-v1 |
+|       33 |          3 |     0.0767 |       1 | AWARD:legacy-v1 |
+|       34 |          7 |     0.1638 |       1 | AWARD:legacy-v1 |
+|       35 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|       36 |          8 |     0.1722 |       1 | AWARD:legacy-v1 |
+|       37 |          7 |     0.1491 |       1 | AWARD:legacy-v1 |
+|       38 |          4 |     0.0872 |       1 | AWARD:legacy-v1 |
+|       39 |          3 |     0.0819 |       1 | AWARD:legacy-v1 |
+|       40 |          6 |     0.1334 |       1 | AWARD:legacy-v1 |
+|       41 |          5 |     0.1113 |       1 | AWARD:legacy-v1 |
+|       42 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|       43 |          4 |     0.1029 |       1 | AWARD:legacy-v1 |
+|       44 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|       45 |          8 |     0.1722 |       1 | AWARD:legacy-v1 |
+|       46 |          7 |     0.1491 |       1 | AWARD:legacy-v1 |
+|       47 |          4 |     0.0872 |       1 | AWARD:legacy-v1 |
+|       48 |          3 |     0.0819 |       1 | AWARD:legacy-v1 |
+|       49 |          6 |     0.1334 |       1 | AWARD:legacy-v1 |
+|       50 |          5 |     0.1113 |       1 | AWARD:legacy-v1 |
+|       51 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|       52 |          4 |     0.1029 |       1 | AWARD:legacy-v1 |
+|       53 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|       54 |          8 |     0.1838 |       1 | AWARD:legacy-v1 |
+|       55 |          7 |     0.1575 |       1 | AWARD:legacy-v1 |
+|       56 |          4 |     0.0872 |       1 | AWARD:legacy-v1 |
+|       57 |          3 |     0.0819 |       1 | AWARD:legacy-v1 |
+|       58 |          6 |     0.1334 |       1 | AWARD:legacy-v1 |
+|       59 |          5 |     0.1113 |       1 | AWARD:legacy-v1 |
+|       60 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|       61 |          4 |     0.1029 |       1 | AWARD:legacy-v1 |
+|       62 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|       63 |          8 |     0.1838 |       1 | AWARD:legacy-v1 |
+|       64 |          7 |     0.1575 |       1 | AWARD:legacy-v1 |
+|       65 |          4 |     0.0872 |       1 | AWARD:legacy-v1 |
+|       66 |          3 |     0.0809 |       1 | AWARD:legacy-v1 |
+|       67 |          4 |     0.0956 |       1 | AWARD:legacy-v1 |
+|       68 |          5 |     0.1113 |       1 | AWARD:legacy-v1 |
+|       69 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|       70 |          4 |     0.1029 |       1 | AWARD:legacy-v1 |
+|       71 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|       72 |          8 |     0.1838 |       1 | AWARD:legacy-v1 |
+|       73 |          7 |     0.1575 |       1 | AWARD:legacy-v1 |
+|       74 |          4 |     0.0872 |       1 | AWARD:legacy-v1 |
+|       75 |          3 |     0.0809 |       1 | AWARD:legacy-v1 |
+|       76 |          4 |     0.0956 |       1 | AWARD:legacy-v1 |
+|       77 |          5 |     0.1113 |       1 | AWARD:legacy-v1 |
+|       78 |          3 |     0.0767 |       1 | AWARD:legacy-v1 |
+|       79 |          7 |     0.1638 |       1 | AWARD:legacy-v1 |
+|       80 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|       81 |          8 |     0.1838 |       1 | AWARD:legacy-v1 |
+|       82 |          7 |     0.1575 |       1 | AWARD:legacy-v1 |
+|       83 |          4 |     0.0872 |       1 | AWARD:legacy-v1 |
+|       84 |          3 |     0.0809 |       1 | AWARD:legacy-v1 |
+|       85 |          4 |     0.0956 |       1 | AWARD:legacy-v1 |
+|       86 |          5 |     0.1113 |       1 | AWARD:legacy-v1 |
+|       87 |          3 |     0.0767 |       1 | AWARD:legacy-v1 |
+|       88 |          7 |     0.1638 |       1 | AWARD:legacy-v1 |
+|       89 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|       90 |          8 |     0.1722 |       1 | AWARD:legacy-v1 |
+|       91 |          7 |     0.1491 |       1 | AWARD:legacy-v1 |
+|       92 |          4 |     0.0872 |       1 | AWARD:legacy-v1 |
+|       93 |          3 |     0.0809 |       1 | AWARD:legacy-v1 |
+|       94 |          4 |     0.0956 |       1 | AWARD:legacy-v1 |
+|       95 |          5 |     0.1113 |       1 | AWARD:legacy-v1 |
+|       96 |          3 |     0.0767 |       1 | AWARD:legacy-v1 |
+|       97 |          7 |     0.1638 |       1 | AWARD:legacy-v1 |
+|       98 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|       99 |          8 |     0.1722 |       1 | AWARD:legacy-v1 |
+|      100 |          7 |     0.1491 |       1 | AWARD:legacy-v1 |
+|      101 |          4 |     0.0872 |       1 | AWARD:legacy-v1 |
+|      102 |          3 |     0.0819 |       1 | AWARD:legacy-v1 |
+|      103 |          6 |     0.1334 |       1 | AWARD:legacy-v1 |
+|      104 |          5 |     0.1113 |       1 | AWARD:legacy-v1 |
+|      105 |          3 |     0.0767 |       1 | AWARD:legacy-v1 |
+|      106 |          7 |     0.1638 |       1 | AWARD:legacy-v1 |
+|      107 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|      108 |          8 |     0.1722 |       1 | AWARD:legacy-v1 |
+|      109 |          7 |     0.1491 |       1 | AWARD:legacy-v1 |
+|      110 |          4 |     0.0872 |       1 | AWARD:legacy-v1 |
+|      111 |          3 |     0.0819 |       1 | AWARD:legacy-v1 |
+|      112 |          6 |     0.1334 |       1 | AWARD:legacy-v1 |
+|      113 |          5 |     0.1113 |       1 | AWARD:legacy-v1 |
+|      114 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|      115 |          4 |     0.1029 |       1 | AWARD:legacy-v1 |
+|      116 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|      117 |          8 |     0.1722 |       1 | AWARD:legacy-v1 |
+|      118 |          7 |     0.1491 |       1 | AWARD:legacy-v1 |
+|      119 |          4 |     0.0872 |       1 | AWARD:legacy-v1 |
+|      120 |          3 |     0.0819 |       1 | AWARD:legacy-v1 |
+|      121 |          6 |     0.1334 |       1 | AWARD:legacy-v1 |
+|      122 |          5 |     0.1113 |       1 | AWARD:legacy-v1 |
+|      123 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|      124 |          4 |     0.1029 |       1 | AWARD:legacy-v1 |
+|      125 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|      126 |          8 |     0.1838 |       1 | AWARD:legacy-v1 |
+|      127 |          7 |     0.1575 |       1 | AWARD:legacy-v1 |
+|      128 |          4 |     0.0872 |       1 | AWARD:legacy-v1 |
+|      129 |          3 |     0.0819 |       1 | AWARD:legacy-v1 |
+|      130 |          6 |     0.1334 |       1 | AWARD:legacy-v1 |
+|      131 |          5 |     0.1113 |       1 | AWARD:legacy-v1 |
+|      132 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|      133 |          4 |     0.1029 |       1 | AWARD:legacy-v1 |
+|      134 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|      135 |          8 |     0.1838 |       1 | AWARD:legacy-v1 |
+|      136 |          7 |     0.1575 |       1 | AWARD:legacy-v1 |
+|      137 |          4 |     0.0872 |       1 | AWARD:legacy-v1 |
+|      138 |          3 |     0.0809 |       1 | AWARD:legacy-v1 |
+|      139 |          4 |     0.0956 |       1 | AWARD:legacy-v1 |
+|      140 |          5 |     0.1113 |       1 | AWARD:legacy-v1 |
+|      141 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|      142 |          4 |     0.1029 |       1 | AWARD:legacy-v1 |
+|      143 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|      144 |          8 |     0.1838 |       1 | AWARD:legacy-v1 |
+|      145 |          7 |     0.1575 |       1 | AWARD:legacy-v1 |
+|      146 |          4 |     0.0872 |       1 | AWARD:legacy-v1 |
+|      147 |          3 |     0.0809 |       1 | AWARD:legacy-v1 |
+|      148 |          4 |     0.0956 |       1 | AWARD:legacy-v1 |
+|      149 |          5 |     0.1113 |       1 | AWARD:legacy-v1 |
+|      150 |          3 |     0.0767 |       1 | AWARD:legacy-v1 |
+|      151 |          7 |     0.1638 |       1 | AWARD:legacy-v1 |
+|      152 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|      153 |          8 |     0.1838 |       1 | AWARD:legacy-v1 |
+|      154 |          7 |     0.1575 |       1 | AWARD:legacy-v1 |
+|      155 |          4 |     0.0872 |       1 | AWARD:legacy-v1 |
+|      156 |          3 |     0.0809 |       1 | AWARD:legacy-v1 |
+|      157 |          4 |     0.0956 |       1 | AWARD:legacy-v1 |
+|      158 |          5 |     0.1113 |       1 | AWARD:legacy-v1 |
+|      159 |          3 |     0.0767 |       1 | AWARD:legacy-v1 |
+|      160 |          7 |     0.1638 |       1 | AWARD:legacy-v1 |
+|      161 |          3 |     0.0672 |       1 | AWARD:legacy-v1 |
+|      162 |          8 |     0.1722 |       1 | AWARD:legacy-v1 |
+|      163 |          7 |     0.1491 |       1 | AWARD:legacy-v1 |
+|      164 |          4 |     0.0872 |       1 | AWARD:legacy-v1 |
+|      165 |          0 |     0.0000 |       1 | AWARD:legacy-v1 |
+|      166 |          3 |     0.0819 |       1 | AWARD:legacy-v1 |
+|      167 |          3 |     0.0819 |       1 | AWARD:legacy-v1 |
+|      168 |          3 |     0.0809 |       1 | AWARD:legacy-v1 |
+|      169 |          3 |     0.0809 |       1 | AWARD:carbon-v1 |
+|      170 |          3 |     0.0809 |       1 | AWARD:carbon-v1 |
+|      171 |          3 |     0.0809 |       1 | AWARD:carbon-v1 |
++----------+------------+------------+---------+-----------------+
++-----------------+--------------+--------------+
+| name            | borrow_count | return_count |
++-----------------+--------------+--------------+
+| 东门驿站        |            0 |            1 |
+| 体育场站        |            1 |            1 |
+| 合一楼站        |            1 |            1 |
+| 图书馆站        |            0 |            0 |
+| 学生公寓站      |            1 |            0 |
+| 新主楼站        |            0 |            0 |
++-----------------+--------------+--------------+
++-------+-----------------+------------------+------------+----------------+
+| roads | pending_returns | open_suggestions | open_risks | carbon_entries |
++-------+-----------------+------------------+------------+----------------+
+|    33 |               9 |                0 |          0 |            171 |
++-------+-----------------+------------------+------------+----------------+

@@ -11,6 +11,7 @@
     "build": "tsc -b && vite build",
     "start": "node server/index.mjs",
     "db:setup": "node scripts/setup.mjs",
+    "db:migrate": "node scripts/migrate-features.mjs",
     "db:seed": "node scripts/seed.mjs",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
     "test:e2e": "playwright test",

@@ -53,7 +53,7 @@ export async function dashboard(pool, user) {
       [user.id],
     );
     const [entries] = await c.query(
-      "SELECT c.* FROM carbon_ledger c JOIN ride_orders r ON r.id=c.order_id WHERE r.user_id=? ORDER BY c.id DESC",
+      "SELECT c.*,c.points_change points,c.carbon_kg_change carbon_kg FROM carbon_transactions c JOIN ride_orders r ON r.id=c.order_id WHERE r.user_id=? ORDER BY c.id DESC",
       [user.id],
     );
     const [attempts] = await c.query(
@@ -61,7 +61,7 @@ export async function dashboard(pool, user) {
       [user.id],
     );
     const [[summary]] = await c.query(
-      "SELECT (SELECT COUNT(*) FROM bikes WHERE status<>'RETIRED') total_bikes,(SELECT COUNT(*) FROM bikes WHERE status='AVAILABLE') available_bikes,(SELECT COUNT(*) FROM ride_orders WHERE status='RUNNING') active_rides,(SELECT COUNT(*) FROM ride_orders WHERE DATE(DATE_ADD(started_at,INTERVAL 8 HOUR))=DATE(DATE_ADD(UTC_TIMESTAMP(),INTERVAL 8 HOUR))) today_rides,(SELECT COALESCE(SUM(carbon_kg),0) FROM carbon_ledger) carbon_kg,(SELECT COUNT(*) FROM maintenance_tickets WHERE status<>'COMPLETED') open_tickets",
+      "SELECT (SELECT COUNT(*) FROM bikes WHERE status<>'RETIRED') total_bikes,(SELECT COUNT(*) FROM bikes WHERE status='AVAILABLE') available_bikes,(SELECT COUNT(*) FROM ride_orders WHERE status='RUNNING') active_rides,(SELECT COUNT(*) FROM ride_orders WHERE DATE(DATE_ADD(started_at,INTERVAL 8 HOUR))=DATE(DATE_ADD(UTC_TIMESTAMP(),INTERVAL 8 HOUR))) today_rides,(SELECT COALESCE(SUM(carbon_kg_change),0) FROM carbon_transactions) carbon_kg,(SELECT COUNT(*) FROM maintenance_tickets WHERE status<>'COMPLETED') open_tickets",
     );
     await c.commit();
     return {
@@ -83,34 +83,53 @@ export async function dashboard(pool, user) {
     c.release();
   }
 }
-export async function analytics(pool, days) {
+export async function analytics(pool, filter) {
   const [zones] = await pool.query(
     "SELECT * FROM v_zone_inventory ORDER BY id",
   );
-  const [rides] = await pool.query(
-    "SELECT * FROM ride_orders WHERE started_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL ? DAY) OR ended_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL ? DAY)",
-    [days, days],
-  );
+  const [rides] = await pool.query("SELECT * FROM ride_orders");
   const [snapshots] = await pool.query(
-    "SELECT * FROM zone_snapshots WHERE captured_at>=DATE_SUB(DATE_SUB(UTC_TIMESTAMP(),INTERVAL ? DAY),INTERVAL 5 MINUTE)",
-    [days],
+    "SELECT * FROM zone_snapshots ORDER BY captured_at",
   );
   const [bikes] = await pool.query(
     "SELECT * FROM bikes WHERE status<>'RETIRED'",
   );
   const [tickets] = await pool.query("SELECT * FROM maintenance_tickets");
-  const hot = aggregateHotspots(zones, rides, snapshots, days);
+  const hot = aggregateHotspots(zones, rides, snapshots, filter);
+  const [savedSuggestions] = await pool.query(
+    `SELECT s.*,a.name source_name,b.name target_name FROM dispatch_suggestions s
+     JOIN parking_zones a ON a.id=s.source_zone_id JOIN parking_zones b ON b.id=s.target_zone_id ORDER BY s.id DESC LIMIT 100`,
+  );
+  const [riskAlerts] = await pool.query(
+    `SELECT r.*,b.code bike_code,u.name handler_name,t.status ticket_status FROM risk_alerts r
+     JOIN bikes b ON b.id=r.bike_id LEFT JOIN users u ON u.id=r.handler_id
+     LEFT JOIN maintenance_tickets t ON t.id=r.maintenance_ticket_id ORDER BY r.id DESC`,
+  );
   return {
     ...hot,
     suggestions: dispatchSuggestions(zones, hot.hotspots),
     risks: bikeRisks(bikes, tickets),
+    risk_alerts: riskAlerts,
+    saved_suggestions: savedSuggestions,
   };
 }
-export async function leaderboard(pool, period, metric) {
-  const [users] = await pool.query("SELECT id,name FROM users"),
+export async function leaderboard(pool, period, metric, viewerId) {
+  const [users] = await pool.query(
+      "SELECT id,name,leaderboard_alias,leaderboard_visible FROM users",
+    ),
     [rides] = await pool.query(
       "SELECT * FROM ride_orders WHERE status='PAID' AND ended_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 32 DAY)",
     ),
-    [entries] = await pool.query("SELECT * FROM carbon_ledger");
-  return buildLeaderboard(users, rides, entries, period, metric);
+    [entries] = await pool.query(
+      "SELECT * FROM carbon_transactions WHERE created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 32 DAY)",
+    );
+  return buildLeaderboard(
+    users,
+    rides,
+    entries,
+    period,
+    metric,
+    new Date(),
+    viewerId,
+  );
 }

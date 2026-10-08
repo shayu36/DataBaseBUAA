@@ -52,7 +52,7 @@ try {
       await page.waitForLoadState("networkidle");
       await expect(page.locator(".loading")).toHaveCount(0);
       if (name === "数据库设计") {
-        await expect(page.locator(".entity-grid article")).toHaveCount(16);
+        await expect(page.locator(".entity-grid article")).toHaveCount(18);
         await expect(page.getByText(/trg_payment_guard/)).toBeVisible();
       }
       await page.evaluate(() => window.scrollTo(0, 0));

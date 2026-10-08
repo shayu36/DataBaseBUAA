@@ -16,5 +16,5 @@ await runMysqlTool(
 );
 await finished(output);
 console.log(
-  "All 20 SQL query groups executed; output saved to docs/evidence/sql-query-results.txt",
+  "All 27 SQL query groups executed; output saved to docs/evidence/sql-query-results.txt",
 );

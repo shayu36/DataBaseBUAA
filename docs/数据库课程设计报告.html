@@ -1,7 +1,7 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>青行 Qingxing · 数据库课程设计报告</title><style>*{box-sizing:border-box}body{margin:0;background:#edf4f1;color:#213d37;font:15px/1.85 'Microsoft YaHei','Segoe UI',sans-serif}aside{position:fixed;inset:0 auto 0 0;width:260px;padding:30px 24px;background:#174940;overflow:auto;color:#d8ebe2}aside strong{display:block;font-size:24px;margin-bottom:24px}aside a{display:block;color:inherit;text-decoration:none;font-size:12px;padding:7px 0}main{margin:35px 35px 35px 295px;padding:50px;background:white;max-width:1150px;border-top:5px solid #58a98b}h1{font-size:30px}h2{margin-top:42px;padding-top:20px;border-top:1px solid #d5e4df;color:#174940}h3{color:#34775f}table{width:100%;border-collapse:collapse;font-size:12px;margin:20px 0}th,td{border:1px solid #d4e2dc;padding:8px;text-align:left;overflow-wrap:anywhere}th{background:#eaf3ee}pre{background:#eff5f2;padding:18px;overflow:auto;white-space:pre-wrap;font:12px/1.7 Consolas,monospace}code{font-family:Consolas,monospace;font-size:.9em}figure{margin:20px 0}svg{display:block;width:100%;height:auto}a{color:#227257}.print{position:fixed;right:25px;bottom:25px;padding:12px 20px;border:0;border-radius:8px;background:#174940;color:white;cursor:pointer}@media(max-width:1050px){aside{display:none}main{margin:15px;padding:25px}table{display:block;overflow:auto}}@media print{@page{size:A4;margin:16mm}body{background:white;font-size:10pt}aside,.print{display:none}main{margin:0;padding:0;max-width:none;border:0}h1{font-size:22pt}h2{font-size:16pt;break-after:avoid}h3{break-after:avoid}table{font-size:8pt}tr{break-inside:avoid}figure{break-before:page;break-after:page}svg{max-height:250mm}pre{font-size:8pt}a{color:inherit;text-decoration:none}*{print-color-adjust:exact;-webkit-print-color-adjust:exact}}</style></head><body><aside><strong>青行 Qingxing</strong><a href="#section-2">1. 摘要与需求依据</a><a href="#section-3">2. 需求分析与系统边界</a><a href="#section-4">3. 架构与业务生命周期</a><a href="#section-5">4. 概念结构：八实体与十一项命名联系</a><a href="#section-6">5. 逻辑结构与规范化</a><a href="#section-7">6. 完整数据字典</a><a href="#section-24">7. 约束、索引与数据库对象</a><a href="#section-25">8. 查询设计</a><a href="#section-26">9. 事务与并发</a><a href="#section-27">10. 七项创新及可验证边界</a><a href="#section-28">11. 安全与权限</a><a href="#section-29">12. 备份恢复与运维</a><a href="#section-30">13. 测试方案与证据口径</a><a href="#section-31">14. 成员分工与答辩安排</a><a href="#section-32">15. 参考与来源</a></aside><main><h1 id="section-1">青行 Qingxing · 校园共享自行车系统数据库课程设计报告</h1>
-<p><strong>小组：贾鑫洋、欧阳晨、郑一凡、王奕</strong><br><strong>交付日期：2026 年 10 月 4 日</strong><br><strong>实现环境：MySQL 8.0.16+ / InnoDB，Node.js，Express，React，TypeScript，Vite</strong></p>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>青行 Qingxing · 数据库课程设计报告</title><style>*{box-sizing:border-box}body{margin:0;background:#edf4f1;color:#213d37;font:15px/1.85 'Microsoft YaHei','Segoe UI',sans-serif}aside{position:fixed;inset:0 auto 0 0;width:260px;padding:30px 24px;background:#174940;overflow:auto;color:#d8ebe2}aside strong{display:block;font-size:24px;margin-bottom:24px}aside a{display:block;color:inherit;text-decoration:none;font-size:12px;padding:7px 0}main{margin:35px 35px 35px 295px;padding:50px;background:white;max-width:1150px;border-top:5px solid #58a98b}h1{font-size:30px}h2{margin-top:42px;padding-top:20px;border-top:1px solid #d5e4df;color:#174940}h3{color:#34775f}table{width:100%;border-collapse:collapse;font-size:12px;margin:20px 0}th,td{border:1px solid #d4e2dc;padding:8px;text-align:left;overflow-wrap:anywhere}th{background:#eaf3ee}pre{background:#eff5f2;padding:18px;overflow:auto;white-space:pre-wrap;font:12px/1.7 Consolas,monospace}code{font-family:Consolas,monospace;font-size:.9em}figure{margin:20px 0}svg{display:block;width:100%;height:auto}a{color:#227257}.print{position:fixed;right:25px;bottom:25px;padding:12px 20px;border:0;border-radius:8px;background:#174940;color:white;cursor:pointer}@media(max-width:1050px){aside{display:none}main{margin:15px;padding:25px}table{display:block;overflow:auto}}@media print{@page{size:A4;margin:16mm}body{background:white;font-size:10pt}aside,.print{display:none}main{margin:0;padding:0;max-width:none;border:0}h1{font-size:22pt}h2{font-size:16pt;break-after:avoid}h3{break-after:avoid}table{font-size:8pt}tr{break-inside:avoid}figure{break-before:page;break-after:page}svg{max-height:250mm}pre{font-size:8pt}a{color:inherit;text-decoration:none}*{print-color-adjust:exact;-webkit-print-color-adjust:exact}}</style></head><body><aside><strong>青行 Qingxing</strong><a href="#section-2">1. 摘要与需求依据</a><a href="#section-3">2. 需求分析与系统边界</a><a href="#section-4">3. 架构与业务生命周期</a><a href="#section-5">4. 概念结构：八实体与十一项命名联系</a><a href="#section-6">5. 逻辑结构与规范化</a><a href="#section-7">6. 完整数据字典</a><a href="#section-25">7. 约束、索引与数据库对象</a><a href="#section-26">8. 查询设计</a><a href="#section-27">9. 事务与并发</a><a href="#section-28">10. 七项创新及可验证边界</a><a href="#section-29">11. 安全与权限</a><a href="#section-30">12. 备份恢复与运维</a><a href="#section-31">13. 测试方案与证据口径</a><a href="#section-32">14. 成员分工与答辩安排</a><a href="#section-33">15. 参考与来源</a></aside><main><h1 id="section-1">青行 Qingxing · 校园共享自行车系统数据库课程设计报告</h1>
+<p><strong>小组：贾鑫洋、欧阳晨、郑一凡、王奕</strong><br><strong>交付日期：2026 年 10 月 8 日</strong><br><strong>实现环境：MySQL 8.0.16+ / InnoDB，Node.js，Express，React，TypeScript，Vite</strong></p>
 <h2 id="section-2">1. 摘要与需求依据</h2>
-<p>本项目针对校园早晚高峰缺车、停车区满位、故障响应滞后及绿色出行反馈不足的问题，设计从注册登录、借车、归还、模拟支付到调度和维修的关系数据库系统。八个核心业务实体形成十一项命名联系（十三条角色边）；任务车辆关联表实现多对多，另设七张分析与审计支持表，共十六表、三视图、两触发器、一存储过程。前端展示业务状态和数据库结构，后端执行业务事务，数据库负责持久化与结构约束。</p>
+<p>本项目针对校园早晚高峰缺车、停车区满位、故障响应滞后及绿色出行反馈不足的问题，设计从注册登录、借车、归还、模拟支付到调度和维修的关系数据库系统。八个核心业务实体形成十一项命名联系（十三条角色边）；任务车辆关联表实现多对多，另设九张分析与审计支持表，共十八表、四视图、两触发器、一存储过程。前端展示业务状态和数据库结构，后端执行业务事务，数据库负责持久化与结构约束。后续拓展 PDF 中的七个方向均实现了可执行、可审计的业务闭环。</p>
 <p>需求来源为当前任务提供的截图要求、可取得的聊天缓存摘要、旧课程报告和实际仓库。引用 ChatGPT 会话的完整正文、课程 PPT 原文在本次环境不可取得；本报告不声称逐页核对，也不自行编造评分细则。旧报告仅沿用四人名单与分工框架，交易与钱包业务已全部改为校园自行车业务。</p>
 <h2 id="section-3">2. 需求分析与系统边界</h2>
 <p>学生需要查看各停车区可借车辆、借用车辆、选择归还停车区并完成支付，也可提交故障报修。管理员负责车辆、停车区、员工、账户状态及任务分配；运维人员处理本人被分配的调度和维修。分析模块辅助观察热点、调度建议、风险及绿色出行记录。</p>
@@ -54,7 +54,7 @@
 <pre><code class="language-text">React / TypeScript 页面 → HTTP JSON / Cookie → Express
   → 身份鉴别、角色授权、参数校验、分析函数
   → 命名锁 + InnoDB 事务 + SELECT ... FOR UPDATE
-  → MySQL：16 表、3 视图、2 触发器、1 存储过程
+  → MySQL：18 表、4 视图、2 触发器、1 存储过程
 </code></pre>
 <p>订单 RUNNING → UNPAID → PAID。借车使 AVAILABLE → RIDING，当前位置变空；归还使 RIDING → AVAILABLE 并登记目标站。报修后车辆进入 MAINTENANCE，维修完成重新可用；报废 RETIRED 不参与借车。调度 PENDING → IN_PROGRESS → COMPLETED，也可取消为 CANCELLED。创建任务即将车改为 DISPATCHING，待处理阶段仍在源站；出发后当前位置为空，完成后落在目标站。待处理和进行中任务均为目标站预留位置，归还必须计算 occupied + reserved，取消也须验证回源站容量。</p>
 <p>时间持久化为 UTC DATETIME(3)，运营统计按北京时间解释小时与周/月边界。费用使用整数分：每开始 30 分钟 100 分，至少 100 分，避免浮点金额误差。归还里程由服务器路网算法重新计算，distance_source 固定 ROUTE_ESTIMATE，不能将浏览器传入的里程当可信依据。</p>
@@ -190,7 +190,7 @@
     STAFF o|--o{ MAINTENANCE_TICKETS : 负责维修
 </code></pre>
 <h2 id="section-6">5. 逻辑结构与规范化</h2>
-<p>八个核心实体分别转为主键 id 的表；调度任务与车辆的多对多转为复合主键 (task_id,bike_id) 的关联表。支持表为 zone_snapshots（库存采样）、return_attempts（拒绝归还记录）、road_nodes（路网点）、road_edges（路网边）、carbon_ledger（支付后绿色积分）、audit_logs（审计）和 system_settings（配置）。八 + 一 + 七 = 十六，关联表与支持表不冒充新增核心业务实体。</p>
+<p>八个核心实体分别转为主键 id 的表；调度任务与车辆的多对多转为复合主键 (task_id,bike_id) 的关联表。支持表为 zone_snapshots（库存采样）、return_attempts（拒绝归还与复核）、road_nodes（路网点）、road_edges（有向路网边）、carbon_transactions（追加式积分流水）、dispatch_suggestions（可追溯调度建议）、risk_alerts（版本化风险处置）、audit_logs（审计）和 system_settings（配置）。八 + 一 + 九 = 十八，关联表与支持表不冒充新增核心业务实体。carbon_ledger 仅为旧查询保留兼容视图。</p>
 <table>
 <thead>
 <tr>
@@ -260,9 +260,19 @@
 <td>各码 → 距离、安全及舒适权重</td>
 </tr>
 <tr>
-<td>carbon_ledger</td>
-<td>id；order_id</td>
-<td>id/order_id → 距离、积分、减排、系数、时间</td>
+<td>carbon_transactions</td>
+<td>id；award_order_id；idempotency_key</td>
+<td>各码 → 类型、距离、有符号积分/减排、规则版本、原因、操作人、时间</td>
+</tr>
+<tr>
+<td>dispatch_suggestions</td>
+<td>id</td>
+<td>id → 来源/目标、库存与需求快照、窗口、算法版本、状态、任务</td>
+</tr>
+<tr>
+<td>risk_alerts</td>
+<td>id；open_fingerprint</td>
+<td>id → 车辆、分数、原因、规则版本、状态、处置人与工单</td>
 </tr>
 <tr>
 <td>system_settings</td>
@@ -271,7 +281,7 @@
 </tr>
 </tbody></table>
 <p>不能把可空 UNIQUE 当作全关系上的候选码：road_nodes.zone_id 可有多个 NULL；订单 active_user/active_bike、维修 active_bike 是状态条件下生成且可空的唯一约束，只限制活动子集，不是所有历史记录的候选码。用户名、员工电话、快照 (zone_id,captured_at) 没有相应非空唯一约束，不自行假设为键。</p>
-<p>对非派生的业务事实，属性原子化、复合键无部分依赖，非键属性由候选码决定；在以上明确列出的键依赖模型下达到 3NF/BCNF。该结论不能机械推广到实际全部列：active_user 等生成列由 status、user_id 派生，严格把这些派生约束当函数依赖时会产生非超码决定关系，完整物理表不能无条件声称 BCNF。carbon_ledger 中积分和减排由距离、当时规则生成，若规则固定并视为永久函数依赖，也存在非码依赖；这是可追溯记账快照的有意冗余，计算写入时校验、支付后不回算历史。库存快照 capacity 则表示采样时容量，不等于停车区当前容量，不产生跨时间的 zone_id → 历史 capacity 依赖。</p>
+<p>对非派生的业务事实，属性原子化、复合键无部分依赖，非键属性由候选码决定；在以上明确列出的键依赖模型下达到 3NF/BCNF。该结论不能机械推广到实际全部列：active_user 等生成列由 status、user_id 派生，严格把这些派生约束当函数依赖时会产生非超码决定关系，完整物理表不能无条件声称 BCNF。carbon_transactions 中积分和减排由距离、当时规则生成，若规则固定并视为永久函数依赖，也存在非码依赖；这是可追溯记账快照的有意冗余。每次调整新增有符号流水而不修改旧发放，历史规则版本不回算。库存快照 capacity 表示采样时容量，不等于停车区当前容量，不产生跨时间的 zone_id → 历史 capacity 依赖。</p>
 <p>staff.name/phone 为运维档案显示字段，users.name/phone 为认证账户联系字段；当前实际 saveStaff 实现会在同一事务中创建或更新两表的同名同电话，因此它们是有意保留的同步联系信息副本，并非可分别修改的独立当前值，也不是历史快照。账户身份、邮箱和登录密码以 users 为规范来源；工种与值勤状态以 staff 为规范来源。保留副本方便运维记录展示，但带来跨表更新一致性责任：必须通过同一服务事务维护，直接 SQL 单边更新可能漂移，可通过 staff JOIN users 对比审计。staff.phone 自身未声明唯一，不能单凭字段名假定为候选码；通过账户唯一电话与同步规则产生的额外业务限制应明确区分于表级约束。每表在所列键依赖下的规范化分析不等于消除了跨表冗余，更不能用“独立信息”解释当前同步写入来无条件宣称全局 BCNF。若追求严格消除该冗余，应删掉 staff 姓名/电话并 JOIN users，这属于后续模式调整，不是当前实现。</p>
 <h2 id="section-7">6. 完整数据字典</h2>
 <p>以下字段定义由 database/schema.sql 的 CREATE TABLE 提取，类型、可空、默认、生成表达式与键以原始 DDL 为准。金额单位分，距离与坐标单位米，所有 <em>_at 时间为 UTC。id 为无符号自增主键；</em>_id 为关联编号；status 为所属表状态域；name 为名称；其他语义见各表职责、字段名称及 DDL 中 ENUM/CHECK。完整字段约束直接列出，避免报告与源码漂移。</p>
@@ -917,12 +927,12 @@ FOREIGN KEY(zone_id) REFERENCES parking_zones(id)
 <tr>
 <td><code>from_node_id</code></td>
 <td><code>BIGINT UNSIGNED NOT NULL</code></td>
-<td>无向边较小编号端点</td>
+<td>道路边起始节点</td>
 </tr>
 <tr>
 <td><code>to_node_id</code></td>
 <td><code>BIGINT UNSIGNED NOT NULL</code></td>
-<td>无向边较大编号端点</td>
+<td>道路边终止节点</td>
 </tr>
 <tr>
 <td><code>distance_m</code></td>
@@ -939,6 +949,51 @@ FOREIGN KEY(zone_id) REFERENCES parking_zones(id)
 <td><code>DECIMAL(6,2) NOT NULL DEFAULT 1</code></td>
 <td>舒适路线附加权重</td>
 </tr>
+<tr>
+<td><code>direction</code></td>
+<td><code>ENUM(&#39;BOTH&#39;,&#39;FORWARD&#39;,&#39;REVERSE&#39;) NOT NULL DEFAULT &#39;BOTH&#39;</code></td>
+<td>双向、正向或反向可通行</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td><code>ENUM(&#39;OPEN&#39;,&#39;CLOSED&#39;,&#39;NO_RIDE&#39;) NOT NULL DEFAULT &#39;OPEN&#39;</code></td>
+<td>开放、封闭或禁骑</td>
+</tr>
+<tr>
+<td><code>slope_percent</code></td>
+<td><code>DECIMAL(5,2) NOT NULL DEFAULT 0</code></td>
+<td>教学模拟坡度百分比</td>
+</tr>
+<tr>
+<td><code>surface</code></td>
+<td><code>ENUM(&#39;SMOOTH&#39;,&#39;AVERAGE&#39;,&#39;ROUGH&#39;) NOT NULL DEFAULT &#39;SMOOTH&#39;</code></td>
+<td>教学模拟路面等级</td>
+</tr>
+<tr>
+<td><code>shade_level</code></td>
+<td><code>TINYINT UNSIGNED NOT NULL DEFAULT 3</code></td>
+<td>遮阴等级 0–5</td>
+</tr>
+<tr>
+<td><code>lighting_level</code></td>
+<td><code>TINYINT UNSIGNED NOT NULL DEFAULT 3</code></td>
+<td>照明等级 0–5</td>
+</tr>
+<tr>
+<td><code>traffic_mix</code></td>
+<td><code>ENUM(&#39;BIKE_ONLY&#39;,&#39;MIXED&#39;,&#39;MOTOR_HEAVY&#39;) NOT NULL DEFAULT &#39;MIXED&#39;</code></td>
+<td>交通混行情况</td>
+</tr>
+<tr>
+<td><code>intersection_risk</code></td>
+<td><code>TINYINT UNSIGNED NOT NULL DEFAULT 1</code></td>
+<td>交叉口风险等级 0–5</td>
+</tr>
+<tr>
+<td><code>attribute_source</code></td>
+<td><code>VARCHAR(40) NOT NULL DEFAULT &#39;SIMULATED_COURSE_DATA&#39;</code></td>
+<td>属性来源声明</td>
+</tr>
 </tbody></table>
 <p>表级约束与索引：</p>
 <pre><code class="language-sql">FOREIGN KEY(from_node_id) REFERENCES road_nodes(id),
@@ -947,7 +1002,7 @@ UNIQUE(from_node_id,to_node_id),
 CHECK(from_node_id&lt;to_node_id),
 CHECK(distance_m&gt;0 AND safety_cost&gt;=1 AND comfort_cost&gt;=1)
 </code></pre>
-<h3 id="section-21">carbon_ledger</h3>
+<h3 id="section-21">carbon_transactions</h3>
 <table>
 <thead>
 <tr>
@@ -963,28 +1018,58 @@ CHECK(distance_m&gt;0 AND safety_cost&gt;=1 AND comfort_cost&gt;=1)
 </tr>
 <tr>
 <td><code>order_id</code></td>
-<td><code>BIGINT UNSIGNED NOT NULL UNIQUE</code></td>
+<td><code>BIGINT UNSIGNED NOT NULL</code></td>
 <td>关联骑行订单</td>
 </tr>
 <tr>
+<td><code>entry_type</code></td>
+<td><code>ENUM(&#39;AWARD&#39;,&#39;ADJUSTMENT&#39;) NOT NULL</code></td>
+<td>发放或调整流水</td>
+</tr>
+<tr>
+<td><code>award_order_id</code></td>
+<td><code>BIGINT UNSIGNED ... STORED UNIQUE</code></td>
+<td>每单至多一条 AWARD 的条件唯一列</td>
+</tr>
+<tr>
+<td><code>idempotency_key</code></td>
+<td><code>VARCHAR(100) NOT NULL UNIQUE</code></td>
+<td>流水幂等标识</td>
+</tr>
+<tr>
 <td><code>distance_m</code></td>
-<td><code>INT NOT NULL</code></td>
-<td>路线估算距离（米）</td>
+<td><code>INT NOT NULL DEFAULT 0</code></td>
+<td>发放依据的路线估算距离（米）</td>
 </tr>
 <tr>
-<td><code>points</code></td>
+<td><code>points_change</code></td>
 <td><code>INT NOT NULL</code></td>
-<td>绿色积分</td>
+<td>有符号积分变动</td>
 </tr>
 <tr>
-<td><code>carbon_kg</code></td>
+<td><code>carbon_kg_change</code></td>
 <td><code>DECIMAL(12,4) NOT NULL</code></td>
-<td>模拟减排量（千克）</td>
+<td>有符号模拟减排变动（千克）</td>
 </tr>
 <tr>
 <td><code>factor_kg_per_km</code></td>
-<td><code>DECIMAL(5,3) NOT NULL DEFAULT 0.210</code></td>
-<td>记账采用的每公里估算系数</td>
+<td><code>DECIMAL(5,3) NOT NULL</code></td>
+<td>流水采用的每公里估算系数</td>
+</tr>
+<tr>
+<td><code>rule_version</code></td>
+<td><code>VARCHAR(30) NOT NULL</code></td>
+<td>计算规则版本</td>
+</tr>
+<tr>
+<td><code>reason</code></td>
+<td><code>VARCHAR(300) NOT NULL</code></td>
+<td>发放或调整原因</td>
+</tr>
+<tr>
+<td><code>actor_id</code></td>
+<td><code>BIGINT UNSIGNED NULL</code></td>
+<td>人工调整操作人；自动发放可空</td>
 </tr>
 <tr>
 <td><code>created_at</code></td>
@@ -994,9 +1079,45 @@ CHECK(distance_m&gt;0 AND safety_cost&gt;=1 AND comfort_cost&gt;=1)
 </tbody></table>
 <p>表级约束与索引：</p>
 <pre><code class="language-sql">FOREIGN KEY(order_id) REFERENCES ride_orders(id),
-CHECK(distance_m&gt;=0 AND points&gt;=0 AND carbon_kg&gt;=0)
+FOREIGN KEY(actor_id) REFERENCES users(id),
+CHECK(distance_m&gt;=0)
 </code></pre>
-<h3 id="section-22">audit_logs</h3>
+<h3 id="section-22">PDF 拓展支持表</h3>
+<table>
+<thead>
+<tr>
+<th>表</th>
+<th>关键字段</th>
+<th>用途与约束</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>dispatch_suggestions</td>
+<td>source/target_zone_id、quantity、库存与需求快照、window_start/end、algorithm_version、status、task_id</td>
+<td>保存建议生成依据；确认时重新校验实际车辆和空位，再与一个正式任务关联</td>
+</tr>
+<tr>
+<td>risk_alerts</td>
+<td>bike_id、score、level、reasons/ticket_ids JSON、fingerprint、rule_version、status、handler_id、maintenance_ticket_id</td>
+<td>同一规则原因的开放告警通过指纹去重；确认、建工单、解决和撤销均留痕</td>
+</tr>
+<tr>
+<td>return_attempts（扩展）</td>
+<td>location_captured_at/source、review_status、reviewer_id、review_note、reviewed_at</td>
+<td>保存失败定位证据并形成管理员复核终态</td>
+</tr>
+<tr>
+<td>ride_orders（扩展）</td>
+<td>qualification_status/reason、reviewed_by/at、return_x/y、location_captured_at/source</td>
+<td>保存成功归还证据，并将异常行程隔离在积分发放之外</td>
+</tr>
+<tr>
+<td>users（扩展）</td>
+<td>leaderboard_alias、leaderboard_visible</td>
+<td>默认不公开；用户自己决定公开昵称和排名</td>
+</tr>
+</tbody></table>
+<h3 id="section-23">audit_logs</h3>
 <table>
 <thead>
 <tr>
@@ -1044,7 +1165,7 @@ CHECK(distance_m&gt;=0 AND points&gt;=0 AND carbon_kg&gt;=0)
 <p>表级约束与索引：</p>
 <pre><code class="language-sql">FOREIGN KEY(actor_id) REFERENCES users(id)
 </code></pre>
-<h3 id="section-23">system_settings</h3>
+<h3 id="section-24">system_settings</h3>
 <table>
 <thead>
 <tr>
@@ -1064,9 +1185,9 @@ CHECK(distance_m&gt;=0 AND points&gt;=0 AND carbon_kg&gt;=0)
 <td>配置JSON值</td>
 </tr>
 </tbody></table>
-<h2 id="section-24">7. 约束、索引与数据库对象</h2>
+<h2 id="section-25">7. 约束、索引与数据库对象</h2>
 <p>主键区分每条记录；外键使用 InnoDB，禁止孤立订单、支付、任务车辆及工单。DDL 未配置级联删除，已有引用的父记录不能直接删除；使用停用、关闭与报废保留历史。CHECK 限制非负金额与距离、站点容量、坐标、围栏半径、任务两站不同及结束/完成所需字段。跨表容量、员工工种、支付后订单状态等由应用事务保证，不能宣称单靠 CHECK 已覆盖。</p>
-<p>唯一生成列为活动订单和活动工单提供数据库兜底；payments.order_id、idempotency_key 与 carbon_ledger.order_id 分别限制重复支付及重复积分。单独的幂等键不能替代授权检查，重复请求仍须属于同一用户、同一订单。</p>
+<p>唯一生成列为活动订单和活动工单提供数据库兜底；payments.order_id、支付幂等键、carbon_transactions.award_order_id 与流水幂等键分别限制重复支付、重复发放和重复调整。单独的幂等键不能替代授权检查，重复请求仍须属于同一用户、同一订单。</p>
 <p>idx_bike_zone_status 支持站点可借筛选；idx_ride_start/end 支持站点时间统计；idx_ride_user 支持个人历史；idx_dispatch_status 支持待办；idx_ticket_bike_time 支持近 30 天复发统计；idx_snapshot_zone_time 支持站点采样区间。通过 EXPLAIN 检查实际执行计划，记录样本量和是否命中索引，不把建了索引等同于证明性能提升。</p>
 <table>
 <thead>
@@ -1092,6 +1213,11 @@ CHECK(distance_m&gt;=0 AND points&gt;=0 AND carbon_kg&gt;=0)
 <td>用户已记账积分、减排、估算距离总计；没有记录返回零</td>
 </tr>
 <tr>
+<td>视图</td>
+<td>carbon_ledger</td>
+<td>只读兼容旧查询，仅投影 AWARD；新功能读写 carbon_transactions</td>
+</tr>
+<tr>
 <td>触发器</td>
 <td>trg_payment_guard</td>
 <td>插入支付前检查订单 UNPAID 且金额相符；不负责自行更新订单状态</td>
@@ -1107,13 +1233,13 @@ CHECK(distance_m&gt;=0 AND points&gt;=0 AND carbon_kg&gt;=0)
 <td>SQL SECURITY INVOKER；从实时库存视图采样；不是租还车存储过程</td>
 </tr>
 </tbody></table>
-<h2 id="section-25">8. 查询设计</h2>
+<h2 id="section-26">8. 查询设计</h2>
 <p>可直接执行的教学查询位于 database/queries.sql，包含 JOIN、LEFT JOIN、GROUP BY、HAVING、EXISTS、窗口函数与不变量巡检。查询既覆盖学生历史、站点借还、员工工作量、故障复发，也验证超容、订单车辆状态、重复活动订单及支付积分一致性。巡检返回异常行才表示问题；空结果只有在已执行且样本覆盖适当时才能作为证据。触发器目录由初始化脚本使用管理账号核验并保存到server/schema-objects.json；业务账号不获得TRIGGER等DDL权限，结构页的列、计数、视图和过程则实时读取。执行前核对 SELECT DATABASE()，在校园库运行，不能在旧主题库误执行。</p>
-<h2 id="section-26">9. 事务与并发</h2>
+<h2 id="section-27">9. 事务与并发</h2>
 <p>写事务在同一连接获取 GET_LOCK(&#39;campus-bike:&lt;数据库名&gt;&#39;,10)，再开启事务、锁定当前操作用户并再次核验ACTIVE与角色，再读取受影响行 FOR UPDATE、校验、写入相关表、COMMIT。失败 ROLLBACK，finally 显式 RELEASE_LOCK，最后归还池连接。命名锁是连接级，COMMIT 不会自动释放；异常路径必须释放，不能让下一请求继承锁。锁等待超时返回可重试的繁忙状态。</p>
 <p>借车锁用户、车及站点，检查无活动骑行，再创建订单并改车状态。归还锁订单、车与目标站，在容量含预留校验后计算路线与费用并一次性结束订单。调度锁相关站点、任务与车辆，任务关联和车辆状态一起提交。支付锁订单，核验所有权与幂等键，将支付记录、订单 PAID、积分和审计写在一次事务中。围栏外、满位、关闭站点时，事务仅写入拒还尝试并提交，随后才向客户端抛出业务错误；因此拒还记录不会随错误被回滚，订单和车辆状态保持不变。</p>
 <p>全库单写者串行化适合课堂规模，并配合唯一约束防重复。它不等于高并发设计；绕过该服务直接写库的客户端不会自动遵守命名锁。扩展可改为固定顺序的站点/车/订单行锁、死锁重试及按站点分区锁，但需重新证明容量和取消回源约束。</p>
-<h2 id="section-27">10. 七项创新及可验证边界</h2>
+<h2 id="section-28">10. 七项创新及可验证边界</h2>
 <table>
 <thead>
 <tr>
@@ -1125,56 +1251,56 @@ CHECK(distance_m&gt;=0 AND points&gt;=0 AND carbon_kg&gt;=0)
 </thead>
 <tbody><tr>
 <td>骑行热点分析</td>
-<td>7/30 日借还量、小时、星期、峰值；库存缺车/满位估计</td>
-<td>对照订单时刻与连续快照；观察 coverage_minutes</td>
+<td>7/30 日或最长31日自定义区间；日期类型、小时、站点筛选；净流量及库存覆盖</td>
+<td>对照筛选条件、订单时刻与连续快照；观察 coverage_ratio</td>
 <td>相邻采样间隔 ≤5 分钟才估时；缺采不当作正常，非预测</td>
 </tr>
 <tr>
 <td>智能调度建议</td>
-<td>基于容量、可用车、reserved 和历史净借车；建议保有 40% 起、80% 封顶</td>
-<td>确认建议后创建、出发、完成任务；比较源目标库存</td>
+<td>保存容量、库存、需求窗口、目标库存、原因与算法版本；确认时重验</td>
+<td>生成保存建议，再复核创建任务并检查 task_id</td>
 <td>确定性启发式；不优化运输成本或车辆路线</td>
 </tr>
 <tr>
 <td>故障风险预警</td>
-<td>30 天报修、同类型复发、维修间隔规则加分，封顶100</td>
-<td>查看每条加分原因，对照工单</td>
+<td>版本化规则、结构化原因及指纹去重；支持确认、建工单、解决/撤销</td>
+<td>运行规则，对照工单，完成一个处置闭环</td>
 <td>规则评分，不是训练模型或实际故障概率</td>
 </tr>
 <tr>
 <td>个性化路线</td>
-<td>Dijkstra 最短/安全/舒适三种权重</td>
-<td>同两站切换模式，核对高亮路与边长总和</td>
-<td>安全/舒适为人为权重；时间按200米/分钟估计，无实时道路数据</td>
+<td>有向、可封闭/禁骑路网；三模式并排比较；坡度、路面、遮阴、照明、交通解释</td>
+<td>修改道路属性或状态，核对路段与解释</td>
+<td>属性为课程模拟；时间按200米/分钟估计，无实时道路数据</td>
 </tr>
 <tr>
 <td>碳积分</td>
-<td>支付后 10 分/公里取整；减排估算0.21 kg/km；订单唯一记账</td>
-<td>连续支付同订单，账本始终一条</td>
-<td>路网估算距离；固定教学系数，不是碳核证</td>
+<td>异常距离/时长先复核；AWARD 与有符号 ADJUSTMENT 追加流水，保留规则版本</td>
+<td>确认异常订单、人工调整并核对净额与流水数</td>
+<td>路网估算距离与教学系数，不是碳核证；规则不指控作弊</td>
 </tr>
 <tr>
 <td>周/月排行榜</td>
-<td>北京时间周一/月初开始；已付订单次数、里程、积分；脱敏名</td>
-<td>改指标和周期，核对 PAID 与 ended_at 窗口</td>
-<td>结束时间口径，并非付款时间；没有对实名用户作公开传播</td>
+<td>默认私密、自愿昵称；有效已付行程；并列同名次；私密“我的名次”</td>
+<td>切换公开设置并比较公开 rows 与 me</td>
+<td>北京时间窗口；不公开邮箱、电话或隐藏用户真实姓名</td>
 </tr>
 <tr>
 <td>电子围栏归还</td>
-<td>圆心半径检测、站点关闭/容量含预留检查；拒绝尝试留痕</td>
-<td>圈外拒还保持 RUNNING，圈内有位结束为 UNPAID</td>
-<td>浏览器坐标是示意输入，不能防真实位置伪造或替代硬件锁</td>
+<td>坐标、定位时间/来源、围栏、关闭与容量校验；失败证据进入复核</td>
+<td>提交过期定位，确认订单保持 RUNNING，再由管理员复核</td>
+<td>浏览器定位为模拟输入，不能防真实位置伪造或替代硬件锁</td>
 </tr>
 </tbody></table>
 <p>安全/舒适路线代价为 distance_m × (1 + safety_cost/comfort_cost)，最短模式代价直接为距离。路线变化应以实际路网是否提供不同最优解为准，不保证任意两点都有三条不同路线。</p>
-<h2 id="section-28">11. 安全与权限</h2>
+<h2 id="section-29">11. 安全与权限</h2>
 <p>注册仅学生；ADMIN 可管理资产、站点、员工、账户与任务；OPERATOR 只能执行分配给自己的任务/工单；STUDENT 只能操作本人的订单与报修。授权须在服务端依据已认证身份检查，隐藏按钮不构成权限。参数化 SQL 避免拼接用户输入；密码摘要不返回 API，日志不记录密码；面向学生的榜单与统计避免泄漏电话等私有字段。</p>
 <p>数据库账号与应用角色不同：应用三角色共享后端服务账号，由后端做行级业务授权；MySQL 可分离只读分析、业务 DML、备份及 DDL 管理账号。database/security.sql 仅展示经审阅后由 DBA 手动应用的最小权限模板，不硬编码密码、不默认执行 CREATE USER/GRANT，不授予 FILE、SUPER、GRANT OPTION。备份涉及额外对象读取权限，应按部署版本及工具错误逐项添加，不能简单改成全局 ALL PRIVILEGES。</p>
-<h2 id="section-29">12. 备份恢复与运维</h2>
+<h2 id="section-30">12. 备份恢复与运维</h2>
 <p>执行 npm run backup 前核对 DB_NAME 指向校园数据库。逻辑备份使用 mysqldump 的 --single-transaction、--routines、--triggers；保存完整日志和生成文件，记录时间、大小与 SHA-256。该一致性方式以 InnoDB 为前提，备份期间避免 DDL。随机本机数据库密码、JWT密钥和.env不得混入交付包；固定教学演示账户口令在README中明确列示。</p>
-<p>恢复演练必须创建独立新库 campus_bike_restore_&lt;时间戳&gt;，校验名称前缀及目标未存在，再导入经过检查、不会 USE 原库的 SQL 文件。不得覆盖 campus_bike、campus_bike_test 或旧 mysqpll。恢复后核对16表、3视图、2触发器、1过程，各表行数、业务汇总和 queries.sql 的不变量；记录测试时间和结果。成功恢复文件不是充分证据，需要实际查询新库。源代码备份与数据库备份不同，旧主题压缩包用于历史留存，不能作为校园数据恢复证据。</p>
-<h2 id="section-30">13. 测试方案与证据口径</h2>
-<p>本节给出可重复测试方法，不把未运行用例写为通过。2026-10-04 已实际运行 node scripts/run-queries.mjs，目标 SELECT DATABASE() 为 campus_bike，20组只读教学查询执行成功；输出见 docs/evidence/sql-query-results.txt。输出确认16张基础表、3视图、2插入触发器、1 INVOKER采样过程；库存/运行订单/重复活动/支付积分巡检未返回异常行，索引示例使用 idx_bike_zone_status。这是当前种子数据的查询证据，不替代并发、权限、故障恢复等专项验证。报告生成已实际运行成功。最终运行结果应以 tests、浏览器验收日志、数据库巡检输出及本次根任务验证为准。报告生成脚本验证只证明 Markdown/SVG/HTML 可生成，不能证明业务闭环或 MySQL 约束已通过。</p>
+<p>恢复演练必须创建独立新库 campus_bike_restore_&lt;时间戳&gt;，校验名称前缀及目标未存在，再导入经过检查、不会 USE 原库的 SQL 文件。不得覆盖 campus_bike、campus_bike_test 或旧 mysqpll。恢复后核对18表、4视图、2触发器、1过程，各表行数、业务汇总和 queries.sql 的不变量；记录测试时间和结果。成功恢复文件不是充分证据，需要实际查询新库。源代码备份与数据库备份不同，旧主题压缩包用于历史留存，不能作为校园数据恢复证据。</p>
+<h2 id="section-31">13. 测试方案与证据口径</h2>
+<p>本节给出可重复测试方法，不把未运行用例写为通过。2026-10-08 对 campus_bike 执行备份、幂等迁移及对象核对，确认18张基础表、4视图、2插入触发器、1个 INVOKER 采样过程。27组只读教学查询覆盖原业务与 PDF 拓展工作流；15项运行库不变量检查为零异常。完整自动化测试、浏览器验收和独立恢复结果以《测试报告》及 evidence 日志为准。</p>
 <table>
 <thead>
 <tr>
@@ -1186,7 +1312,7 @@ CHECK(distance_m&gt;=0 AND points&gt;=0 AND carbon_kg&gt;=0)
 <tbody><tr>
 <td>DDL 与对象</td>
 <td>新隔离库执行 schema.sql，查询 information_schema</td>
-<td>16表、3视图、2触发器、1过程，字段与报告一致</td>
+<td>18表、4视图、2触发器、1过程，字段与报告一致</td>
 </tr>
 <tr>
 <td>注册权限</td>
@@ -1234,8 +1360,8 @@ CHECK(distance_m&gt;=0 AND points&gt;=0 AND carbon_kg&gt;=0)
 <td>页面展示真实响应，失败有反馈，无假成功</td>
 </tr>
 </tbody></table>
-<p>2026-10-05最终验收：46项后端/数据库测试与6项浏览器测试通过（4项真实服务、2项前端API固定数据回归）；TypeScript/Vite构建与格式检查通过。运行库10项不变量全为0异常；完整启停和独立campus_bike_restore_20261005恢复实测成功。详细结果、舍入修复及覆盖限制见《测试报告》。</p>
-<h2 id="section-31">14. 成员分工与答辩安排</h2>
+<p>2026-10-08 最终验收：58项后端/数据库测试与8项浏览器测试通过；TypeScript/Vite构建与格式检查通过。运行库15项不变量全为0异常；独立 campus_bike_restore_20261008_final 恢复后，18表、4视图、2触发器、1过程、业务行数与碳积分净额均与源库一致。详细结果见《测试报告》。</p>
+<h2 id="section-32">14. 成员分工与答辩安排</h2>
 <table>
 <thead>
 <tr>
@@ -1252,12 +1378,12 @@ CHECK(distance_m&gt;=0 AND points&gt;=0 AND carbon_kg&gt;=0)
 <tr>
 <td>欧阳晨</td>
 <td>逻辑结构与规范化</td>
-<td>十六表转换、数据字典、候选码、条件唯一和冗余说明</td>
+<td>十八表转换、数据字典、候选码、条件唯一和冗余说明</td>
 </tr>
 <tr>
 <td>郑一凡</td>
 <td>数据库与 SQL</td>
-<td>DDL、查询、索引、三视图、两触发器、一采样过程</td>
+<td>DDL、查询、索引、四视图、两触发器、一采样过程</td>
 </tr>
 <tr>
 <td>王奕</td>
@@ -1266,7 +1392,7 @@ CHECK(distance_m&gt;=0 AND points&gt;=0 AND carbon_kg&gt;=0)
 </tr>
 </tbody></table>
 <p>分工是课程任务安排，不冒充实际 Git 提交统计。答辩按需求→ER→数据约束→学生闭环→运维闭环→七创新→SQL与不变量→局限展开，详细步骤见《答辩演示指南》。</p>
-<h2 id="section-32">15. 参考与来源</h2>
+<h2 id="section-33">15. 参考与来源</h2>
 <ol>
 <li><a href="https://github.com/Rivertxx/lushu/blob/master/README.md">Rivertxx/lushu 项目说明</a>：自行车社团活动与路线管理，非共享单车租还模型。</li>
 <li><a href="https://github.com/Rivertxx/lushu/blob/master/road_book.sql">路书数据库 SQL</a>：routes、keypoints、activities、participants 与复合关联键。</li>

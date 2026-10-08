@@ -21,6 +21,9 @@ try {
   const [p] = await pool.query(
     "SELECT ROUTINE_NAME name FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=DATABASE()",
   );
+  const [[{ tables }]] = await pool.query(
+    "SELECT COUNT(*) tables FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME<>'carbon_ledger_legacy'",
+  );
   await writeFile(
     new URL("../server/schema-objects.json", import.meta.url),
     JSON.stringify(
@@ -36,7 +39,7 @@ try {
     ) + "\n",
   );
   console.log(
-    "Schema ready: 16 tables, 3 views, 2 triggers, 1 procedure; read-only object catalogue refreshed.",
+    `Schema ready: ${tables} tables, ${v.length} views, ${t.length} triggers, ${p.length} procedures; read-only object catalogue refreshed.`,
   );
 } finally {
   await pool.end();

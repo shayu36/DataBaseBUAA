@@ -259,7 +259,7 @@ test("leaderboard monthly boundary and ties are deterministic and future rows ex
     r.rows.map((r) => [r.user_id, r.rank, r.distance_m]),
     [
       [1, 1, 100],
-      [2, 2, 100],
+      [2, 1, 100],
     ],
   );
 });
@@ -279,4 +279,58 @@ test("demand changes dispatch allocation and empty inputs are safe", () => {
   assert.deepEqual(bikeRisks([], []), []);
   assert.deepEqual(buildLeaderboard([], [], []).rows, []);
   assert.equal(aggregateHotspots([], [], []).snapshot_count, 0);
+});
+
+test("custom hotspot filters use Beijing weekday, hour and station", () => {
+  const result = aggregateHotspots(
+    [
+      { id: 1, name: "主楼", capacity: 10 },
+      { id: 2, name: "体育场", capacity: 10 },
+    ],
+    [
+      { start_zone_id: 1, started_at: "2026-10-08T00:30:00Z" },
+      { start_zone_id: 1, started_at: "2026-10-08T04:30:00Z" },
+      { start_zone_id: 2, started_at: "2026-10-08T00:30:00Z" },
+    ],
+    [],
+    {
+      start: "2026-10-08",
+      end: "2026-10-08",
+      dayType: "WEEKDAY",
+      startHour: 8,
+      endHour: 10,
+      zoneId: 1,
+    },
+    new Date("2026-10-09T00:00:00Z"),
+  );
+  assert.equal(result.hotspots.length, 1);
+  assert.equal(result.hotspots[0].borrow_count, 1);
+  assert.equal(result.filter.timezone, "Asia/Shanghai");
+});
+
+test("route direction and road closures are enforced", () => {
+  const nodes = [{ id: 1 }, { id: 2 }, { id: 3 }];
+  const edges = [
+    {
+      from_node_id: 1,
+      to_node_id: 2,
+      distance_m: 10,
+      safety_cost: 0,
+      comfort_cost: 0,
+      direction: "FORWARD",
+      status: "OPEN",
+    },
+    {
+      from_node_id: 2,
+      to_node_id: 3,
+      distance_m: 10,
+      safety_cost: 0,
+      comfort_cost: 0,
+      direction: "BOTH",
+      status: "CLOSED",
+    },
+  ];
+  assert.equal(findRoute(nodes, edges, 1, 2).distance_m, 10);
+  assert.throws(() => findRoute(nodes, edges, 2, 1), /No route/);
+  assert.throws(() => findRoute(nodes, edges, 1, 3), /No route/);
 });

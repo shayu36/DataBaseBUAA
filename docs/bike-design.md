@@ -8,9 +8,9 @@
 
 校园示意图采用以米为单位的本地平面坐标，停车区为圆形电子围栏；不声称真实 GPS、支付、碳核证。路网由可审计道路节点、边长和安全/舒适权重组成。行程里程取归还时服务器计算的所选路网路线估算长度，保存 distance_source=ROUTE_ESTIMATE，不信任客户端里程。金额用整数分保存，每开始 30 分钟 100 分，至少 100 分；积分仅成功支付时记一笔，10 分/公里取整，模拟减排系数 0.21 kg/km。
 
-8 个核心实体：users、bikes、parking_zones、ride_orders、payments、staff、dispatch_tasks、maintenance_tickets。dispatch_bikes 实现任务与车辆 M:N。支持表 zone_snapshots、return_attempts、road_nodes、road_edges、carbon_ledger、audit_logs、system_settings。
+8 个核心实体：users、bikes、parking_zones、ride_orders、payments、staff、dispatch_tasks、maintenance_tickets。dispatch_bikes 实现任务与车辆 M:N。支持表为 zone_snapshots、return_attempts、road_nodes、road_edges、carbon_transactions、dispatch_suggestions、risk_alerts、audit_logs、system_settings；carbon_ledger 是旧查询兼容视图。
 
-所有写业务事务持有数据库命名锁 campus-bike:<db> 并对受影响行加锁。课堂规模串行化换取清晰的防超借、防超容、支付幂等和任务状态一致性。唯一生成列限制用户/车辆只能有一笔 RUNNING 订单；payments.order_id 和 carbon_ledger.order_id 唯一；维护工单同车至多一笔未完成。调度创建即锁定车辆及目标车位，PENDING 时车在源站，IN_PROGRESS 车无当前站，完成后落到目标站；取消恢复源站。归还校验计入目标站预留车位。
+所有写业务事务持有数据库命名锁 campus-bike:<db> 并对受影响行加锁。课堂规模串行化换取清晰的防超借、防超容、支付幂等和任务状态一致性。唯一生成列限制用户/车辆只能有一笔 RUNNING 订单；payments.order_id、carbon_transactions.award_order_id 和幂等键限制重复支付、发放和调整；维护工单同车至多一笔未完成。调度建议确认及正式任务创建在同一事务重验车辆和目标车位。归还同时检查定位时间、围栏及计入调度预留后的容量。
 
 ADMIN 管理车辆、站点、员工、任务及账户；OPERATOR 仅处理分配给自己的任务和工单；STUDENT 仅查看/操作自己的骑行与报修。统计不向学生公开他人的电话等信息。
 

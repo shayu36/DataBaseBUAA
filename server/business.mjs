@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { AppError, actorTransaction } from "./db.mjs";
 import { findRoute } from "./analytics.mjs";
+import { awardCarbonForOrder, classifyRideForCredit } from "./carbon.mjs";
 export const idSchema = z.coerce.number().int().positive().safe();
 // Integer metres * 21 / 100000 kg; round half-up to four decimals without
 // applying toFixed directly to a binary approximation of the coefficient.
 export const carbonKilograms = (distance) =>
   (Math.round((distance * 21) / 10) / 10000).toFixed(4);
-const coord = z.number().finite().min(0).max(2000);
+const coord = z.number().finite();
 const need = (ok, message, code = "INVALID_STATE", status = 409) => {
   if (!ok) throw new AppError(message, code, status);
 };
@@ -67,7 +68,7 @@ export async function routeForZones(c, from, to, mode = "shortest") {
   try {
     return { ...findRoute(nodes, edges, start.id, end.id, mode), nodes, edges };
   } catch {
-    throw new AppError("两处停车区之间没有可用路线", "NO_ROUTE", 400);
+    throw new AppError("两处停车区之间没有可用路线", "NO_ROUTE", 409);
   }
 }
 export async function startRide(pool, user, input) {
@@ -107,6 +108,10 @@ export async function returnRide(pool, user, id, input) {
       zone_id: idSchema,
       x: coord,
       y: coord,
+      captured_at: z.coerce.date().optional(),
+      location_source: z
+        .enum(["MAP_SIMULATION", "DEVICE_GPS", "MANUAL"])
+        .default("MAP_SIMULATION"),
       route_mode: z
         .enum(["shortest", "safe", "comfortable"])
         .default("shortest"),
@@ -118,8 +123,20 @@ export async function returnRide(pool, user, id, input) {
     need(r.status === "RUNNING", "该订单不在骑行中");
     const target = await zone(c, d.zone_id);
     await get(c, "bikes", r.bike_id);
+    const [[{ now }]] = await c.query("SELECT UTC_TIMESTAMP(3) now"),
+      captured = d.captured_at || new Date(now),
+      capturedMs = captured.getTime(),
+      nowMs = new Date(now).getTime();
     let reason = null;
-    if (target.status !== "ACTIVE") reason = "ZONE_CLOSED";
+    if (d.x < 0 || d.x > 2000 || d.y < 0 || d.y > 2000)
+      reason = "INVALID_LOCATION";
+    else if (
+      capturedMs < new Date(r.started_at).getTime() ||
+      capturedMs > nowMs + 30000 ||
+      nowMs - capturedMs > 300000
+    )
+      reason = "LOCATION_STALE";
+    else if (target.status !== "ACTIVE") reason = "ZONE_CLOSED";
     else if (
       Math.hypot(d.x - Number(target.x), d.y - Number(target.y)) >
       Number(target.radius) + 1e-8
@@ -132,8 +149,8 @@ export async function returnRide(pool, user, id, input) {
       reason = "ZONE_FULL";
     if (reason) {
       await c.query(
-        "INSERT INTO return_attempts(order_id,zone_id,x,y,reason) VALUES(?,?,?,?,?)",
-        [r.id, d.zone_id, d.x, d.y, reason],
+        "INSERT INTO return_attempts(order_id,zone_id,x,y,reason,location_captured_at,location_source) VALUES(?,?,?,?,?,?,?)",
+        [r.id, d.zone_id, d.x, d.y, reason, captured, d.location_source],
       );
       return { rejected: reason };
     }
@@ -143,7 +160,6 @@ export async function returnRide(pool, user, id, input) {
       d.zone_id,
       d.route_mode,
     );
-    const [[{ now }]] = await c.query("SELECT UTC_TIMESTAMP(3) now");
     const fee =
       Math.max(
         1,
@@ -153,9 +169,28 @@ export async function returnRide(pool, user, id, input) {
       "SELECT id FROM maintenance_tickets WHERE bike_id=? AND status<>'COMPLETED'",
       [r.bike_id],
     );
+    const completed = {
+        ...r,
+        ended_at: now,
+        distance_m: Math.round(route.distance_m),
+      },
+      qualification = classifyRideForCredit(completed);
     await c.query(
-      "UPDATE ride_orders SET end_zone_id=?,ended_at=?,amount_cents=?,distance_m=?,route_mode=?,status='UNPAID' WHERE id=?",
-      [d.zone_id, now, fee, Math.round(route.distance_m), d.route_mode, r.id],
+      "UPDATE ride_orders SET end_zone_id=?,ended_at=?,amount_cents=?,distance_m=?,route_mode=?,qualification_status=?,qualification_reason=?,return_x=?,return_y=?,location_captured_at=?,location_source=?,status='UNPAID' WHERE id=?",
+      [
+        d.zone_id,
+        now,
+        fee,
+        completed.distance_m,
+        d.route_mode,
+        qualification.status,
+        qualification.reason,
+        d.x,
+        d.y,
+        captured,
+        d.location_source,
+        r.id,
+      ],
     );
     await c.query("UPDATE bikes SET status=?,current_zone_id=? WHERE id=?", [
       open ? "MAINTENANCE" : "AVAILABLE",
@@ -176,6 +211,8 @@ export async function returnRide(pool, user, id, input) {
   if (result.rejected)
     throw new AppError(
       {
+        INVALID_LOCATION: "位置坐标无效，请重新选择还车位置",
+        LOCATION_STALE: "位置信息已过期，请重新获取位置后还车",
         OUTSIDE_FENCE: "当前位置在电子围栏外，请进入停车区后还车",
         ZONE_FULL: "该停车区车位已满或已预留，请选择其他停车区",
         ZONE_CLOSED: "该停车区已关闭",
@@ -219,15 +256,7 @@ export async function payRide(pool, user, id, input) {
       [r.id, key, r.amount_cents],
     );
     await c.query("UPDATE ride_orders SET status='PAID' WHERE id=?", [r.id]);
-    await c.query(
-      "INSERT INTO carbon_ledger(order_id,distance_m,points,carbon_kg) VALUES(?,?,?,?)",
-      [
-        r.id,
-        r.distance_m,
-        Math.floor(r.distance_m / 100),
-        carbonKilograms(r.distance_m),
-      ],
-    );
+    const credit = await awardCarbonForOrder(c, r.id, user.id);
     await audit(c, user, "SIMULATED_PAYMENT", "ride_orders", r.id, {
       amount_cents: r.amount_cents,
     });
@@ -236,6 +265,7 @@ export async function payRide(pool, user, id, input) {
       order_id: r.id,
       amount_cents: r.amount_cents,
       duplicate: false,
+      credit,
     };
   });
 }
@@ -259,44 +289,52 @@ export async function createDispatch(pool, user, input) {
     "INVALID_INPUT",
     400,
   );
-  return actorTransaction(pool, user, async (c) => {
-    const source = await zone(c, d.source_zone_id),
-      target = await zone(c, d.target_zone_id);
+  return actorTransaction(pool, user, (c) =>
+    createDispatchInConnection(c, user, d),
+  );
+}
+export async function createDispatchInConnection(c, user, d) {
+  requireAdmin(user);
+  need(
+    d.source_zone_id !== d.target_zone_id,
+    "调出与调入停车区不能相同",
+    "INVALID_INPUT",
+    400,
+  );
+  const source = await zone(c, d.source_zone_id),
+    target = await zone(c, d.target_zone_id);
+  need(
+    source.status === "ACTIVE" && target.status === "ACTIVE",
+    "调度停车区必须开放",
+  );
+  need(
+    Number(target.occupied) + Number(target.reserved) + d.bike_ids.length <=
+      target.capacity,
+    "目标停车区车位不足",
+    "ZONE_FULL",
+  );
+  if (d.staff_id) await activeStaff(c, d.staff_id, "DISPATCH");
+  for (const bikeId of [...d.bike_ids].sort((a, b) => a - b)) {
+    const b = await get(c, "bikes", bikeId);
     need(
-      source.status === "ACTIVE" && target.status === "ACTIVE",
-      "调度停车区必须开放",
+      b.status === "AVAILABLE" && b.current_zone_id === source.id,
+      "所选车辆不在源停车区或已被占用",
+      "BIKE_UNAVAILABLE",
     );
-    need(
-      Number(target.occupied) + Number(target.reserved) + d.bike_ids.length <=
-        target.capacity,
-      "目标停车区车位不足",
-      "ZONE_FULL",
-    );
-    if (d.staff_id) await activeStaff(c, d.staff_id, "DISPATCH");
-    for (const bikeId of [...d.bike_ids].sort((a, b) => a - b)) {
-      const b = await get(c, "bikes", bikeId);
-      need(
-        b.status === "AVAILABLE" && b.current_zone_id === source.id,
-        "所选车辆不在源停车区或已被占用",
-        "BIKE_UNAVAILABLE",
-      );
-    }
-    const [t] = await c.query(
-      "INSERT INTO dispatch_tasks(staff_id,source_zone_id,target_zone_id) VALUES(?,?,?)",
-      [d.staff_id ?? null, source.id, target.id],
-    );
-    for (const bikeId of d.bike_ids) {
-      await c.query("INSERT INTO dispatch_bikes(task_id,bike_id) VALUES(?,?)", [
-        t.insertId,
-        bikeId,
-      ]);
-      await c.query("UPDATE bikes SET status='DISPATCHING' WHERE id=?", [
-        bikeId,
-      ]);
-    }
-    await audit(c, user, "DISPATCH_CREATE", "dispatch_tasks", t.insertId, d);
-    return { id: t.insertId };
-  });
+  }
+  const [t] = await c.query(
+    "INSERT INTO dispatch_tasks(staff_id,source_zone_id,target_zone_id) VALUES(?,?,?)",
+    [d.staff_id ?? null, source.id, target.id],
+  );
+  for (const bikeId of d.bike_ids) {
+    await c.query("INSERT INTO dispatch_bikes(task_id,bike_id) VALUES(?,?)", [
+      t.insertId,
+      bikeId,
+    ]);
+    await c.query("UPDATE bikes SET status='DISPATCHING' WHERE id=?", [bikeId]);
+  }
+  await audit(c, user, "DISPATCH_CREATE", "dispatch_tasks", t.insertId, d);
+  return { id: t.insertId };
 }
 export async function dispatchAction(pool, user, id, action, input) {
   need(

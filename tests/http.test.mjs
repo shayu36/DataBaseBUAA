@@ -133,6 +133,14 @@ test("students cannot list users or mutate administrator resources", async () =>
     403,
   );
   assert.equal(
+    (await request("/api/analytics?days=7", undefined, studentCookie)).status,
+    403,
+  );
+  assert.equal(
+    (await request("/api/admin/roads", undefined, studentCookie)).status,
+    403,
+  );
+  assert.equal(
     (await request("/api/admin/users", undefined, adminCookie)).data.users
       .length,
     4,
@@ -218,9 +226,9 @@ test("route API validates modes and schema endpoint reflects real objects", asyn
     400,
   );
   const s = (await request("/api/schema", undefined, studentCookie)).data;
-  assert.equal(s.entities.length, 16);
+  assert.equal(s.entities.length, 18);
   assert.equal(s.relationships.length, 11);
-  assert.equal(s.objects.views.length, 3);
+  assert.equal(s.objects.views.length, 4);
   assert.ok(Object.values(s.objects).every(Array.isArray));
 });
 test("SQL constraints enforce foreign keys, active ride uniqueness and payment amount", async () => {

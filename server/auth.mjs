@@ -2,13 +2,24 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { AppError, ledgerTransaction } from "./db.mjs";
-const publicUser = ({ id, name, email, phone, role, status }) => ({
+const publicUser = ({
   id,
   name,
   email,
   phone,
   role,
   status,
+  leaderboard_alias,
+  leaderboard_visible,
+}) => ({
+  id,
+  name,
+  email,
+  phone,
+  role,
+  status,
+  leaderboard_alias,
+  leaderboard_visible: Boolean(leaderboard_visible),
 });
 const password = z
   .string()
@@ -66,7 +77,7 @@ export function authenticate(pool) {
         audience: "qingxing-browser",
       });
       const [[user]] = await pool.query(
-        "SELECT id,name,email,phone,role,status FROM users WHERE id=?",
+        "SELECT id,name,email,phone,role,status,leaderboard_alias,leaderboard_visible FROM users WHERE id=?",
         [p.sub],
       );
       if (!user)
@@ -111,14 +122,14 @@ export async function register(pool, input) {
         "INSERT INTO users(name,email,phone,password_hash) VALUES(?,?,?,?)",
         [d.name, d.email, d.phone, hash],
       );
-      return {
-        id: r.insertId,
-        name: d.name,
-        email: d.email,
-        phone: d.phone,
-        role: "STUDENT",
-        status: "ACTIVE",
-      };
+      await c.query("UPDATE users SET leaderboard_alias=? WHERE id=?", [
+        "骑行者" + String(r.insertId).padStart(4, "0"),
+        r.insertId,
+      ]);
+      const [[user]] = await c.query("SELECT * FROM users WHERE id=?", [
+        r.insertId,
+      ]);
+      return publicUser(user);
     } catch (e) {
       if (e.code === "ER_DUP_ENTRY")
         throw new AppError("邮箱或手机号已注册", "ACCOUNT_EXISTS", 409);

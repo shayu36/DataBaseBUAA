@@ -1,11 +1,20 @@
+
+> qingxing-campus-bike@1.0.0 check
+> node scripts/check.mjs
+
 PASS 停车区占用及预留不超容: 0
 PASS 骑行订单与车辆状态一一对应: 0
 PASS 可借车辆都有停车区且没有开放维修单: 0
 PASS 成功支付与订单状态金额一致: 0
-PASS 积分只授予成功支付订单且符合里程规则: 0
+PASS 有效已支付订单恰有一条版本化积分发放: 0
+PASS 积分流水幂等键唯一且发放关联支付: 0
+PASS 归还证据坐标成对且终态复核信息完整: 0
+PASS 确认的调度建议唯一关联正式任务: 0
+PASS 开放风险指纹无重复: 0
+PASS 道路模拟属性在声明范围内: 0
 PASS 调度车辆只属于一个未完成任务: 0
 PASS 调度状态与车辆位置一致: 0
 PASS 调度中车辆有对应活动任务: 0
 PASS 维修状态与开放工单相符: 0
 PASS 所有调度任务有车辆明细: 0
-{"db":"campus_bike","users":4,"bikes":66,"rides":167,"payments":167}
+{"db":"campus_bike","users":4,"bikes":66,"rides":171,"payments":171}

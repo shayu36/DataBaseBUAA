@@ -1,8 +1,20 @@
-Project application stopped.
-Project MySQL shut down cleanly.
-Project MySQL ready on 127.0.0.1:3377.
+Project MySQL is already running on 127.0.0.1:3377.
 Local credentials configured; application user is restricted to campus_bike.
-Schema ready: 16 tables, 3 views, 2 triggers, 1 procedure; read-only object catalogue refreshed.
+Schema ready: 18 tables, 4 views, 2 triggers, 1 procedures; read-only object catalogue refreshed.
+Feature migration already current.
 Campus demo already seeded; existing data preserved.
+
+> qingxing-campus-bike@1.0.0 build
+> tsc -b && vite build
+
+vite v7.3.6 building client environment for production...
+transforming...
+✓ 1584 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.48 kB │ gzip:  0.34 kB
+dist/assets/index-CITeunW6.css   24.15 kB │ gzip:  6.61 kB
+dist/assets/index-DyNlUJvl.js   290.62 kB │ gzip: 90.68 kB
+✓ built in 1.50s
 Qingxing is ready: http://127.0.0.1:5188
 Demo account: jia@qingxing.local / Qingxing2026!

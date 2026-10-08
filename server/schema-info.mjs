@@ -13,7 +13,9 @@ const descriptions = {
   return_attempts: ["违规还车尝试", "围栏和容量校验失败留痕"],
   road_nodes: ["路网节点", "校园示意路网节点"],
   road_edges: ["道路边", "距离、安全、舒适权重"],
-  carbon_ledger: ["碳积分流水", "已支付订单模拟减排及积分"],
+  carbon_transactions: ["碳积分流水", "发放与调整组成的追加式积分账本"],
+  dispatch_suggestions: ["调度建议", "供需分析依据、状态及正式任务来源"],
+  risk_alerts: ["风险预警", "版本化车辆风险原因及处置记录"],
   audit_logs: ["操作审计", "关键业务变更记录"],
   system_settings: ["系统参数", "种子标记及可审计规则"],
 };

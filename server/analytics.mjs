@@ -17,6 +17,7 @@ export function findRoute(nodes, edges, fromId, toId, mode = "shortest") {
   if (!graph.has(fromId) || !graph.has(toId))
     throw new Error("Unknown road node");
   for (const edge of edges) {
+    if (["CLOSED", "NO_RIDE"].includes(edge.status)) continue;
     const distance = Number(edge.distance_m),
       safety = Number(edge.safety_cost),
       comfort = Number(edge.comfort_cost);
@@ -26,16 +27,41 @@ export function findRoute(nodes, edges, fromId, toId, mode = "shortest") {
       ![distance, safety, comfort].every((n) => Number.isFinite(n) && n >= 0)
     )
       throw new Error("Invalid road edge");
-    const weight =
-      distance *
-      (mode === "safe" ? 1 + safety : mode === "comfortable" ? 1 + comfort : 1);
+    const traffic =
+        edge.traffic_mix === "MOTOR_HEAVY"
+          ? 0.8
+          : edge.traffic_mix === "MIXED"
+            ? 0.35
+            : 0,
+      surface =
+        edge.surface === "ROUGH" ? 0.75 : edge.surface === "AVERAGE" ? 0.3 : 0,
+      safetyPenalty =
+        safety +
+        number(edge.intersection_risk) * 0.18 +
+        traffic +
+        Math.max(0, 5 - number(edge.lighting_level ?? 5)) * 0.12,
+      comfortPenalty =
+        comfort +
+        surface +
+        Math.abs(Number(edge.slope_percent || 0)) * 0.04 +
+        Math.max(0, 5 - number(edge.shade_level ?? 5)) * 0.08,
+      weight =
+        distance *
+        (mode === "safe"
+          ? 1 + safetyPenalty
+          : mode === "comfortable"
+            ? 1 + comfortPenalty
+            : 1),
+      detail = { ...edge, distance, safetyPenalty, comfortPenalty };
     if (!Number.isFinite(weight)) throw new Error("Invalid route weight");
-    graph
-      .get(edge.from_node_id)
-      .push({ to: edge.to_node_id, distance, weight });
-    graph
-      .get(edge.to_node_id)
-      .push({ to: edge.from_node_id, distance, weight });
+    if (edge.direction !== "REVERSE")
+      graph
+        .get(edge.from_node_id)
+        .push({ to: edge.to_node_id, distance, weight, detail });
+    if (edge.direction !== "FORWARD")
+      graph
+        .get(edge.to_node_id)
+        .push({ to: edge.from_node_id, distance, weight, detail });
   }
   const costs = new Map([[fromId, 0]]),
     previous = new Map(),
@@ -57,24 +83,61 @@ export function findRoute(nodes, edges, fromId, toId, mode = "shortest") {
         best + edge.weight < (costs.get(edge.to) ?? Infinity)
       ) {
         costs.set(edge.to, best + edge.weight);
-        previous.set(edge.to, { id: next, distance: edge.distance });
+        previous.set(edge.to, {
+          id: next,
+          distance: edge.distance,
+          detail: edge.detail,
+        });
       }
   }
   const path = [toId];
   let distance = 0,
     id = toId;
+  const segments = [];
   while (id !== fromId) {
     const p = previous.get(id);
+    if (!p) throw new Error("No route between selected zones");
     distance += p.distance;
+    segments.unshift({
+      from_node_id: p.id,
+      to_node_id: id,
+      ...p.detail,
+      distance_m: p.distance,
+    });
     id = p.id;
     path.unshift(id);
   }
   if (!Number.isFinite(distance)) throw new Error("Invalid route distance");
+  const attribute_totals = segments.reduce(
+    (a, s) => ({
+      intersection_risk: a.intersection_risk + number(s.intersection_risk),
+      motor_heavy_edges:
+        a.motor_heavy_edges + (s.traffic_mix === "MOTOR_HEAVY" ? 1 : 0),
+      rough_edges: a.rough_edges + (s.surface === "ROUGH" ? 1 : 0),
+      shaded_edges: a.shaded_edges + (number(s.shade_level) >= 4 ? 1 : 0),
+    }),
+    {
+      intersection_risk: 0,
+      motor_heavy_edges: 0,
+      rough_edges: 0,
+      shaded_edges: 0,
+    },
+  );
+  const explanation =
+    mode === "safe"
+      ? `避开封闭及禁骑路段，综合机动车混行、交叉口和照明模拟属性；途经 ${attribute_totals.motor_heavy_edges} 条机动车较多道路`
+      : mode === "comfortable"
+        ? `避开封闭及禁骑路段，综合路面、坡度和遮阴模拟属性；途经 ${attribute_totals.shaded_edges} 条高遮阴道路`
+        : "避开封闭及禁骑路段，以可通行道路长度计算最短路线";
   return {
     path,
     distance_m: round(distance),
     duration_minutes: round(distance / 200),
     mode,
+    segments,
+    attribute_totals,
+    explanation,
+    attribute_source: "SIMULATED_COURSE_DATA",
   };
 }
 export function dispatchSuggestions(zones, demand = []) {
@@ -123,6 +186,7 @@ export function dispatchSuggestions(zones, demand = []) {
         source_name: source.name,
         target_name: target.name,
         quantity,
+        desired_inventory: target.desired,
         reason: `目标库存 ${target.available}，建议保有 ${target.desired}；按容量、预留车位及历史净借车需求估算`,
       });
       source.supply -= quantity;
@@ -186,26 +250,109 @@ export function bikeRisks(bikes, tickets, now = new Date()) {
         score,
         level: score >= 60 ? "HIGH" : score >= 30 ? "MEDIUM" : "LOW",
         reasons,
+        reason_details: reasons.map((message) => ({
+          rule: message.includes("同类型")
+            ? "REPEAT_FAULT"
+            : message.includes("维修")
+              ? "SERVICE_GAP"
+              : message.includes("报修")
+                ? "RECENT_FAULTS"
+                : "NONE",
+          message,
+        })),
       };
     })
     .sort((a, b) => b.score - a.score || a.bike_id - b.bike_id);
 }
+function reportFilter(input, now) {
+  const endNow = clock(now);
+  if (typeof input === "number" || input == null) {
+    const days = Number(input ?? 7);
+    if (![7, 30].includes(days)) throw new Error("Invalid reporting days");
+    return {
+      start: endNow - days * DAY,
+      end: endNow,
+      dayType: "ALL",
+      startHour: 0,
+      endHour: 24,
+      zoneId: null,
+      preset: String(days),
+      timezone: "Asia/Shanghai",
+    };
+  }
+  const parseDay = (value, end = false) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value)))
+      throw new Error("Invalid reporting date");
+    const [year, month, day] = String(value).split("-").map(Number);
+    return Date.UTC(year, month - 1, day + (end ? 1 : 0)) - OFFSET;
+  };
+  const start = parseDay(input.start),
+    end = Math.min(parseDay(input.end, true), endNow),
+    startHour = Number(input.startHour ?? 0),
+    endHour = Number(input.endHour ?? 24),
+    dayType = input.dayType || "ALL",
+    zoneId = input.zoneId == null ? null : Number(input.zoneId);
+  if (
+    end <= start ||
+    end - start > 31 * DAY ||
+    !["ALL", "WEEKDAY", "WEEKEND"].includes(dayType) ||
+    !Number.isInteger(startHour) ||
+    !Number.isInteger(endHour) ||
+    startHour < 0 ||
+    endHour > 24 ||
+    startHour >= endHour ||
+    (zoneId != null && (!Number.isInteger(zoneId) || zoneId <= 0))
+  )
+    throw new Error("Invalid reporting range");
+  return {
+    start,
+    end,
+    dayType,
+    startHour,
+    endHour,
+    zoneId,
+    preset: "custom",
+    timezone: "Asia/Shanghai",
+  };
+}
+
 export function aggregateHotspots(
   zones,
   rides,
   snapshots,
-  days = 7,
+  filter = 7,
   now = new Date(),
 ) {
-  if (![7, 30].includes(Number(days)))
-    throw new Error("Invalid reporting days");
-  const end = clock(now),
-    start = end - Number(days) * DAY;
-  const hotspots = zones.map((z) => ({
+  const normalized = reportFilter(filter, now),
+    { start, end } = normalized,
+    included = (time) => {
+      const t = timestamp(time);
+      if (!Number.isFinite(t) || t < start || t > end) return false;
+      const local = new Date(t + OFFSET),
+        weekday = local.getUTCDay(),
+        hour = local.getUTCHours();
+      return (
+        hour >= normalized.startHour &&
+        hour < normalized.endHour &&
+        (normalized.dayType === "ALL" ||
+          (normalized.dayType === "WEEKDAY" && weekday >= 1 && weekday <= 5) ||
+          (normalized.dayType === "WEEKEND" &&
+            (weekday === 0 || weekday === 6)))
+      );
+    };
+  const selectedZones = normalized.zoneId
+    ? zones.filter((z) => z.id === normalized.zoneId)
+    : zones;
+  const hotspots = selectedZones.map((z) => ({
     zone_id: z.id,
     name: z.name,
+    available: number(z.available),
+    occupied: number(z.occupied),
+    capacity: number(z.capacity),
+    reserved: number(z.reserved),
     borrow_count: 0,
     return_count: 0,
+    net_flow: 0,
     peak_hour: null,
     shortage_minutes: 0,
     full_minutes: 0,
@@ -226,7 +373,7 @@ export function aggregateHotspots(
   function event(zoneId, time, field) {
     const t = timestamp(time),
       zone = byZone.get(zoneId);
-    if (!zone || !Number.isFinite(t) || t < start || t > end) return;
+    if (!zone || !included(time)) return;
     const date = new Date(t + OFFSET),
       hour = date.getUTCHours();
     zone[field]++;
@@ -247,7 +394,7 @@ export function aggregateHotspots(
   for (const s of snapshots) {
     const t = timestamp(s.captured_at);
     if (!byZone.has(s.zone_id) || !Number.isFinite(t) || t > end) continue;
-    if (t >= start) snapshot_count++;
+    if (included(s.captured_at)) snapshot_count++;
     const list = grouped.get(s.zone_id) || [];
     list.push({ ...s, t });
     grouped.set(s.zone_id, list);
@@ -267,6 +414,7 @@ export function aggregateHotspots(
         Number(a.capacity) <= 0
       )
         continue;
+      if (normalized.preset === "custom" && !included(a.captured_at)) continue;
       const minutes =
         Math.max(0, Math.min(b.t, end) - Math.max(a.t, start)) / 60000;
       h.coverage_minutes += minutes;
@@ -280,8 +428,50 @@ export function aggregateHotspots(
     if (p) h.peak_hour = p.indexOf(Math.max(...p));
     for (const key of ["coverage_minutes", "shortage_minutes", "full_minutes"])
       h[key] = round(h[key]);
+    h.net_flow = h.return_count - h.borrow_count;
   }
-  return { hotspots, hourly, weekday, snapshot_count };
+  const inventory_series = [...grouped.entries()].flatMap(([zoneId, list]) =>
+    list
+      .filter((s) => included(s.captured_at))
+      .map((s) => ({
+        zone_id: zoneId,
+        captured_at: s.captured_at,
+        available: number(s.available),
+        occupied: number(s.occupied),
+        capacity: number(s.capacity),
+      })),
+  );
+  const possibleMinutes =
+      selectedZones.length *
+      ((end - start) / DAY) *
+      (normalized.endHour - normalized.startHour) *
+      60,
+    perZonePossible = selectedZones.length
+      ? possibleMinutes / selectedZones.length
+      : 0,
+    covered = hotspots.reduce((sum, h) => sum + h.coverage_minutes, 0);
+  for (const h of hotspots)
+    h.coverage_ratio = perZonePossible
+      ? round(h.coverage_minutes / perZonePossible)
+      : 0;
+  return {
+    hotspots,
+    hourly,
+    weekday,
+    inventory_series,
+    snapshot_count,
+    coverage_ratio: possibleMinutes ? round(covered / possibleMinutes) : 0,
+    filter: {
+      ...normalized,
+      start: new Date(start).toISOString(),
+      end: new Date(end).toISOString(),
+    },
+    methodology: {
+      snapshot_gap_minutes: 5,
+      shortage_threshold: "available <= 20% capacity",
+      simulation: true,
+    },
+  };
 }
 export function buildLeaderboard(
   users,
@@ -290,6 +480,7 @@ export function buildLeaderboard(
   period = "week",
   metric = "points",
   now = new Date(),
+  viewerId = null,
 ) {
   if (
     !["week", "month"].includes(period) ||
@@ -306,11 +497,26 @@ export function buildLeaderboard(
     ) - OFFSET;
   if (period === "week") start -= ((local.getUTCDay() + 6) % 7) * DAY;
   const people = new Map(users.map((u) => [u.id, u])),
-    ledger = new Map();
-  for (const e of entries)
-    if (!ledger.has(e.order_id)) ledger.set(e.order_id, e);
-  const totals = new Map(),
+    orders = new Map(rides.map((r) => [r.id, r])),
+    totals = new Map(),
     seen = new Set();
+  const rowFor = (userId) => {
+    const u = people.get(userId);
+    if (!u) return null;
+    const chars = Array.from(String(u.name || "同学"));
+    const row = totals.get(u.id) || {
+      rank: 0,
+      user_id: u.id,
+      name: u.leaderboard_alias || chars[0] + "**",
+      visible: u.leaderboard_visible == null || Boolean(u.leaderboard_visible),
+      rides: 0,
+      distance_m: 0,
+      points: 0,
+      carbon_kg: 0,
+    };
+    totals.set(u.id, row);
+    return row;
+  };
   for (const r of rides) {
     const ended = timestamp(r.ended_at);
     if (
@@ -319,36 +525,51 @@ export function buildLeaderboard(
       ended < start ||
       ended > end ||
       !people.has(r.user_id) ||
+      (r.qualification_status && r.qualification_status !== "VALID") ||
       seen.has(r.id)
     )
       continue;
     seen.add(r.id);
-    const u = people.get(r.user_id),
-      chars = Array.from(String(u.name || "同学"));
-    const row = totals.get(u.id) || {
-      rank: 0,
-      user_id: u.id,
-      name: chars[0] + "**",
-      rides: 0,
-      distance_m: 0,
-      points: 0,
-      carbon_kg: 0,
-    };
+    const row = rowFor(r.user_id);
     row.rides++;
     row.distance_m += number(r.distance_m);
-    const entry = ledger.get(r.id);
-    row.points += number(entry?.points);
-    row.carbon_kg += number(entry?.carbon_kg);
-    totals.set(u.id, row);
+  }
+  for (const entry of entries) {
+    const order = orders.get(entry.order_id);
+    if (
+      !order ||
+      order.status !== "PAID" ||
+      (order.qualification_status && order.qualification_status !== "VALID")
+    )
+      continue;
+    const when = timestamp(entry.created_at ?? order.ended_at);
+    if (!Number.isFinite(when) || when < start || when > end) continue;
+    const row = rowFor(order.user_id);
+    if (!row) continue;
+    row.points += Number(entry.points_change ?? entry.points ?? 0);
+    row.carbon_kg += Number(entry.carbon_kg_change ?? entry.carbon_kg ?? 0);
   }
   const field = metric === "distance" ? "distance_m" : metric;
-  const rows = [...totals.values()].sort(
+  const ranked = [...totals.values()].sort(
     (a, b) => b[field] - a[field] || a.user_id - b.user_id,
   );
-  rows.forEach((r, i) => {
-    r.rank = i + 1;
+  ranked.forEach((r, i) => {
+    r.rank =
+      i > 0 && ranked[i - 1][field] === r[field] ? ranked[i - 1].rank : i + 1;
     r.distance_m = round(r.distance_m);
     r.carbon_kg = Math.round(r.carbon_kg * 1000000) / 1000000;
   });
-  return { period, metric, rows };
+  const me = ranked.find((r) => r.user_id === Number(viewerId)) || null,
+    rows = ranked.filter((r) => r.visible).map(({ visible, ...r }) => r);
+  return {
+    period,
+    metric,
+    rows,
+    me: me ? (({ visible, ...r }) => ({ ...r, private: !visible }))(me) : null,
+    window: {
+      start: new Date(start).toISOString(),
+      end: new Date(end).toISOString(),
+      timezone: "Asia/Shanghai",
+    },
+  };
 }

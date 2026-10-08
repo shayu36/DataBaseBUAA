@@ -333,6 +333,10 @@ test("carbon half-unit rounding follows exact decimal half-up rule", async () =>
     "UPDATE road_edges SET distance_m=875 WHERE from_node_id=1 AND to_node_id=2",
   );
   const { id } = await business.startRide(pool, user, { bike_id: 1 });
+  await pool.query(
+    "UPDATE ride_orders SET started_at=DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE) WHERE id=?",
+    [id],
+  );
   await business.returnRide(pool, user, id, { zone_id: 2, x: 500, y: 100 });
   await business.payRide(pool, user, id, {
     idempotency_key: "rounding-regression",

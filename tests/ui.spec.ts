@@ -333,9 +333,9 @@ test("analytics refetches after suggestion creation and manual refresh while ret
       });
     if (url.pathname === "/api/dashboard")
       return route.fulfill({ json: regressionDashboard });
-    if (url.pathname === "/api/dispatches") {
+    if (url.pathname === "/api/analytics/suggestions") {
       created = true;
-      return route.fulfill({ json: { id: 1 } });
+      return route.fulfill({ json: { suggestions: [{ id: 1 }] } });
     }
     if (url.pathname === "/api/analytics") {
       analyticsRequests.push(url.search);
@@ -345,6 +345,8 @@ test("analytics refetches after suggestion creation and manual refresh while ret
           hourly: [],
           weekday: [],
           risks: [],
+          risk_alerts: [],
+          saved_suggestions: [],
           snapshot_count: 0,
           suggestions: created
             ? []
@@ -370,7 +372,9 @@ test("analytics refetches after suggestion creation and manual refresh while ret
     page.getByText("回归测试调度建议", { exact: true }),
   ).toBeVisible();
   const before = analyticsRequests.length;
-  await page.getByRole("button", { name: "确认创建任务", exact: true }).click();
+  await page
+    .getByRole("button", { name: "生成并保存本次建议", exact: true })
+    .click();
   await expect(
     page.getByText("当前没有可执行调度建议", { exact: true }),
   ).toBeVisible();
@@ -381,4 +385,240 @@ test("analytics refetches after suggestion creation and manual refresh while ret
   await expect.poll(() => analyticsRequests.length).toBeGreaterThan(after);
   await expect(page.getByLabel("统计周期")).toHaveValue("30");
   expect(analyticsRequests.at(-1)).toBe("?days=30");
+});
+
+test("PDF expansion controls expose traceable workflows", async ({ page }) => {
+  const posts: string[] = [];
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    const path = url.pathname;
+    if (route.request().method() === "POST") posts.push(path);
+    if (path === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: 1,
+            name: "测试管理员",
+            email: "admin@test.local",
+            role: "ADMIN",
+            status: "ACTIVE",
+            leaderboard_alias: "航空蓝骑手",
+            leaderboard_visible: false,
+          },
+        },
+      });
+    if (path === "/api/dashboard")
+      return route.fulfill({
+        json: {
+          ...regressionDashboard,
+          carbon: {
+            points: 8,
+            carbon_kg: 0.2,
+            distance_m: 1000,
+            entries: [
+              {
+                id: 1,
+                order_id: 8,
+                entry_type: "ADJUSTMENT",
+                points: -2,
+                carbon_kg: -0.01,
+                rule_version: "carbon-v1",
+                reason: "人工校正",
+                created_at: "2026-10-08T00:00:00Z",
+              },
+            ],
+          },
+        },
+      });
+    if (path === "/api/analytics")
+      return route.fulfill({
+        json: {
+          hotspots: [
+            {
+              zone_id: 1,
+              name: "测试源站",
+              borrow_count: 5,
+              return_count: 2,
+              peak_hour: 8,
+              shortage_minutes: 3,
+              full_minutes: 0,
+              coverage_minutes: 30,
+              coverage_ratio: 0.75,
+            },
+          ],
+          hourly: Array.from({ length: 24 }, (_, hour) => ({
+            hour,
+            borrow_count: hour === 8 ? 5 : 0,
+            return_count: hour === 9 ? 2 : 0,
+          })),
+          weekday: Array.from({ length: 7 }, (_, weekday) => ({
+            weekday,
+            borrow_count: 0,
+            return_count: 0,
+          })),
+          snapshot_count: 2,
+          suggestions: [],
+          saved_suggestions: [
+            {
+              id: 7,
+              source_name: "测试源站",
+              target_name: "测试目标站",
+              quantity: 1,
+              borrow_count: 9,
+              return_count: 1,
+              desired_inventory: 5,
+              algorithm_version: "demand-balance-v1",
+              status: "OPEN",
+            },
+          ],
+          risks: [],
+          risk_alerts: [
+            {
+              id: 9,
+              bike_code: "QX-REGRESSION",
+              score: 60,
+              level: "HIGH",
+              status: "OPEN",
+              reasons: JSON.stringify([{ message: "同类故障复发" }]),
+            },
+          ],
+        },
+      });
+    if (path === "/api/routes") {
+      const mode = url.searchParams.get("mode") || "shortest";
+      return route.fulfill({
+        json: {
+          mode,
+          distance_m: mode === "shortest" ? 400 : 430,
+          duration_minutes: 2,
+          path: [1, 2],
+          nodes: [
+            { id: 1, name: "主楼", x: 100, y: 100 },
+            { id: 2, name: "新主楼", x: 500, y: 100 },
+          ],
+          edges: [],
+          segments: [
+            {
+              from_node_id: 1,
+              to_node_id: 2,
+              direction: "BOTH",
+              status: "OPEN",
+              distance_m: 400,
+              slope_percent: 1,
+              surface: "SMOOTH",
+              traffic_mix: "MIXED",
+              shade_level: 4,
+              lighting_level: 5,
+            },
+          ],
+          attribute_totals: {
+            intersection_risk: 1,
+            motor_heavy_edges: 0,
+            rough_edges: 0,
+            shaded_edges: 1,
+          },
+          explanation: "避开封闭及禁骑路段",
+        },
+      });
+    }
+    if (path === "/api/leaderboard")
+      return route.fulfill({
+        json: {
+          rows: [],
+          me: {
+            rank: 2,
+            points: 8,
+            distance_m: 1000,
+            private: true,
+          },
+        },
+      });
+    if (path === "/api/admin/users")
+      return route.fulfill({ json: { users: [] } });
+    if (path === "/api/admin/roads")
+      return route.fulfill({
+        json: {
+          roads: [
+            {
+              id: 1,
+              from_name: "主楼",
+              to_name: "新主楼",
+              direction: "BOTH",
+              status: "OPEN",
+              slope_percent: 1,
+              surface: "SMOOTH",
+              shade_level: 4,
+              lighting_level: 5,
+              traffic_mix: "MIXED",
+              intersection_risk: 1,
+              attribute_source: "SIMULATED_COURSE_DATA",
+            },
+          ],
+        },
+      });
+    if (path === "/api/return-attempts")
+      return route.fulfill({
+        json: {
+          attempts: [
+            {
+              id: 3,
+              order_id: 8,
+              bike_code: "QX-REGRESSION",
+              zone_name: "测试目标站",
+              x: 999,
+              y: 999,
+              reason: "LOCATION_STALE",
+              location_source: "MAP_SIMULATION",
+              review_status: "PENDING",
+            },
+          ],
+        },
+      });
+    if (path === "/api/admin/orders/review")
+      return route.fulfill({
+        json: {
+          orders: [
+            {
+              id: 8,
+              user_name: "测试学生",
+              bike_code: "QX-REGRESSION",
+              distance_m: 1000,
+              qualification_reason: "距离与时长组合异常",
+            },
+          ],
+        },
+      });
+    return route.fulfill({ json: { id: 1 } });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "运营分析", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "热点分析条件" }),
+  ).toBeVisible();
+  await expect(page.getByText("demand-balance-v1")).toBeVisible();
+  await expect(page.getByText("同类故障复发")).toBeVisible();
+  await page.getByRole("button", { name: "复核并创建任务" }).click();
+  await page.getByRole("button", { name: "确认", exact: true }).click();
+  expect(posts).toContain("/api/dispatches/from-suggestion/7");
+  expect(posts).toContain("/api/risks/9/acknowledge");
+
+  await page.getByRole("button", { name: "路线规划", exact: true }).click();
+  await expect(page.getByRole("button", { name: /安全优先/ })).toBeVisible();
+  await expect(
+    page.getByText("避开封闭及禁骑路段", { exact: true }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "碳积分", exact: true }).click();
+  await expect(page.getByText("我的排名 #2")).toBeVisible();
+  await expect(page.getByText("人工校正")).toBeVisible();
+
+  await page.getByRole("button", { name: "基础资料", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "校园路网属性维护" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("LOCATION_STALE", { exact: false }),
+  ).toBeVisible();
+  await expect(page.getByText("距离与时长组合异常")).toBeVisible();
 });

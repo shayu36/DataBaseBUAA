@@ -7,17 +7,33 @@ export async function installCampusRoads(c) {
       "INSERT INTO road_nodes(id,name,x,y,zone_id) VALUES(?,?,?,?,?) ON DUPLICATE KEY UPDATE name=VALUES(name),x=VALUES(x),y=VALUES(y),zone_id=VALUES(zone_id)",
       [n.id, n.name, n.x, n.y, n.zone_id],
     );
-  for (const e of campus.edges)
+  for (const e of campus.edges) {
+    const attrs = {
+      slope: ((e.id % 5) - 2) * 1.5,
+      surface: e.id % 5 === 0 ? "ROUGH" : e.id % 2 === 0 ? "AVERAGE" : "SMOOTH",
+      shade: Math.min(5, 2 + (e.id % 4)),
+      lighting: 5 - (e.id % 3),
+      traffic:
+        e.id % 7 === 0 ? "MOTOR_HEAVY" : e.id % 3 === 0 ? "BIKE_ONLY" : "MIXED",
+      risk: e.id % 4,
+    };
     await c.query(
-      "INSERT INTO road_edges(from_node_id,to_node_id,distance_m,safety_cost,comfort_cost) VALUES(?,?,?,?,?)",
+      "INSERT INTO road_edges(from_node_id,to_node_id,distance_m,safety_cost,comfort_cost,direction,status,slope_percent,surface,shade_level,lighting_level,traffic_mix,intersection_risk,attribute_source) VALUES(?,?,?,?,?,'BOTH','OPEN',?,?,?,?,?,?,'SIMULATED_COURSE_DATA')",
       [
         e.from_node_id,
         e.to_node_id,
         e.distance_m,
         e.safety_cost,
         e.comfort_cost,
+        attrs.slope,
+        attrs.surface,
+        attrs.shade,
+        attrs.lighting,
+        attrs.traffic,
+        attrs.risk,
       ],
     );
+  }
   await c.query(
     "INSERT INTO system_settings(name,value) VALUES('campus_map',JSON_OBJECT('version',?,'source',?))",
     [campus.version, campus.source],

@@ -21,6 +21,17 @@ import {
 } from "./business.mjs";
 import { saveZone, saveBike, saveStaff, setUserStatus } from "./admin.mjs";
 import { dashboard, analytics, leaderboard } from "./read-model.mjs";
+import {
+  reportFilterSchema,
+  createDispatchSuggestions,
+  listDispatchSuggestions,
+  confirmDispatchSuggestion,
+} from "./operations.mjs";
+import { refreshRiskAlerts, actOnRisk, listRiskAlerts } from "./risks.mjs";
+import { saveRoad } from "./roads.mjs";
+import { reviewReturnAttempt, listReturnAttempts } from "./returns.mjs";
+import { reviewOrderQualification, adjustCarbon } from "./carbon.mjs";
+import { updateLeaderboardProfile } from "./profile.mjs";
 import { schemaInfo } from "./schema-info.mjs";
 const root = fileURLToPath(new URL("../", import.meta.url));
 export function createApp(pool) {
@@ -118,6 +129,18 @@ export function createApp(pool) {
   app.post("/api/dispatches", async (req, res) =>
     res.status(201).json(await createDispatch(pool, req.user, req.body)),
   );
+  app.post("/api/dispatches/from-suggestion/:id", async (req, res) =>
+    res
+      .status(201)
+      .json(
+        await confirmDispatchSuggestion(
+          pool,
+          req.user,
+          req.params.id,
+          req.body.staff_id,
+        ),
+      ),
+  );
   app.post("/api/dispatches/:id/:action", async (req, res) =>
     res.json(
       await dispatchAction(
@@ -141,6 +164,26 @@ export function createApp(pool) {
   app.post("/api/admin/users/:id/status", async (req, res) =>
     res.json(await setUserStatus(pool, req.user, req.params.id, req.body)),
   );
+  app.get("/api/admin/roads", async (req, res) => {
+    requireAdmin(req.user);
+    const [roads] = await pool.query(
+      `SELECT e.*,a.name from_name,b.name to_name FROM road_edges e
+       JOIN road_nodes a ON a.id=e.from_node_id JOIN road_nodes b ON b.id=e.to_node_id ORDER BY e.id`,
+    );
+    res.json({ roads });
+  });
+  app.post("/api/admin/roads", async (req, res) =>
+    res.json(await saveRoad(pool, req.user, req.body)),
+  );
+  app.get("/api/admin/orders/review", async (req, res) => {
+    requireAdmin(req.user);
+    const [orders] = await pool.query(
+      `SELECT r.*,u.name user_name,b.code bike_code FROM ride_orders r
+       JOIN users u ON u.id=r.user_id JOIN bikes b ON b.id=r.bike_id
+       WHERE r.qualification_status='UNDER_REVIEW' ORDER BY r.id DESC`,
+    );
+    res.json({ orders });
+  });
   app.get("/api/admin/users", async (req, res) => {
     requireAdmin(req.user);
     const [users] = await pool.query(
@@ -148,13 +191,56 @@ export function createApp(pool) {
     );
     res.json({ users });
   });
-  app.get("/api/analytics", async (req, res) =>
+  app.get("/api/analytics", async (req, res) => {
+    requireAdmin(req.user);
+    res.json(await analytics(pool, reportFilterSchema.parse(req.query)));
+  });
+  app.post("/api/analytics/suggestions", async (req, res) =>
+    res
+      .status(201)
+      .json(await createDispatchSuggestions(pool, req.user, req.body)),
+  );
+  app.get("/api/analytics/suggestions", async (req, res) => {
+    requireAdmin(req.user);
+    res.json({ suggestions: await listDispatchSuggestions(pool) });
+  });
+  app.post("/api/risks/refresh", async (req, res) =>
+    res.json(await refreshRiskAlerts(pool, req.user)),
+  );
+  app.get("/api/risks", async (req, res) => {
+    if (req.user.role === "STUDENT")
+      throw new AppError("没有风险查看权限", "FORBIDDEN", 403);
+    res.json({ risks: await listRiskAlerts(pool) });
+  });
+  app.post("/api/risks/:id/:action", async (req, res) =>
     res.json(
-      await analytics(
+      await actOnRisk(
         pool,
-        Number(z.enum(["7", "30"]).default("7").parse(req.query.days)),
+        req.user,
+        req.params.id,
+        req.params.action,
+        req.body,
       ),
     ),
+  );
+  app.get("/api/return-attempts", async (req, res) =>
+    res.json({ attempts: await listReturnAttempts(pool, req.user) }),
+  );
+  app.post("/api/returns/:id/review", async (req, res) =>
+    res.json(
+      await reviewReturnAttempt(pool, req.user, req.params.id, req.body),
+    ),
+  );
+  app.post("/api/orders/:id/qualification", async (req, res) =>
+    res.json(
+      await reviewOrderQualification(pool, req.user, req.params.id, req.body),
+    ),
+  );
+  app.post("/api/carbon/adjustments", async (req, res) =>
+    res.status(201).json(await adjustCarbon(pool, req.user, req.body)),
+  );
+  app.post("/api/profile/leaderboard", async (req, res) =>
+    res.json(await updateLeaderboardProfile(pool, req.user, req.body)),
   );
   app.get("/api/routes", async (req, res) => {
     const mode = z
@@ -179,6 +265,7 @@ export function createApp(pool) {
           .enum(["points", "distance", "rides"])
           .default("points")
           .parse(req.query.metric),
+        req.user.id,
       ),
     ),
   );

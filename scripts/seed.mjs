@@ -31,6 +31,9 @@ try {
       );
     }
     await c.query(
+      "UPDATE users SET leaderboard_alias=CONCAT('骑行者',LPAD(id,4,'0')),leaderboard_visible=(id IN(2,4))",
+    );
+    await c.query(
       "INSERT INTO staff(id,user_id,name,phone,job) VALUES(1,3,'郑一凡','13800000003','BOTH')",
     );
     const zones = campus.zones.map((z) => [
@@ -89,9 +92,10 @@ try {
             r.insertId,
           ]);
           await c.query(
-            "INSERT INTO carbon_ledger(order_id,distance_m,points,carbon_kg,created_at) VALUES(?,?,?,?,?)",
+            "INSERT INTO carbon_transactions(order_id,entry_type,idempotency_key,distance_m,points_change,carbon_kg_change,factor_kg_per_km,rule_version,reason,created_at) VALUES(?,'AWARD',?,?,?,?,0.210,'carbon-v1','有效已支付行程积分发放',?)",
             [
               r.insertId,
+              "seed-award-" + r.insertId,
               route.distance_m,
               Math.floor(route.distance_m / 100),
               carbonKilograms(route.distance_m),
@@ -151,7 +155,7 @@ try {
       "INSERT INTO system_settings(name,value) VALUES('seed_version',JSON_OBJECT('version',1,'history','synthetic'))",
     );
     await c.query(
-      "INSERT INTO system_settings(name,value) VALUES('pricing',JSON_OBJECT('per_30_minutes_cents',100)),('carbon',JSON_OBJECT('kg_per_km',0.21,'points_per_km',10,'source','ROUTE_ESTIMATE'))",
+      "INSERT INTO system_settings(name,value) VALUES('pricing',JSON_OBJECT('per_30_minutes_cents',100)),('carbon',JSON_OBJECT('kg_per_km',0.21,'points_per_km',10,'source','ROUTE_ESTIMATE','rule_version','carbon-v1')),('risk',JSON_OBJECT('rule_version','risk-v1','window_days',30))",
     );
     console.log(
       "Seeded: 6 parking zones, 66 bikes, 4 accounts, connected road network and labeled demo history.",
