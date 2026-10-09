@@ -17,6 +17,8 @@
 
 注册入口创建学生账户。管理员可新建运维人员；密码用 bcrypt 摘要保存。结束演示可双击 **停止系统.cmd**。
 
+登录身份会同时影响前端功能入口、后端接口权限和数据范围，并非只隐藏菜单。三种身份使用同一套前端构建产物：学生只能读写自己的骑行、支付、还车记录和个人榜单设置；运维员可处理分配给自己的调度、维修与风险任务；管理员可查看全局分析并管理车辆、停车区、道路、人员和复核流程。后端会在每次受保护请求及写事务中重新校验账号状态和角色，直接调用无权接口同样会返回 403。
+
 项目路径 D:\code\mysqpll。应用端口 5188，开发端口 5189，专用 MySQL 端口 3377，MySQL 数据目录 .runtime/mysql-data。项目脚本核对进程路径，不停止电脑原有 MySQL80 / 3306 服务。
 
 ## 已实现功能
@@ -76,6 +78,7 @@
 ```powershell
 npm ci
 & .\scripts\start.ps1 -NoBrowser
+npm run db:seed
 npm run dev
 npm run build
 npm test
@@ -87,6 +90,8 @@ node scripts/run-queries.mjs
 npm run report
 npm run screenshots
 ```
+
+`npm run db:seed` 是可单独使用的本机数据库初始化命令：它会启动项目专用 MySQL，生成本机 `.env`，依次建表、迁移并幂等写入演示数据。`node scripts/seed.mjs` 只是上述流程的最后一步，要求 3377 端口数据库和表结构已经就绪；新下载目录不要跳过前置步骤直接执行它。
 
 集成测试明确限制在 **campus_bike_test**，重建其中的测试数据；不重置 **campus_bike**。浏览器测试会在演示账户下产生已完成的测试行程、工单、调度和还车尝试。服务端源码修改后需停止再启动；前端修改后运行 build。运行中的应用每分钟采集一次库存，停机期间没有实际快照，不把缺采当作正常。
 
@@ -114,6 +119,8 @@ node scripts/check.mjs campus_bike_restore_demo
 ## 故障排查
 
 - 服务连接失败：查看 .runtime/app-error.log 与 .runtime/mysql-error.log，确认端口3377和5188。
+- 单独运行种子脚本报 `ECONNREFUSED` 或缺表：在项目根目录改用 `npm run db:seed`；它会补齐数据库启动、凭据、结构和迁移步骤。
+- 出现 Node.js 语法或 Vite 启动错误：运行 `node --version`，确认版本不低于 22.12。
 - 端口被其它程序占用：脚本报错退出，请确认占用方，不要强制停止无关服务。
 - 归还失败：查看围栏坐标、停车区开放状态及含预留的剩余容量；订单保留，可换站重试。
 - 员工无法执行：确认员工在岗、岗位匹配，任务已分配给该登录人员。

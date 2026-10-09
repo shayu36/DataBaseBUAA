@@ -1,10 +1,49 @@
 import bcrypt from "bcryptjs";
-import campus from "../database/campus-map.json" with { type: "json" };
+import { readFile } from "node:fs/promises";
 import { installCampusRoads, upgradeCampusMap } from "../server/campus.mjs";
 import { createPool, ledgerTransaction } from "../server/db.mjs";
 import { routeForZones, carbonKilograms } from "../server/business.mjs";
+
+const campus = JSON.parse(
+  await readFile(
+    new URL("../database/campus-map.json", import.meta.url),
+    "utf8",
+  ),
+);
+
+function seedStartupError(error) {
+  if (!process.env.DB_NAME)
+    return new Error(
+      "缺少本机配置文件 .env。请在项目根目录运行 npm run db:seed，或双击 启动系统.cmd 完成数据库初始化。",
+      { cause: error },
+    );
+  if (error?.code === "ECONNREFUSED")
+    return new Error(
+      `无法连接项目数据库 ${process.env.DB_HOST || "127.0.0.1"}:${process.env.DB_PORT || "3377"}。请运行 npm run db:seed 自动启动并初始化项目 MySQL；不要直接执行 node scripts/seed.mjs。`,
+      { cause: error },
+    );
+  if (
+    error?.code === "ER_ACCESS_DENIED_ERROR" ||
+    error?.code === "ER_ACCESS_DENIED_NO_PASSWORD_ERROR"
+  )
+    return new Error(
+      "项目数据库凭据不匹配。请保留本机 .env，并运行 npm run db:seed 重新配置项目数据库账户。",
+      { cause: error },
+    );
+  if (error?.code === "ER_BAD_DB_ERROR" || error?.code === "ER_NO_SUCH_TABLE")
+    return new Error(
+      "项目数据库结构尚未就绪。请运行 npm run db:seed，它会依次建库、建表、迁移并写入演示数据。",
+      { cause: error },
+    );
+  return error;
+}
+
 const pool = createPool();
 try {
+  if (!process.env.DB_NAME)
+    throw new Error(
+      "缺少本机配置文件 .env。请在项目根目录运行 npm run db:seed，或双击 启动系统.cmd 完成数据库初始化。",
+    );
   if (process.env.DB_NAME !== "campus_bike")
     throw new Error("Seeding is restricted to campus_bike.");
   await ledgerTransaction(pool, async (c) => {
@@ -155,7 +194,7 @@ try {
       "INSERT INTO system_settings(name,value) VALUES('seed_version',JSON_OBJECT('version',1,'history','synthetic'))",
     );
     await c.query(
-      "INSERT INTO system_settings(name,value) VALUES('pricing',JSON_OBJECT('per_30_minutes_cents',100)),('carbon',JSON_OBJECT('kg_per_km',0.21,'points_per_km',10,'source','ROUTE_ESTIMATE','rule_version','carbon-v1')),('risk',JSON_OBJECT('rule_version','risk-v1','window_days',30))",
+      "INSERT IGNORE INTO system_settings(name,value) VALUES('pricing',JSON_OBJECT('per_30_minutes_cents',100)),('carbon',JSON_OBJECT('kg_per_km',0.21,'points_per_km',10,'source','ROUTE_ESTIMATE','rule_version','carbon-v1')),('risk',JSON_OBJECT('rule_version','risk-v1','window_days',30))",
     );
     console.log(
       "Seeded: 6 parking zones, 66 bikes, 4 accounts, connected road network and labeled demo history.",
@@ -166,6 +205,8 @@ try {
     console.log(
       "Updated campus map to Beihang Xueyuan Road; historical ledgers preserved.",
     );
+} catch (error) {
+  throw seedStartupError(error);
 } finally {
   await pool.end();
 }

@@ -1,6 +1,6 @@
 {
   "database": "campus_bike",
-  "generated_at": "2026-10-08T11:38:32.755Z",
+  "generated_at": "2026-10-09T06:18:46.591Z",
   "views": [
     "carbon_ledger",
     "v_ride_details",

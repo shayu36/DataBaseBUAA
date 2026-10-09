@@ -4,6 +4,10 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
 $nodeExecutable = (Get-Command node -ErrorAction Stop).Source
 $npmExecutable = (Get-Command npm.cmd -ErrorAction Stop).Source
+$nodeVersion = [version](& $nodeExecutable -p "process.versions.node")
+if ($nodeVersion -lt [version]'22.12.0') {
+    throw "Node.js $nodeVersion is unsupported. Install Node.js 22.12 or newer."
+}
 if (-not (Test-Path -LiteralPath (Join-Path $projectRoot 'node_modules'))) {
     & $npmExecutable ci --no-fund
     if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
