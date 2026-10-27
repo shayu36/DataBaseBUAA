@@ -1,21 +1,22 @@
 import { test, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import bcrypt from "bcryptjs";
-import { createPool } from "../server/db.mjs";
+import { createPool } from "../backend/db.mjs";
 import { applySchema } from "../scripts/sql.mjs";
+import { saveRoad } from "../backend/roads.mjs";
 import {
   saveZone,
   saveBike,
   saveStaff,
   setUserStatus,
-} from "../server/admin.mjs";
+} from "../backend/admin.mjs";
 import {
   startRide,
   returnRide,
   createDispatch,
   reportFault,
   maintenanceAction,
-} from "../server/business.mjs";
+} from "../backend/business.mjs";
 const pool = createPool({
   database: "campus_bike_test",
   user: process.env.DB_ADMIN_USER,
@@ -95,6 +96,40 @@ test("admin authorization on all operations", async () => {
     () => setUserStatus(pool, student, 1, { status: "SUSPENDED" }),
   ])
     await assert.rejects(fn(), { status: 403 });
+});
+test("road updates persist attributes and before/after audit in MySQL", async () => {
+  const data = {
+    id: 1,
+    direction: "FORWARD",
+    status: "CLOSED",
+    slope_percent: 1.25,
+    surface: "ROUGH",
+    shade_level: 2,
+    lighting_level: 3,
+    traffic_mix: "MIXED",
+    intersection_risk: 4,
+  };
+  assert.deepEqual(await saveRoad(pool, admin, data), { id: 1 });
+  const [[road]] = await pool.query(
+    "SELECT status,direction,surface,slope_percent FROM road_edges WHERE id=1",
+  );
+  assert.deepEqual(road, {
+    status: "CLOSED",
+    direction: "FORWARD",
+    surface: "ROUGH",
+    slope_percent: 1.25,
+  });
+  const [[audit]] = await pool.query(
+    "SELECT detail FROM audit_logs WHERE action='ROAD_UPDATE' AND entity_id=1",
+  );
+  const detail =
+    typeof audit.detail === "string" ? JSON.parse(audit.detail) : audit.detail;
+  assert.equal(detail.before.status, "OPEN");
+  assert.equal(detail.after.status, "CLOSED");
+  assert.throws(() => saveRoad(pool, student, data), { code: "FORBIDDEN" });
+  await assert.rejects(saveRoad(pool, admin, { ...data, id: 999 }), {
+    code: "NOT_FOUND",
+  });
 });
 test("zone capacity, closing and geometry protect occupied bikes and reservations", async () => {
   await assert.rejects(saveZone(pool, admin, zone({ capacity: 1 })), {

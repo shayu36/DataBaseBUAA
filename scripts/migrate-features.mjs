@@ -1,5 +1,7 @@
-import { createPool, ledgerTransaction } from "../server/db.mjs";
-import { applyFeatureMigrations } from "../server/feature-migrations.mjs";
+import { createPool, ledgerTransaction } from "../backend/db.mjs";
+import { applyFeatureMigrations } from "../backend/feature-migrations.mjs";
+import { applyProcedures } from "./sql.mjs";
+import { assertMysqlVersion } from "./mysql-version.mjs";
 
 const pool = createPool({
   user: process.env.DB_ADMIN_USER,
@@ -8,11 +10,16 @@ const pool = createPool({
 try {
   if (process.env.DB_NAME !== "campus_bike")
     throw new Error("Feature migration is restricted to campus_bike.");
-  const result = await ledgerTransaction(pool, applyFeatureMigrations);
+  await assertMysqlVersion(pool);
+  const result = await ledgerTransaction(pool, async (connection) => {
+    const migration = await applyFeatureMigrations(connection);
+    await applyProcedures(connection);
+    return migration;
+  });
   console.log(
     result.applied.length
       ? `Feature migration applied: ${result.applied.join(", ")}`
-      : "Feature migration already current.",
+      : "Feature migration already current; SQL procedures refreshed.",
   );
 } finally {
   await pool.end();

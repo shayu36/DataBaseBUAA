@@ -1,9 +1,9 @@
 import { test, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import bcrypt from "bcryptjs";
-import { createPool, ledgerTransaction } from "../server/db.mjs";
+import { createPool, ledgerTransaction } from "../backend/db.mjs";
 import { applySchema } from "../scripts/sql.mjs";
-import * as business from "../server/business.mjs";
+import * as business from "../backend/business.mjs";
 const pool = createPool({
   database: "campus_bike_test",
   user: process.env.DB_ADMIN_USER,
@@ -76,6 +76,35 @@ test("one user cannot run two rides and failed start leaves second bike availabl
   await assert.rejects(business.startRide(pool, user, { bike_id: 2 }));
   const [[r]] = await pool.query("SELECT status FROM bikes WHERE id=2");
   assert.equal(r.status, "AVAILABLE");
+});
+test("native ride start preserves errors and audit records", async () => {
+  await assert.rejects(business.startRide(pool, user, { bike_id: 999 }), {
+    code: "NOT_FOUND",
+    status: 404,
+  });
+  await pool.query("UPDATE parking_zones SET status='CLOSED' WHERE id=1");
+  await assert.rejects(business.startRide(pool, user, { bike_id: 1 }), {
+    code: "INVALID_STATE",
+    status: 409,
+  });
+  await pool.query("UPDATE parking_zones SET status='ACTIVE' WHERE id=1");
+  const { id } = await business.startRide(pool, user, { bike_id: 1 });
+  const [[record]] = await pool.query(
+    "SELECT actor_id,action,entity_id,detail FROM audit_logs WHERE entity_id=? AND action='RIDE_START'",
+    [id],
+  );
+  assert.equal(record.actor_id, user.id);
+  assert.equal(
+    (typeof record.detail === "string"
+      ? JSON.parse(record.detail)
+      : record.detail
+    ).bike_id,
+    1,
+  );
+  await assert.rejects(business.startRide(pool, other, { bike_id: 1 }), {
+    code: "BIKE_UNAVAILABLE",
+    status: 409,
+  });
 });
 test("outside geofence rejection commits violation but leaves order running", async () => {
   const { id } = await business.startRide(pool, user, { bike_id: 1 });
@@ -174,6 +203,21 @@ test("dispatch reserves vehicles and destination slots, progresses atomically", 
   );
   assert.equal(c.status, "AVAILABLE");
   assert.equal(c.current_zone_id, 2);
+  const [[snapshots]] = await pool.query(
+    "SELECT inventory_created,inventory_started,inventory_completed FROM dispatch_tasks WHERE id=?",
+    [id],
+  );
+  const parse = (value) =>
+    typeof value === "string" ? JSON.parse(value) : value;
+  const created = parse(snapshots.inventory_created),
+    started = parse(snapshots.inventory_started),
+    completed = parse(snapshots.inventory_completed);
+  assert.equal(created.source.occupied, 3);
+  assert.equal(created.target.reserved, 2);
+  assert.equal(started.source.occupied, 1);
+  assert.equal(started.target.reserved, 2);
+  assert.equal(completed.target.occupied, 2);
+  assert.equal(completed.target.reserved, 0);
   await assert.rejects(
     business.dispatchAction(pool, operator, id, "complete", {}),
   );
@@ -300,6 +344,23 @@ test("invalid numeric coordinates are rejected without changing order", async ()
   await assert.rejects(
     business.returnRide(pool, user, id, { zone_id: 2, x: "wrong", y: 100 }),
   );
+  await assert.rejects(
+    business.returnRide(pool, user, id, { zone_id: 2, x: 1e200, y: 100 }),
+  );
+  await assert.rejects(
+    business.returnRide(pool, user, id, { zone_id: 2, x: -1, y: 100 }),
+    { code: "INVALID_LOCATION" },
+  );
+  const [[attempt]] = await pool.query(
+    "SELECT reason,x FROM return_attempts WHERE order_id=?",
+    [id],
+  );
+  assert.deepEqual(attempt, { reason: "INVALID_LOCATION", x: -1 });
+  const [[order]] = await pool.query(
+    "SELECT status FROM ride_orders WHERE id=?",
+    [id],
+  );
+  assert.equal(order.status, "RUNNING");
 });
 test("suspended actor cannot execute a write queued before suspension committed", async () => {
   let ready, release;

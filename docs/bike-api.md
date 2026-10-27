@@ -10,6 +10,7 @@
 - POST /rides/:id/pay {idempotency_key:string} -> {id,order_id,amount_cents,duplicate:boolean}
 - POST /maintenance {bike_id,fault_type:'BRAKE'|'TIRE'|'LOCK'|'CHAIN'|'OTHER',description} -> {id}
 - POST /maintenance/:id/assign {staff_id}; POST /maintenance/:id/complete {result}; 都返回 {ok:true}
+- POST /analytics/suggestions/:id/dismiss {note} -> {id,status,resolution_note}；管理员可记录原因并不执行待处理建议。
 - POST /dispatches {source_zone_id,target_zone_id,bike_ids:number[],staff_id?:number} -> {id}; POST /dispatches/:id/assign {staff_id}; POST /dispatches/:id/start {}; POST /dispatches/:id/complete {}; POST /dispatches/:id/cancel {} -> {ok:true}
 - POST /admin/zones {id?:number,name,location,x,y,radius,capacity,status:'ACTIVE'|'CLOSED'} -> {id}；POST /admin/bikes {id?:number,code,zone_id,deployed_at?:string,status?:'AVAILABLE'|'RETIRED'} -> {id}
 - POST /admin/staff {name,phone,job:'DISPATCH'|'MAINTENANCE'|'BOTH',status:'ACTIVE'|'OFF_DUTY',email,password?} -> {id}；POST /admin/users/:id/status {status} -> {ok:true}; GET /admin/users -> {users}
@@ -22,9 +23,7 @@
 ## analytics.mjs 给后端的导出接口
 
 export function findRoute(nodes,edges,fromId,toId,mode='shortest') -> {path,distance_m,duration_minutes,mode}，无路径抛 Error。
-export function dispatchSuggestions(zones, demand=[]) -> suggestions。demand 行 {zone_id,borrow_count,return_count}。occupied/reserved 已含预留；quantity 不能超可用车和目标剩余车位。
-export function bikeRisks(bikes,tickets,now=new Date()) -> risks。
-export function aggregateHotspots(zones,rides,snapshots,days=7,now=new Date()) -> {hotspots,hourly,weekday,snapshot_count}。快照行 {zone_id,available,occupied,capacity,captured_at}。采样区间仅计相邻快照且差距<=5分钟；北京时间小时/工作日。
-export function buildLeaderboard(users,rides,entries,period='week',metric='points',now=new Date()) -> {period,metric,rows}。周一/每月1日北京时间起算；只计 PAID 且 ended_at 在窗口的订单，榜单姓名脱敏。
+调度建议、风险评分与热点统计分别由 MySQL `sp_dispatch_suggestions`、`sp_risk_inputs` 和 `sp_hotspot_report` 计算。快照区间仅计相邻且间隔不超过五分钟的采样，并裁剪到所选北京时间日期和小时。
+排行榜由 MySQL `sp_leaderboard` 按北京时间自然周/月聚合和排名；有效订单按结束时间计数，积分流水按入账时间计入周期。
 
 演示账户 jia@qingxing.local（ADMIN）、ouyang@qingxing.local（STUDENT）、zheng@qingxing.local（OPERATOR BOTH）、wang@qingxing.local（STUDENT）；密码 Qingxing2026!。通过登录页选择演示身份；注册只能 STUDENT。

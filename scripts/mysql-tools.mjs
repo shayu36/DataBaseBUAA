@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
-import "../server/db.mjs";
+import "../backend/db.mjs";
 export const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 export async function runMysqlTool(tool, args, { input, output } = {}) {
   const runtime = join(projectRoot, ".runtime");
@@ -23,11 +23,10 @@ export async function runMysqlTool(tool, args, { input, output } = {}) {
     `[client]\nhost=${process.env.DB_HOST}\nport=${process.env.DB_PORT}\nuser=${process.env.DB_ADMIN_USER}\npassword="${escape(process.env.DB_ADMIN_PASSWORD)}"\n`,
     { mode: 0o600 },
   );
-  const binary = join(
-    process.env.MYSQL_BASE || "C:\\Program Files\\MySQL\\MySQL Server 8.0",
-    "bin",
-    `${tool}.exe`,
-  );
+  const executable = process.platform === "win32" ? `${tool}.exe` : tool;
+  const binary = process.env.MYSQL_BASE
+    ? join(process.env.MYSQL_BASE, "bin", executable)
+    : executable;
   try {
     await new Promise((resolve, reject) => {
       const child = spawn(

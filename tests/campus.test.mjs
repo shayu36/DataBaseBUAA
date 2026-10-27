@@ -1,10 +1,10 @@
 import { test, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import campus from "../database/campus-map.json" with { type: "json" };
-import { createPool, ledgerTransaction } from "../server/db.mjs";
+import { createPool, ledgerTransaction } from "../backend/db.mjs";
 import { applySchema } from "../scripts/sql.mjs";
-import { findRoute } from "../server/analytics.mjs";
-import { upgradeCampusMap } from "../server/campus.mjs";
+import { findRoute } from "../backend/analytics.mjs";
+import { upgradeCampusMap } from "../backend/campus.mjs";
 
 const pool = createPool({
   database: "campus_bike_test",
@@ -149,5 +149,22 @@ test("campus migration refuses a customized map rather than overwriting it", asy
   assert.equal(
     (await pool.query("SELECT x FROM parking_zones WHERE id=1"))[0][0].x,
     160,
+  );
+});
+
+test("campus migration rejects an unknown or malformed version marker", async () => {
+  await pool.query(
+    "INSERT INTO system_settings(name,value) VALUES('campus_map',JSON_OBJECT('version','unknown'))",
+  );
+  await assert.rejects(
+    ledgerTransaction(pool, upgradeCampusMap),
+    /Unknown campus map version/,
+  );
+  await pool.query(
+    "UPDATE system_settings SET value=JSON_OBJECT() WHERE name='campus_map'",
+  );
+  await assert.rejects(
+    ledgerTransaction(pool, upgradeCampusMap),
+    /Unknown campus map version/,
   );
 });

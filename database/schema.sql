@@ -1,4 +1,4 @@
--- MySQL 8.0.16+; times UTC, money integer cents, coordinates metres.
+-- MySQL 8.0.21+; times UTC, money integer cents, coordinates metres.
 CREATE TABLE IF NOT EXISTS users (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
  name VARCHAR(40) NOT NULL, email VARCHAR(160) NOT NULL UNIQUE, phone VARCHAR(20) NOT NULL UNIQUE,
@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS ride_orders (
  active_bike BIGINT UNSIGNED GENERATED ALWAYS AS (CASE WHEN status='RUNNING' THEN bike_id END) STORED UNIQUE,
  FOREIGN KEY(user_id) REFERENCES users(id), FOREIGN KEY(bike_id) REFERENCES bikes(id),
  FOREIGN KEY(start_zone_id) REFERENCES parking_zones(id), FOREIGN KEY(end_zone_id) REFERENCES parking_zones(id), FOREIGN KEY(reviewed_by) REFERENCES users(id),
- INDEX idx_ride_start(start_zone_id,started_at), INDEX idx_ride_end(end_zone_id,ended_at), INDEX idx_ride_user(user_id,started_at),
+ INDEX idx_ride_start(start_zone_id,started_at), INDEX idx_ride_end(end_zone_id,ended_at), INDEX idx_ride_user(user_id,started_at), INDEX idx_ride_user_status(user_id,status),
+ INDEX idx_ride_started_at(started_at), INDEX idx_ride_ended_at(ended_at),
  CHECK(amount_cents>=0), CHECK(distance_m>=0), CONSTRAINT chk_ride_return_pair CHECK((return_x IS NULL)=(return_y IS NULL)),
  CONSTRAINT chk_ride_qualification_review CHECK(
    (qualification_status='UNDER_REVIEW' AND reviewed_by IS NULL AND reviewed_at IS NULL) OR
@@ -59,9 +60,10 @@ CREATE TABLE IF NOT EXISTS dispatch_tasks (
  source_zone_id BIGINT UNSIGNED NOT NULL, target_zone_id BIGINT UNSIGNED NOT NULL,
  status ENUM('PENDING','IN_PROGRESS','COMPLETED','CANCELLED') NOT NULL DEFAULT 'PENDING',
  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), started_at DATETIME(3) NULL, completed_at DATETIME(3) NULL,
+ inventory_created JSON NULL, inventory_started JSON NULL, inventory_completed JSON NULL,
  FOREIGN KEY(staff_id) REFERENCES staff(id), FOREIGN KEY(source_zone_id) REFERENCES parking_zones(id), FOREIGN KEY(target_zone_id) REFERENCES parking_zones(id),
  CHECK(source_zone_id<>target_zone_id), CHECK(status<>'IN_PROGRESS' OR (staff_id IS NOT NULL AND started_at IS NOT NULL)),
- CHECK(status<>'COMPLETED' OR (staff_id IS NOT NULL AND completed_at IS NOT NULL)), INDEX idx_dispatch_status(status,created_at)
+ CHECK(status<>'COMPLETED' OR (staff_id IS NOT NULL AND completed_at IS NOT NULL)), INDEX idx_dispatch_status(status,created_at), INDEX idx_dispatch_target_status(target_zone_id,status)
 ) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS dispatch_bikes (
  task_id BIGINT UNSIGNED NOT NULL, bike_id BIGINT UNSIGNED NOT NULL, PRIMARY KEY(task_id,bike_id),
@@ -74,13 +76,13 @@ CREATE TABLE IF NOT EXISTS maintenance_tickets (
  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), completed_at DATETIME(3) NULL,
  active_bike BIGINT UNSIGNED GENERATED ALWAYS AS (CASE WHEN status<>'COMPLETED' THEN bike_id END) STORED UNIQUE,
  FOREIGN KEY(bike_id) REFERENCES bikes(id), FOREIGN KEY(reporter_id) REFERENCES users(id), FOREIGN KEY(staff_id) REFERENCES staff(id),
- INDEX idx_ticket_bike_time(bike_id,created_at),
+ INDEX idx_ticket_bike_time(bike_id,created_at), INDEX idx_ticket_created_bike(created_at,bike_id), INDEX idx_ticket_completed_bike(status,bike_id,completed_at),
  CHECK(status<>'COMPLETED' OR (result IS NOT NULL AND completed_at IS NOT NULL AND staff_id IS NOT NULL)), CHECK(status<>'ASSIGNED' OR staff_id IS NOT NULL)
 ) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS zone_snapshots (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, zone_id BIGINT UNSIGNED NOT NULL,
  available INT NOT NULL, occupied INT NOT NULL, capacity INT NOT NULL, captured_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
- source ENUM('LIVE','DEMO') NOT NULL DEFAULT 'LIVE', FOREIGN KEY(zone_id) REFERENCES parking_zones(id), INDEX idx_snapshot_zone_time(zone_id,captured_at),
+ source ENUM('LIVE','DEMO') NOT NULL DEFAULT 'LIVE', FOREIGN KEY(zone_id) REFERENCES parking_zones(id), INDEX idx_snapshot_zone_time(zone_id,captured_at), INDEX idx_snapshot_time(captured_at),
  CHECK(available>=0 AND occupied>=available AND capacity>0 AND occupied<=capacity)
 ) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS return_attempts (
@@ -136,7 +138,7 @@ CREATE TABLE IF NOT EXISTS carbon_transactions (
  idempotency_key VARCHAR(100) NOT NULL UNIQUE, distance_m INT NOT NULL DEFAULT 0,
  points_change INT NOT NULL, carbon_kg_change DECIMAL(12,4) NOT NULL, factor_kg_per_km DECIMAL(5,3) NOT NULL DEFAULT 0.210,
  rule_version VARCHAR(30) NOT NULL, reason VARCHAR(300) NOT NULL, actor_id BIGINT UNSIGNED NULL,
- created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), FOREIGN KEY(order_id) REFERENCES ride_orders(id), FOREIGN KEY(actor_id) REFERENCES users(id), CHECK(distance_m>=0)
+ created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), FOREIGN KEY(order_id) REFERENCES ride_orders(id), FOREIGN KEY(actor_id) REFERENCES users(id), INDEX idx_carbon_created_order(created_at,order_id), CHECK(distance_m>=0)
 ) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS audit_logs (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, actor_id BIGINT UNSIGNED NULL, action VARCHAR(60) NOT NULL,
@@ -173,13 +175,5 @@ BEGIN
  SELECT COUNT(*) INTO paid_count FROM payments WHERE order_id=NEW.order_id;
  IF paid_count<>1 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Carbon transaction requires successful payment'; END IF;
  IF NEW.entry_type='AWARD' AND (NEW.points_change<0 OR NEW.carbon_kg_change<0) THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Carbon award cannot be negative'; END IF;
-END$$
-DELIMITER ;
-DROP PROCEDURE IF EXISTS sp_capture_zone_snapshots;
-DELIMITER $$
-CREATE PROCEDURE sp_capture_zone_snapshots()
-SQL SECURITY INVOKER
-BEGIN
- INSERT INTO zone_snapshots(zone_id,available,occupied,capacity) SELECT id,available,occupied,capacity FROM v_zone_inventory;
 END$$
 DELIMITER ;

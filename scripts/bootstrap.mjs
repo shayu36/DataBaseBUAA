@@ -1,51 +1,69 @@
-import { randomBytes } from "node:crypto";
-import { existsSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
 import mysql from "mysql2/promise";
 import dotenv from "dotenv";
-const root = fileURLToPath(new URL("../", import.meta.url));
-const envPath = `${root}.env`;
+import { sql } from "../backend/sql-statements.mjs";
+import { assertMysqlVersion } from "./mysql-version.mjs";
+
+const envPath = new URL("../.env", import.meta.url);
 if (!existsSync(envPath)) {
-  writeFileSync(
-    envPath,
-    `HOST=127.0.0.1\nPORT=5188\nDB_HOST=127.0.0.1\nDB_PORT=3377\nDB_USER=qingxing_app\nDB_PASSWORD=${randomBytes(24).toString("hex")}\nDB_NAME=campus_bike\nDB_ADMIN_USER=root\nDB_ADMIN_PASSWORD=${randomBytes(24).toString("hex")}\nJWT_SECRET=${randomBytes(48).toString("hex")}\nCOOKIE_SECURE=false\n`,
+  throw new Error(
+    "缺少 .env：请复制 .env.example 并填写本机 MySQL 管理员和应用账号密码。",
   );
 }
 dotenv.config({ path: envPath, quiet: true });
-let connection;
-const base = {
+const required = [
+  "DB_HOST",
+  "DB_PORT",
+  "DB_USER",
+  "DB_PASSWORD",
+  "DB_NAME",
+  "DB_ADMIN_USER",
+  "DB_ADMIN_PASSWORD",
+  "JWT_SECRET",
+];
+if (
+  required.some(
+    (name) =>
+      !process.env[name] || process.env[name].startsWith("replace-with-"),
+  )
+) {
+  throw new Error("请在 .env 中填写完整的 MySQL 凭据和 JWT_SECRET。");
+}
+if (process.env.JWT_SECRET.length < 32)
+  throw new Error("JWT_SECRET 至少需要 32 个字符。");
+if (
+  !["127.0.0.1", "localhost"].includes(process.env.DB_HOST) ||
+  process.env.DB_NAME !== "campus_bike" ||
+  process.env.DB_USER !== "qingxing_app"
+) {
+  throw new Error(
+    "自动初始化仅支持本机 MySQL、campus_bike 数据库及 qingxing_app 账号。",
+  );
+}
+const connection = await mysql.createConnection({
   host: process.env.DB_HOST,
   port: Number(process.env.DB_PORT),
-  user: "root",
-};
+  user: process.env.DB_ADMIN_USER,
+  password: process.env.DB_ADMIN_PASSWORD,
+});
 try {
-  connection = await mysql.createConnection({
-    ...base,
-    password: process.env.DB_ADMIN_PASSWORD,
-  });
-} catch (error) {
-  if (error.code !== "ER_ACCESS_DENIED_ERROR") throw error;
-  connection = await mysql.createConnection({ ...base, password: "" });
-  await connection.query(`ALTER USER 'root'@'localhost' IDENTIFIED BY ?`, [
-    process.env.DB_ADMIN_PASSWORD,
-  ]);
-}
-try {
+  await assertMysqlVersion(connection);
   for (const name of ["campus_bike", "campus_bike_test"]) {
-    await connection.query(
-      `CREATE DATABASE IF NOT EXISTS \`${name}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci`,
-    );
+    await connection.query(sql("create_application_database"), [name]);
   }
-  await connection.query(
-    `CREATE USER IF NOT EXISTS 'qingxing_app'@'localhost' IDENTIFIED BY ?`,
-    [process.env.DB_PASSWORD],
-  );
-  await connection.query(
-    `GRANT SELECT, INSERT, UPDATE, DELETE, EXECUTE ON campus_bike.* TO 'qingxing_app'@'localhost'`,
-  );
-  console.log(
-    "Local credentials configured; application user is restricted to campus_bike.",
-  );
+  await connection.query(sql("create_application_user"), [
+    process.env.DB_PASSWORD,
+  ]);
+  await connection.query(sql("grant_application_user"));
 } finally {
   await connection.end();
 }
+const app = await mysql.createConnection({
+  host: process.env.DB_HOST,
+  port: Number(process.env.DB_PORT),
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+});
+await app.end();
+console.log("MySQL 数据库和应用账号已就绪。");

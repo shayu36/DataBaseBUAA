@@ -1,9 +1,28 @@
-node_modules/
-dist/
-.env
-.runtime/
-test-results/
-playwright-report/
-backups/
+# 依赖与构建结果
+/node_modules/
+/dist/
 *.tsbuildinfo
-deliverables/
+__pycache__/
+*.py[cod]
+
+# 本机配置、数据库、备份和交付包
+/.env
+/.env.*
+!/.env.example
+/.runtime/
+/backups/
+/deliverables/
+
+# 测试结果、日志与临时文件
+/test-results/
+/playwright-report/
+*.log
+.DS_Store
+Thumbs.db
+
+# 可重新生成的报告、截图、验证记录和数据库快照
+/docs/ER图.svg
+/docs/数据库课程设计报告.html
+/docs/screenshots/
+/docs/evidence/
+/database/demo-snapshot.sql

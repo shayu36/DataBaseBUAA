@@ -1,12 +1,10 @@
 import test from "node:test";
+import { buildLeaderboard } from "./leaderboard-reference.mjs";
+import { aggregateHotspots } from "./hotspot-reference.mjs";
+import { bikeRisks } from "./risk-reference.mjs";
+import { dispatchSuggestions } from "./dispatch-reference.mjs";
 import assert from "node:assert/strict";
-import {
-  findRoute,
-  dispatchSuggestions,
-  bikeRisks,
-  aggregateHotspots,
-  buildLeaderboard,
-} from "../server/analytics.mjs";
+import { findRoute, reportFilter } from "../backend/analytics.mjs";
 test("route modes use weighted undirected paths and actual distance", () => {
   const nodes = [1, 2, 3].map((id) => ({ id }));
   const edges = [
@@ -39,6 +37,61 @@ test("route modes use weighted undirected paths and actual distance", () => {
   assert.throws(() => findRoute(nodes, [], 1, 3));
   assert.throws(() =>
     findRoute(nodes, [{ ...edges[0], distance_m: NaN }], 1, 3),
+  );
+});
+test("route search handles long graphs and stable equal-cost alternatives", () => {
+  const count = 5000;
+  const nodes = Array.from({ length: count }, (_, id) => ({ id }));
+  const edges = Array.from({ length: count - 1 }, (_, id) => ({
+    from_node_id: id,
+    to_node_id: id + 1,
+    distance_m: 1,
+    safety_cost: 1,
+    comfort_cost: 1,
+  }));
+  const route = findRoute(nodes, edges, 0, count - 1);
+  assert.equal(route.distance_m, count - 1);
+  assert.equal(route.path.length, count);
+  assert.equal(route.segments[0].from_node_id, 0);
+  assert.equal(route.segments.at(-1).to_node_id, count - 1);
+  const diamond = [
+    {
+      from_node_id: 1,
+      to_node_id: 2,
+      distance_m: 1,
+      safety_cost: 1,
+      comfort_cost: 1,
+    },
+    {
+      from_node_id: 1,
+      to_node_id: 3,
+      distance_m: 1,
+      safety_cost: 1,
+      comfort_cost: 1,
+    },
+    {
+      from_node_id: 2,
+      to_node_id: 4,
+      distance_m: 1,
+      safety_cost: 1,
+      comfort_cost: 1,
+    },
+    {
+      from_node_id: 3,
+      to_node_id: 4,
+      distance_m: 1,
+      safety_cost: 1,
+      comfort_cost: 1,
+    },
+  ];
+  assert.deepEqual(
+    findRoute(
+      [1, 2, 3, 4].map((id) => ({ id })),
+      diamond,
+      1,
+      4,
+    ).path,
+    [1, 2, 4],
   );
 });
 test("dispatch shares supply and respects occupied and reserved capacity", () => {
@@ -333,4 +386,14 @@ test("route direction and road closures are enforced", () => {
   assert.equal(findRoute(nodes, edges, 1, 2).distance_m, 10);
   assert.throws(() => findRoute(nodes, edges, 2, 1), /No route/);
   assert.throws(() => findRoute(nodes, edges, 1, 3), /No route/);
+});
+
+test("reporting rejects impossible calendar dates and permits leap days", () => {
+  const now = new Date("2026-03-01T12:00:00Z");
+  assert.throws(
+    () => reportFilter({ start: "2026-02-30", end: "2026-03-01" }, now),
+    /Invalid reporting date/,
+  );
+  const leap = reportFilter({ start: "2024-02-29", end: "2024-02-29" }, now);
+  assert.equal(leap.end - leap.start, 86400000);
 });

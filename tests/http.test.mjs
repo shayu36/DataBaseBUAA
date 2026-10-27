@@ -1,9 +1,9 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import bcrypt from "bcryptjs";
-import { createPool } from "../server/db.mjs";
+import { createPool } from "../backend/db.mjs";
 import { applySchema } from "../scripts/sql.mjs";
-import { createApp } from "../server/app.mjs";
+import { createApp } from "../backend/app.mjs";
 const pool = createPool({
   database: "campus_bike_test",
   user: process.env.DB_ADMIN_USER,
@@ -145,6 +145,19 @@ test("students cannot list users or mutate administrator resources", async () =>
       .length,
     4,
   );
+});
+test("analytics rejects invalid and future date ranges as client errors", async () => {
+  for (const query of [
+    "start=2026-02-30&end=2026-03-01",
+    "start=2999-01-01&end=2999-01-02",
+  ]) {
+    const response = await request(
+      `/api/analytics?${query}`,
+      undefined,
+      adminCookie,
+    );
+    assert.equal(response.status, 400);
+  }
 });
 test("cross origin writes rejected before mutation", async () => {
   const r = await request("/api/rides/start", { bike_id: 1 }, studentCookie, {

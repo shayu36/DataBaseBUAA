@@ -7,9 +7,9 @@
     "node": ">=22.12"
   },
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "build": "tsc -b && vite build",
-    "start": "node server/index.mjs",
+    "dev": "vite --config frontend/vite.config.ts --host 127.0.0.1",
+    "build": "npm run report && tsc -b && vite build --config frontend/vite.config.ts",
+    "start": "node backend/index.mjs",
     "db:setup": "node scripts/setup.mjs",
     "db:migrate": "node scripts/migrate-features.mjs",
     "db:seed": "node scripts/run-seed-local.mjs",
@@ -20,12 +20,11 @@
     "check": "node scripts/check.mjs",
     "report": "node scripts/render-report.mjs",
     "screenshots": "node scripts/screenshots.mjs",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"server/**/*.mjs\" \"scripts/**/*.mjs\" \"tests/*.{mjs,ts}\""
+    "format:check": "prettier --check \"frontend/**/*.{ts,tsx,css}\" \"backend/**/*.mjs\" \"scripts/**/*.mjs\" \"tests/*.{mjs,ts}\""
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "cookie-parser": "^1.4.7",
-    "decimal.js": "^10.6.0",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "express-rate-limit": "^8.2.1",

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createPool } from "../server/db.mjs";
-import { applyFeatureMigrations } from "../server/feature-migrations.mjs";
+import { createPool } from "../backend/db.mjs";
+import { applyFeatureMigrations } from "../backend/feature-migrations.mjs";
 
 test("feature migration preserves legacy rows and carbon totals and is idempotent", async () => {
   const admin = createPool({
@@ -119,6 +119,36 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
       status: "OPEN",
       attribute_source: "SIMULATED_COURSE_DATA",
     });
+    // Version 1 installations need the constraints introduced in version 2.
+    await pool.query("ALTER TABLE road_edges DROP CHECK chk_road_attributes");
+    await pool.query(
+      "UPDATE system_settings SET value=JSON_OBJECT('version',1) WHERE name='pdf_expansion'",
+    );
+    assert.ok((await applyFeatureMigrations(pool)).applied.length > 0);
+    const [[{ checks }]] = await pool.query(
+      "SELECT COUNT(*) checks FROM information_schema.table_constraints WHERE constraint_schema=DATABASE() AND table_name='road_edges' AND constraint_name='chk_road_attributes'",
+    );
+    assert.equal(checks, 1);
+    assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
+    // Upgrade an existing version 3 database without losing its data.
+    await pool.query("ALTER TABLE ride_orders DROP INDEX idx_ride_user_status");
+    await pool.query(
+      "UPDATE system_settings SET value=JSON_OBJECT('version',3) WHERE name='pdf_expansion'",
+    );
+    assert.ok((await applyFeatureMigrations(pool)).applied.length > 0);
+    const [[{ indexes }]] = await pool.query(
+      "SELECT COUNT(*) indexes FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='ride_orders' AND index_name='idx_ride_user_status'",
+    );
+    assert.equal(indexes, 2);
+    const [[{ target_indexes }]] = await pool.query(
+      "SELECT COUNT(*) target_indexes FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='dispatch_tasks' AND index_name='idx_dispatch_target_status'",
+    );
+    assert.equal(target_indexes, 2);
+    const [[{ inventory_columns }]] = await pool.query(
+      "SELECT COUNT(*) inventory_columns FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='dispatch_tasks' AND column_name IN ('inventory_created','inventory_started','inventory_completed')",
+    );
+    assert.equal(inventory_columns, 3);
+    assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
   } finally {
     await pool.end();
     await admin.query(`DROP DATABASE IF EXISTS \`${dbName}\``);

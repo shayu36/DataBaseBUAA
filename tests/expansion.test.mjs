@@ -1,17 +1,23 @@
 import { test, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import bcrypt from "bcryptjs";
-import { createPool } from "../server/db.mjs";
+import { createPool } from "../backend/db.mjs";
 import { applySchema } from "../scripts/sql.mjs";
-import * as business from "../server/business.mjs";
+import * as business from "../backend/business.mjs";
 import {
   createDispatchSuggestions,
   confirmDispatchSuggestion,
-} from "../server/operations.mjs";
-import { refreshRiskAlerts, actOnRisk } from "../server/risks.mjs";
-import { reviewReturnAttempt } from "../server/returns.mjs";
-import { reviewOrderQualification, adjustCarbon } from "../server/carbon.mjs";
-import { updateLeaderboardProfile } from "../server/profile.mjs";
+  dismissDispatchSuggestion,
+} from "../backend/operations.mjs";
+import { refreshRiskAlerts, actOnRisk } from "../backend/risks.mjs";
+import { reviewReturnAttempt } from "../backend/returns.mjs";
+import { reviewOrderQualification, adjustCarbon } from "../backend/carbon.mjs";
+import { updateLeaderboardProfile } from "../backend/profile.mjs";
+import { leaderboard } from "../backend/read-model.mjs";
+import { buildLeaderboard } from "./leaderboard-reference.mjs";
+import { bikeRisks } from "./risk-reference.mjs";
+import { riskData } from "../backend/risk-data.mjs";
 
 const pool = createPool({
   database: "campus_bike_test",
@@ -85,12 +91,67 @@ test("saved dispatch suggestions keep their basis and create a revalidated task"
   assert.ok(saved.source_available > saved.desired_inventory);
 });
 
+test("stale dispatch suggestion is persisted without creating a task", async () => {
+  const generated = await createDispatchSuggestions(pool, admin, { days: 7 });
+  assert.ok(generated.suggestions.length > 0);
+  const suggestion = generated.suggestions[0];
+  await pool.query("UPDATE parking_zones SET status='CLOSED' WHERE id=?", [
+    suggestion.target_zone_id,
+  ]);
+  await assert.rejects(
+    confirmDispatchSuggestion(pool, admin, suggestion.id, 1),
+    { code: "SUGGESTION_STALE" },
+  );
+  const [[state]] = await pool.query(
+    "SELECT status,resolution_note,task_id FROM dispatch_suggestions WHERE id=?",
+    [suggestion.id],
+  );
+  assert.equal(state.status, "STALE");
+  assert.ok(state.resolution_note);
+  assert.equal(state.task_id, null);
+  const [[{ count }]] = await pool.query(
+    "SELECT COUNT(*) count FROM dispatch_tasks",
+  );
+  assert.equal(count, 0);
+});
+
+test("dispatch suggestions can be dismissed with a recorded reason", async () => {
+  const generated = await createDispatchSuggestions(pool, admin, { days: 7 });
+  const suggestion = generated.suggestions[0];
+  assert.ok(suggestion);
+  const result = await dismissDispatchSuggestion(pool, admin, suggestion.id, {
+    note: "现场车流已恢复",
+  });
+  assert.equal(result.status, "DISMISSED");
+  const [[saved]] = await pool.query(
+    "SELECT status,resolution_note,task_id FROM dispatch_suggestions WHERE id=?",
+    [suggestion.id],
+  );
+  assert.deepEqual(saved, {
+    status: "DISMISSED",
+    resolution_note: "现场车流已恢复",
+    task_id: null,
+  });
+  await assert.rejects(
+    confirmDispatchSuggestion(pool, admin, suggestion.id, 1),
+    { code: "SUGGESTION_NOT_OPEN" },
+  );
+  assert.throws(
+    () =>
+      dismissDispatchSuggestion(pool, student, suggestion.id, {
+        note: "不能操作",
+      }),
+    { code: "FORBIDDEN" },
+  );
+});
+
 test("risk rule produces a versioned alert and operator can link a ticket", async () => {
   await pool.query(
     "INSERT INTO maintenance_tickets(bike_id,reporter_id,fault_type,description) VALUES(1,2,'BRAKE','近期刹车异常')",
   );
   const refreshed = await refreshRiskAlerts(pool, admin);
   assert.ok(refreshed.created.length > 0);
+  assert.deepEqual((await refreshRiskAlerts(pool, admin)).created, []);
   const [[risk]] = await pool.query(
     "SELECT * FROM risk_alerts WHERE bike_id=1 ORDER BY id DESC LIMIT 1",
   );
@@ -100,6 +161,102 @@ test("risk rule produces a versioned alert and operator can link a ticket", asyn
   });
   assert.equal(handled.status, "ACKNOWLEDGED");
   assert.ok(handled.maintenance_ticket_id);
+});
+
+test("SQL risk aggregation matches rule results and ordered ticket references", async () => {
+  const now = new Date("2026-10-27T12:00:00Z");
+  await pool.query(
+    "UPDATE bikes SET last_service_at='2026-09-01 12:00:00' WHERE id=1",
+  );
+  await pool.query(`INSERT INTO maintenance_tickets(bike_id,reporter_id,staff_id,fault_type,description,status,result,created_at,completed_at) VALUES
+    (1,2,1,'BRAKE','完成工单一','COMPLETED','已修复','2026-10-01 12:00:00','2026-10-02 12:00:00'),
+    (1,2,1,'BRAKE','完成工单二','COMPLETED','已修复','2026-10-10 12:00:00','2026-10-11 12:00:00')`);
+  await pool.query(
+    "INSERT INTO maintenance_tickets(bike_id,reporter_id,fault_type,description,created_at) VALUES(1,2,'TIRE','近期工单','2026-10-20 12:00:00')",
+  );
+  const [bikes] = await pool.query(
+    "SELECT * FROM bikes WHERE status<>'RETIRED'",
+  );
+  const [tickets] = await pool.query(
+    "SELECT * FROM maintenance_tickets ORDER BY id",
+  );
+  const actual = await riskData(pool, now, true);
+  assert.deepEqual(actual.risks, bikeRisks(bikes, tickets, now));
+  assert.deepEqual(
+    actual.ticketIds.get(1),
+    tickets.map((ticket) => ticket.id),
+  );
+});
+
+test("short abnormal rides appear as risk clues without changing the score", async () => {
+  const now = new Date("2026-10-27T12:00:00Z");
+  await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,'2026-10-27 11:59:30','2026-10-27 12:00:00',700,100,'UNPAID')",
+  );
+  const { risks } = await riskData(pool, now);
+  const bike = risks.find((entry) => entry.bike_id === 1);
+  assert.equal(bike.score, 20);
+  assert.ok(
+    bike.reason_details.some(
+      (reason) =>
+        reason.rule === "SHORT_RIDE" && reason.message.includes("不计分"),
+    ),
+  );
+});
+
+test("risk ticket creation preserves active ride and dispatch states", async () => {
+  const ride = await business.startRide(pool, student, { bike_id: 1 });
+  const [risk] = await pool.query(
+    "INSERT INTO risk_alerts(bike_id,score,level,reasons,ticket_ids,fingerprint,rule_version,recommendation) VALUES(1,30,'MEDIUM',JSON_ARRAY(),JSON_ARRAY(),REPEAT('a',64),'risk-v1','请检查')",
+  );
+  const handled = await actOnRisk(
+    pool,
+    operator,
+    risk.insertId,
+    "CREATE_TICKET",
+    { note: "检".repeat(500) },
+  );
+  assert.ok(handled.maintenance_ticket_id);
+  assert.equal(
+    (await pool.query("SELECT status FROM bikes WHERE id=1"))[0][0].status,
+    "RIDING",
+  );
+  await business.returnRide(pool, student, ride.id, {
+    zone_id: 2,
+    x: 500,
+    y: 100,
+  });
+  assert.equal(
+    (await pool.query("SELECT status FROM bikes WHERE id=1"))[0][0].status,
+    "MAINTENANCE",
+  );
+  const task = await business.createDispatch(pool, admin, {
+    source_zone_id: 1,
+    target_zone_id: 2,
+    bike_ids: [2],
+    staff_id: 1,
+  });
+  const [dispatchRisk] = await pool.query(
+    "INSERT INTO risk_alerts(bike_id,score,level,reasons,ticket_ids,fingerprint,rule_version,recommendation) VALUES(2,30,'MEDIUM',JSON_ARRAY(),JSON_ARRAY(),REPEAT('b',64),'risk-v1','请检查')",
+  );
+  await assert.rejects(
+    actOnRisk(pool, operator, dispatchRisk.insertId, "CREATE_TICKET", {
+      note: "检查车锁",
+    }),
+    { code: "INVALID_STATE" },
+  );
+  assert.equal(
+    (await pool.query("SELECT status FROM bikes WHERE id=2"))[0][0].status,
+    "DISPATCHING",
+  );
+  assert.equal(
+    (
+      await pool.query("SELECT status FROM dispatch_tasks WHERE id=?", [
+        task.id,
+      ])
+    )[0][0].status,
+    "PENDING",
+  );
 });
 
 test("stale location is rejected, retained and then reviewed", async () => {
@@ -157,6 +314,132 @@ test("reviewed rides award versioned carbon and adjustments append signed rows",
   assert.equal(totals.entries, 2);
   assert.equal(Number(totals.points), 8);
   assert.equal(Number(totals.carbon), 0.2);
+});
+
+test("excluded historical award is reversed without failing invariant checks", async () => {
+  const [order] = await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
+  );
+  await business.payRide(pool, student, order.insertId, {
+    idempotency_key: "exclude-payment",
+  });
+  await pool.query(
+    "UPDATE ride_orders SET qualification_status='UNDER_REVIEW',qualification_reason='重新复核' WHERE id=?",
+    [order.insertId],
+  );
+  await reviewOrderQualification(pool, admin, order.insertId, {
+    decision: "EXCLUDED",
+    reason: "人工复核排除",
+  });
+  const [rows] = await pool.query(
+    await readFile(
+      new URL("../database/invariant-checks.sql", import.meta.url),
+      "utf8",
+    ),
+  );
+  const awardCheck = rows.find(
+    (row) => row.name === "有效已支付订单恰有一条版本化积分发放",
+  );
+  assert.equal(Number(awardCheck.errors), 0);
+  const [[net]] = await pool.query(
+    "SELECT SUM(points_change) points,SUM(carbon_kg_change) carbon FROM carbon_transactions WHERE order_id=?",
+    [order.insertId],
+  );
+  assert.equal(Number(net.points), 0);
+  assert.equal(Number(net.carbon), 0);
+});
+
+test("SQL payment keeps qualification, idempotency and rollback consistent", async () => {
+  const [first] = await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status,qualification_status,qualification_reason) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID','UNDER_REVIEW','待复核')",
+  );
+  const paid = await business.payRide(pool, student, first.insertId, {
+    idempotency_key: "review-payment-1",
+  });
+  assert.deepEqual(paid.credit, { awarded: false, reason: "UNDER_REVIEW" });
+  await reviewOrderQualification(pool, admin, first.insertId, {
+    decision: "VALID",
+    reason: "已核对行程",
+  });
+  const [second] = await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
+  );
+  await assert.rejects(
+    business.payRide(pool, student, second.insertId, {
+      idempotency_key: "review-payment-1",
+    }),
+    { code: "IDEMPOTENCY_CONFLICT" },
+  );
+  await adjustCarbon(pool, admin, {
+    order_id: first.insertId,
+    points_change: 1,
+    carbon_kg_change: -0.00005,
+    reason: "测试重复键",
+    idempotency_key: `award-${second.insertId}`.padEnd(8, "0"),
+  });
+  // Use an order id whose reserved award key meets the adjustment key's minimum length.
+  const reservedKey = `award-${second.insertId}`;
+  if (reservedKey.length < 8) {
+    await pool.query(
+      "UPDATE carbon_transactions SET idempotency_key=? WHERE entry_type='ADJUSTMENT'",
+      [reservedKey],
+    );
+  }
+  await assert.rejects(
+    business.payRide(pool, student, second.insertId, {
+      idempotency_key: "review-payment-2",
+    }),
+    { code: "ER_DUP_ENTRY" },
+  );
+  const [[state]] = await pool.query(
+    "SELECT status,(SELECT COUNT(*) FROM payments WHERE order_id=?) payments FROM ride_orders WHERE id=?",
+    [second.insertId, second.insertId],
+  );
+  assert.equal(state.status, "UNPAID");
+  assert.equal(state.payments, 0);
+  const [[adjustment]] = await pool.query(
+    "SELECT carbon_kg_change FROM carbon_transactions WHERE order_id=? AND entry_type='ADJUSTMENT'",
+    [first.insertId],
+  );
+  assert.equal(adjustment.carbon_kg_change, -0.0001);
+});
+
+test("leaderboard counts current adjustments for qualifying old rides", async () => {
+  const [order] = await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 65 DAY),DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 64 DAY),1000,100,'UNPAID')",
+  );
+  await pool.query(
+    "INSERT INTO payments(order_id,amount_cents,idempotency_key) VALUES(?,100,'old-ride-payment')",
+    [order.insertId],
+  );
+  await pool.query("UPDATE ride_orders SET status='PAID' WHERE id=?", [
+    order.insertId,
+  ]);
+  await adjustCarbon(pool, admin, {
+    order_id: order.insertId,
+    points_change: 3,
+    carbon_kg_change: 0.01,
+    reason: "旧订单更正",
+    idempotency_key: "old-ride-adjust",
+  });
+  const result = await leaderboard(pool, "month", "points", student.id);
+  assert.equal(result.me.points, 3);
+  assert.equal(result.me.rides, 0);
+  assert.equal(result.me.private, true);
+  assert.deepEqual(result.rows, []);
+  const [users] = await pool.query("SELECT * FROM users");
+  const [rides] = await pool.query("SELECT * FROM ride_orders");
+  const [entries] = await pool.query("SELECT * FROM carbon_transactions");
+  const reference = buildLeaderboard(
+    users,
+    rides,
+    entries,
+    "month",
+    "points",
+    new Date(result.window.end),
+    student.id,
+  );
+  assert.deepEqual(result, reference);
 });
 
 test("leaderboard participation is explicit and audited", async () => {

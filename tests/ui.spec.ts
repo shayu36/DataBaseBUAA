@@ -158,6 +158,7 @@ test("admin can create and finish maintenance and dispatch tasks", async ({
       has: page.getByRole("button", { name: "开始执行", exact: true }),
     })
     .last();
+  const taskNumber = await task.getByRole("cell").first().innerText();
   await task.getByRole("button", { name: "开始执行", exact: true }).click();
   const running = page
     .getByRole("row")
@@ -168,6 +169,13 @@ test("admin can create and finish maintenance and dispatch tasks", async ({
   await running.getByRole("button", { name: "确认完成", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("操作已保存");
   await expect(page.getByText("已完成", { exact: true }).last()).toBeVisible();
+  const completedTask = page
+    .getByRole("row")
+    .filter({ has: page.getByRole("cell", { name: taskNumber, exact: true }) });
+  await completedTask.getByText("查看库存变化").click();
+  await expect(completedTask.getByText("创建后")).toBeVisible();
+  await expect(completedTask.getByText("出发后")).toBeVisible();
+  await expect(completedTask.getByText("完成后")).toBeVisible();
 });
 
 const regressionDashboard = {
@@ -621,4 +629,55 @@ test("PDF expansion controls expose traceable workflows", async ({ page }) => {
     page.getByText("LOCATION_STALE", { exact: false }),
   ).toBeVisible();
   await expect(page.getByText("距离与时长组合异常")).toBeVisible();
+});
+
+test("maintenance operator can view and acknowledge risk alerts", async ({
+  page,
+}) => {
+  const login = await page.request.post("/api/auth/login", {
+    data: { email: "jia@qingxing.local", password: "Qingxing2026!" },
+  });
+  expect(login.ok()).toBeTruthy();
+  const refreshed = await page.request.post("/api/risks/refresh", { data: {} });
+  expect(refreshed.ok()).toBeTruthy();
+  await page.request.post("/api/auth/logout", { data: {} });
+  await page.goto("/");
+  await page.getByRole("button", { name: "运营员 · 郑一凡" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  await page.getByRole("button", { name: "风险处置", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "车辆风险预警与处置" }),
+  ).toBeVisible();
+  const acknowledge = page
+    .getByRole("button", { name: "确认", exact: true })
+    .first();
+  await expect(acknowledge).toBeVisible();
+  await acknowledge.click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "操作已保存" }),
+  ).toBeVisible();
+});
+
+test("administrator records why a dispatch suggestion is dismissed", async ({
+  page,
+}) => {
+  const login = await page.request.post("/api/auth/login", {
+    data: { email: "jia@qingxing.local", password: "Qingxing2026!" },
+  });
+  expect(login.ok()).toBeTruthy();
+  const response = await page.request.post("/api/analytics/suggestions", {
+    data: { days: 7 },
+  });
+  expect(response.ok()).toBeTruthy();
+  const { suggestions } = await response.json();
+  expect(suggestions.length).toBeGreaterThan(0);
+  const id = suggestions[0].id;
+  await page.goto("/");
+  await page.getByRole("button", { name: "运营分析", exact: true }).click();
+  const note = page.getByLabel(`建议 ${id} 不执行原因`);
+  await note.fill("现场库存已恢复，无需调度");
+  const row = page.getByRole("row").filter({ has: note });
+  await row.getByRole("button", { name: "不执行", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("操作已保存");
+  await expect(page.getByText("现场库存已恢复，无需调度")).toBeVisible();
 });

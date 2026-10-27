@@ -1,6 +1,8 @@
-import { writeFile } from "node:fs/promises";
-import { createPool } from "../server/db.mjs";
+import { mkdir, writeFile } from "node:fs/promises";
+import { createPool } from "../backend/db.mjs";
 import { applySchema } from "./sql.mjs";
+import { sql } from "../backend/sql-statements.mjs";
+import { assertMysqlVersion } from "./mysql-version.mjs";
 const pool = createPool({
   user: process.env.DB_ADMIN_USER,
   password: process.env.DB_ADMIN_PASSWORD,
@@ -10,22 +12,16 @@ try {
     throw new Error(
       "Setup is restricted to campus_bike; old database is preserved.",
     );
+  await assertMysqlVersion(pool);
   await applySchema(pool);
-  const [[{ name }]] = await pool.query("SELECT DATABASE() name");
-  const [v] = await pool.query(
-    "SELECT TABLE_NAME name FROM information_schema.VIEWS WHERE TABLE_SCHEMA=DATABASE()",
-  );
-  const [t] = await pool.query(
-    "SELECT TRIGGER_NAME name FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE()",
-  );
-  const [p] = await pool.query(
-    "SELECT ROUTINE_NAME name FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=DATABASE()",
-  );
-  const [[{ tables }]] = await pool.query(
-    "SELECT COUNT(*) tables FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME<>'carbon_ledger_legacy'",
-  );
+  const [[{ name }]] = await pool.query(sql("current_database"));
+  const [v] = await pool.query(sql("metadata_views"));
+  const [t] = await pool.query(sql("metadata_triggers"));
+  const [p] = await pool.query(sql("metadata_routines"));
+  const [[{ tables }]] = await pool.query(sql("metadata_tables_count"));
+  await mkdir(new URL("../.runtime/", import.meta.url), { recursive: true });
   await writeFile(
-    new URL("../server/schema-objects.json", import.meta.url),
+    new URL("../.runtime/schema-objects.json", import.meta.url),
     JSON.stringify(
       {
         database: name,
