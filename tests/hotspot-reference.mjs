@@ -83,7 +83,12 @@ export function aggregateHotspots(
   const grouped = new Map();
   for (const s of snapshots) {
     const t = timestamp(s.captured_at);
-    if (!byZone.has(s.zone_id) || !Number.isFinite(t) || t > end) continue;
+    if (
+      !byZone.has(s.zone_id) ||
+      !Number.isFinite(t) ||
+      t > Math.min(end + 300000, timestamp(now))
+    )
+      continue;
     if (included(s.captured_at)) snapshot_count++;
     const list = grouped.get(s.zone_id) || [];
     list.push({ ...s, t });

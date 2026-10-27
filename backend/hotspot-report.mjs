@@ -4,7 +4,7 @@ const round = (value) => Math.round(value * 100) / 100;
 
 async function hotspotInputs(db, filter, now, details) {
   const normalized = reportFilter(filter, now);
-  const [result] = await db.query("CALL sp_hotspot_report(?,?,?,?,?,?,?)", [
+  const [result] = await db.query("CALL sp_hotspot_report(?,?,?,?,?,?,?,?)", [
     new Date(normalized.start),
     new Date(normalized.end),
     normalized.dayType,
@@ -12,6 +12,7 @@ async function hotspotInputs(db, filter, now, details) {
     normalized.endHour,
     normalized.zoneId,
     details,
+    new Date(now),
   ]);
   const window = {
     ...normalized,

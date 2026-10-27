@@ -44,7 +44,7 @@ DELIMITER ;
 DROP PROCEDURE IF EXISTS sp_hotspot_report;
 DELIMITER $$
 CREATE PROCEDURE sp_hotspot_report(IN p_start DATETIME(3), IN p_end DATETIME(3), IN p_day_type VARCHAR(10),
- IN p_hour_start INT, IN p_hour_end INT, IN p_zone BIGINT UNSIGNED, IN p_details BOOLEAN)
+ IN p_hour_start INT, IN p_hour_end INT, IN p_zone BIGINT UNSIGNED, IN p_details BOOLEAN, IN p_as_of DATETIME(3))
 SQL SECURITY INVOKER
 report: BEGIN
  SELECT * FROM v_zone_inventory WHERE p_zone IS NULL OR id=p_zone ORDER BY id;
@@ -63,7 +63,8 @@ report: BEGIN
  IF NOT p_details THEN LEAVE report; END IF;
  WITH intervals AS (
   SELECT s.*,LEAD(captured_at) OVER (PARTITION BY zone_id ORDER BY captured_at,id) AS next_at
-  FROM zone_snapshots s WHERE s.captured_at BETWEEN p_start-INTERVAL 5 MINUTE AND p_end AND (p_zone IS NULL OR zone_id=p_zone)
+  FROM zone_snapshots s WHERE s.captured_at BETWEEN p_start-INTERVAL 5 MINUTE AND LEAST(p_end+INTERVAL 5 MINUTE,p_as_of)
+   AND (p_zone IS NULL OR zone_id=p_zone)
  ), interval_days AS (
   SELECT zone_id,available,occupied,capacity,captured_at,next_at,DATE(captured_at+INTERVAL 8 HOUR) AS local_day
   FROM intervals WHERE next_at>captured_at AND next_at<=captured_at+INTERVAL 5 MINUTE

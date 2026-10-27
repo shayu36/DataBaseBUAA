@@ -264,6 +264,45 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
     assert.equal(day.inventory_series.length, 2);
     assert.equal(day.hotspots[0].coverage_minutes, 2);
     assert.equal(day.hotspots[0].shortage_minutes, 2);
+    await pool.query(`INSERT INTO zone_snapshots(zone_id,available,occupied,capacity,captured_at,source)
+      VALUES(1,0,24,24,'2026-07-05 15:58:00','DEMO'),
+        (1,0,24,24,'2026-07-05 16:02:00','DEMO'),
+        (2,0,24,24,'2026-07-05 15:57:00','DEMO'),
+        (2,0,24,24,'2026-07-05 16:03:00','DEMO')`);
+    const boundaryFilter = {
+      start: "2026-07-05",
+      end: "2026-07-05",
+      dayType: "WEEKEND",
+      zoneId: 1,
+    };
+    const observed = (
+      await hotspotReport(
+        pool,
+        boundaryFilter,
+        new Date("2026-07-05T16:03:00Z"),
+      )
+    ).report;
+    assert.equal(observed.hotspots[0].coverage_minutes, 2);
+    assert.equal(observed.hotspots[0].shortage_minutes, 2);
+    assert.equal(observed.hotspots[0].full_minutes, 2);
+    assert.equal(observed.snapshot_count, 1);
+    assert.equal(observed.inventory_series.length, 1);
+    const notYetObserved = (
+      await hotspotReport(
+        pool,
+        boundaryFilter,
+        new Date("2026-07-05T16:01:00Z"),
+      )
+    ).report;
+    assert.equal(notYetObserved.hotspots[0].coverage_minutes, 0);
+    const gap = (
+      await hotspotReport(
+        pool,
+        { ...boundaryFilter, zoneId: 2 },
+        new Date("2026-07-05T16:04:00Z"),
+      )
+    ).report;
+    assert.equal(gap.hotspots[0].coverage_minutes, 0);
     await pool.query("DELETE FROM system_settings WHERE name='seed_version'");
     await assert.rejects(seedDemo(appPool, pool), /Nonempty unmarked database/);
     const [[afterFailure]] = await pool.query(
