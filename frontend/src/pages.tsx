@@ -769,6 +769,7 @@ function InventoryChart({ series, zones }: { series: Row[]; zones: Row[] }) {
         })}
         <text x="55" y="212">
           {new Date(start).toLocaleString("zh-CN", {
+            timeZone: "Asia/Shanghai",
             month: "numeric",
             day: "numeric",
             hour: "2-digit",
@@ -776,6 +777,7 @@ function InventoryChart({ series, zones }: { series: Row[]; zones: Row[] }) {
         </text>
         <text x="845" y="212" textAnchor="end">
           {new Date(end).toLocaleString("zh-CN", {
+            timeZone: "Asia/Shanghai",
             month: "numeric",
             day: "numeric",
             hour: "2-digit",
@@ -923,8 +925,9 @@ export function RiskAlerts({ d, run }: Props) {
   );
 }
 export function Analytics({ d, run }: Props) {
-  const today = new Date().toISOString().slice(0, 10),
-    weekAgo = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10),
+  const beijingNow = Date.now() + 8 * 3600000,
+    today = new Date(beijingNow).toISOString().slice(0, 10),
+    weekAgo = new Date(beijingNow - 6 * 86400000).toISOString().slice(0, 10),
     [scope, setScope] = useState("preset"),
     [days, setDays] = useState(7),
     [start, setStart] = useState(weekAgo),

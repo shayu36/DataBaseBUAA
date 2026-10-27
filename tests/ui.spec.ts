@@ -1,5 +1,43 @@
 import { test, expect } from "@playwright/test";
 
+test.describe("北京时间的运营分析", () => {
+  test.use({ timezoneId: "America/Los_Angeles" });
+
+  test("日期默认值和库存曲线标签不受浏览器时区影响", async ({ page }) => {
+    await page.clock.setFixedTime(new Date("2026-10-04T18:30:00Z"));
+    await page.route("**/api/analytics?**", async (route) => {
+      const response = await route.fetch();
+      const data = await response.json();
+      data.inventory_series = [
+        {
+          zone_id: 1,
+          captured_at: "2026-10-04T18:00:00Z",
+          available: 2,
+          capacity: 10,
+        },
+        {
+          zone_id: 1,
+          captured_at: "2026-10-04T18:04:00Z",
+          available: 3,
+          capacity: 10,
+        },
+      ];
+      await route.fulfill({ response, json: data });
+    });
+    await page.goto("/");
+    await page.getByRole("button", { name: "管理员 · 贾鑫洋" }).click();
+    await page.getByRole("button", { name: "登录青行", exact: true }).click();
+    await page.getByRole("button", { name: "运营分析", exact: true }).click();
+    const chart = page.getByRole("img", {
+      name: "停车区可用车辆库存时间序列",
+    });
+    await expect(chart).toContainText("10/5 02时");
+    await page.getByRole("button", { name: "自定义筛选" }).click();
+    await expect(page.getByLabel("开始日期")).toHaveValue("2026-09-29");
+    await expect(page.getByLabel("结束日期")).toHaveValue("2026-10-05");
+  });
+});
+
 test("Beihang map names landmarks and keeps coordinate picking correct after zoom", async ({
   page,
 }) => {
