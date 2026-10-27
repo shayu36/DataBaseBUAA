@@ -404,6 +404,79 @@ test("SQL payment keeps qualification, idempotency and rollback consistent", asy
   assert.equal(adjustment.carbon_kg_change, -0.0001);
 });
 
+test("carbon adjustments enforce account balances and exact idempotency", async () => {
+  const orders = [];
+  for (const distance of [1000, 400]) {
+    const [row] = await pool.query(
+      "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),?,100,'UNPAID')",
+      [distance],
+    );
+    orders.push(row.insertId);
+    await business.payRide(pool, student, row.insertId, {
+      idempotency_key: `balance-pay-${row.insertId}`,
+    });
+  }
+  const input = {
+    order_id: orders[1],
+    points_change: -12,
+    carbon_kg_change: -0.25,
+    reason: "余额校正",
+    idempotency_key: "balance-adjust-1",
+  };
+  const [first, repeated] = await Promise.all([
+    adjustCarbon(pool, admin, input),
+    adjustCarbon(pool, admin, input),
+  ]);
+  assert.deepEqual([first.duplicate, repeated.duplicate].sort(), [false, true]);
+  assert.equal(first.id, repeated.id);
+  for (const changed of [
+    { order_id: orders[0] },
+    { points_change: -11 },
+    { reason: "不同原因" },
+  ]) {
+    await assert.rejects(adjustCarbon(pool, admin, { ...input, ...changed }), {
+      code: "IDEMPOTENCY_CONFLICT",
+    });
+  }
+  await assert.rejects(
+    adjustCarbon(pool, admin, {
+      ...input,
+      idempotency_key: "balance-over-points",
+      points_change: -3,
+      carbon_kg_change: 0,
+    }),
+    { code: "INSUFFICIENT_BALANCE" },
+  );
+  await assert.rejects(
+    adjustCarbon(pool, admin, {
+      ...input,
+      idempotency_key: "balance-over-carbon",
+      points_change: 0,
+      carbon_kg_change: -0.0441,
+    }),
+    { code: "INSUFFICIENT_BALANCE" },
+  );
+  await assert.rejects(
+    adjustCarbon(pool, admin, {
+      ...input,
+      idempotency_key: "balance-rounds-zero",
+      points_change: 0,
+      carbon_kg_change: 0.00001,
+    }),
+    { code: "INVALID_ADJUSTMENT" },
+  );
+  const [[balance]] = await pool.query(
+    "SELECT points,carbon_kg FROM v_user_carbon WHERE user_id=2",
+  );
+  assert.equal(Number(balance.points), 2);
+  assert.equal(Number(balance.carbon_kg), 0.044);
+  const [[counts]] = await pool.query(
+    "SELECT (SELECT COUNT(*) FROM carbon_transactions WHERE entry_type='ADJUSTMENT') entries,(SELECT COUNT(*) FROM audit_logs WHERE action='CARBON_ADJUST') audits",
+  );
+  assert.equal(counts.entries, 1);
+  assert.equal(counts.audits, 1);
+});
+
 test("leaderboard counts current adjustments for qualifying old rides", async () => {
   const [order] = await pool.query(
     "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 65 DAY),DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 64 DAY),1000,100,'UNPAID')",
@@ -440,6 +513,23 @@ test("leaderboard counts current adjustments for qualifying old rides", async ()
     student.id,
   );
   assert.deepEqual(result, reference);
+});
+
+test("a rider without eligible activity sees a private unranked summary", async () => {
+  let board = await leaderboard(pool, "week", "points", student.id);
+  assert.deepEqual(board.rows, []);
+  assert.equal(board.me.rank, null);
+  assert.equal(board.me.points, 0);
+  assert.equal(board.me.rides, 0);
+  assert.equal(board.me.private, true);
+  await updateLeaderboardProfile(pool, student, {
+    alias: "航空蓝骑手",
+    visible: true,
+  });
+  board = await leaderboard(pool, "week", "points", student.id);
+  assert.equal(board.me.rank, null);
+  assert.equal(board.me.private, false);
+  assert.deepEqual(board.rows, []);
 });
 
 test("leaderboard participation is explicit and audited", async () => {

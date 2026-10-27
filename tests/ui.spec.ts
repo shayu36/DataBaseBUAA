@@ -675,9 +675,47 @@ test("administrator records why a dispatch suggestion is dismissed", async ({
   await page.goto("/");
   await page.getByRole("button", { name: "运营分析", exact: true }).click();
   const note = page.getByLabel(`建议 ${id} 不执行原因`);
-  await note.fill("现场库存已恢复，无需调度");
+  const reason = `现场库存已恢复，无需调度（建议 ${id}）`;
+  await note.fill(reason);
   const row = page.getByRole("row").filter({ has: note });
   await row.getByRole("button", { name: "不执行", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("操作已保存");
-  await expect(page.getByText("现场库存已恢复，无需调度")).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: reason, exact: true }),
+  ).toBeVisible();
+});
+
+test("a new rider sees an unranked private summary", async ({ page }) => {
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: 2,
+            name: "新骑行者",
+            email: "new@example.test",
+            role: "STUDENT",
+            status: "ACTIVE",
+            leaderboard_alias: "新骑行者",
+            leaderboard_visible: false,
+          },
+        },
+      });
+    if (path === "/api/dashboard")
+      return route.fulfill({ json: regressionDashboard });
+    if (path === "/api/leaderboard")
+      return route.fulfill({
+        json: {
+          rows: [],
+          me: { rank: null, points: 0, distance_m: 0, rides: 0, private: true },
+        },
+      });
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "碳积分", exact: true }).click();
+  await expect(page.getByText("暂无排名", { exact: true })).toBeVisible();
+  await expect(page.getByText("仅自己可见", { exact: true })).toBeVisible();
+  await expect(page.getByText("我的排名 #null")).toHaveCount(0);
 });

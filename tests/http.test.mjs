@@ -123,6 +123,18 @@ test("registration cannot choose admin role; duplicate phone rejected", async ()
     409,
   );
 });
+test("new students receive an unranked private leaderboard summary", async () => {
+  const result = await request(
+    "/api/leaderboard?period=week&metric=points",
+    undefined,
+    studentCookie,
+  );
+  assert.equal(result.status, 200);
+  assert.equal(result.data.me.rank, null);
+  assert.equal(result.data.me.private, true);
+  assert.equal(result.data.me.rides, 0);
+  assert.deepEqual(result.data.rows, []);
+});
 test("students cannot list users or mutate administrator resources", async () => {
   assert.equal(
     (await request("/api/admin/users", undefined, studentCookie)).status,

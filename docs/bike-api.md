@@ -8,6 +8,7 @@
 - POST /rides/start {bike_id} -> {id}
 - POST /rides/:id/return {zone_id,x,y,route_mode:'shortest'|'safe'|'comfortable'} -> {id,amount_cents,distance_m}; 错误 OUTSIDE_FENCE/ZONE_FULL 保留尝试且订单不结束。
 - POST /rides/:id/pay {idempotency_key:string} -> {id,order_id,amount_cents,duplicate:boolean}
+- POST /carbon/adjustments {order_id,points_change,carbon_kg_change,reason,idempotency_key}；人工扣减不得超过账户余额，相同请求编号内容不一致返回 `IDEMPOTENCY_CONFLICT`。
 - POST /maintenance {bike_id,fault_type:'BRAKE'|'TIRE'|'LOCK'|'CHAIN'|'OTHER',description} -> {id}
 - POST /maintenance/:id/assign {staff_id}; POST /maintenance/:id/complete {result}; 都返回 {ok:true}
 - POST /analytics/suggestions/:id/dismiss {note} -> {id,status,resolution_note}；管理员可记录原因并不执行待处理建议。

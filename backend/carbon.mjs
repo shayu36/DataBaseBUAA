@@ -56,7 +56,24 @@ export function adjustCarbon(pool, actor, input) {
         data.idempotency_key,
         JSON.stringify(data),
       ],
-      { INVALID_ADJUSTMENT: ["只能调整已支付订单", "INVALID_ADJUSTMENT", 409] },
+      {
+        INVALID_ADJUSTMENT: ["只能调整已支付订单", "INVALID_ADJUSTMENT", 409],
+        ADJUSTMENT_ZERO: [
+          "调整后的积分和减排量不能同时为零",
+          "INVALID_ADJUSTMENT",
+          400,
+        ],
+        ADJUSTMENT_IDEMPOTENCY_CONFLICT: [
+          "此调整请求编号已用于不同内容",
+          "IDEMPOTENCY_CONFLICT",
+          409,
+        ],
+        INSUFFICIENT_CARBON_BALANCE: [
+          "账户积分或减排余额不足，无法扣减",
+          "INSUFFICIENT_BALANCE",
+          409,
+        ],
+      },
     );
     return { ...row, duplicate: Boolean(row.duplicate) };
   });

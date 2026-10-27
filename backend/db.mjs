@@ -45,8 +45,19 @@ export async function ledgerTransaction(pool, work) {
     await connection.rollback();
     throw error;
   } finally {
-    if (locked) await connection.query(sql("release_lock"));
+    if (locked) await releaseNamedLock(connection);
     connection.release();
+  }
+}
+
+// A connection must not be reused if releasing its named lock cannot be confirmed.
+export async function releaseNamedLock(connection) {
+  try {
+    const [[{ released }]] = await connection.query(sql("release_lock"));
+    if (released !== 1) throw new Error("数据库事务锁未正确释放");
+  } catch (error) {
+    connection.destroy();
+    throw error;
   }
 }
 

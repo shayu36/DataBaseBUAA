@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { sql } from "./sql-statements.mjs";
+import { releaseNamedLock } from "./db.mjs";
 
 // DDL and migration decisions live in MySQL. Use a unique temporary routine so
 // concurrent invocations do not overwrite another session's migration routine.
@@ -31,10 +32,14 @@ export async function applyFeatureMigrations(db) {
       if (created)
         await connection.query(sql("drop_temporary_procedure"), [name]);
     } finally {
+      let destroyed = false;
       try {
-        if (locked) await connection.query(sql("release_lock"));
+        if (locked) await releaseNamedLock(connection);
+      } catch (error) {
+        destroyed = true;
+        throw error;
       } finally {
-        if (connection !== db) connection.release();
+        if (connection !== db && !destroyed) connection.release();
       }
     }
   }

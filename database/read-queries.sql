@@ -1,7 +1,7 @@
 -- name: acquire_lock
 SELECT GET_LOCK(CONCAT('campus-bike:', DATABASE()),10) AS acquired;
 -- name: release_lock
-SELECT RELEASE_LOCK(CONCAT('campus-bike:', DATABASE()));
+SELECT RELEASE_LOCK(CONCAT('campus-bike:', DATABASE())) AS released;
 -- name: current_database
 SELECT DATABASE() AS name;
 -- name: actor_for_update

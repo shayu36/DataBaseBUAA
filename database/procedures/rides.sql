@@ -143,16 +143,36 @@ CREATE PROCEDURE sp_adjust_carbon(IN p_actor_id BIGINT UNSIGNED, IN p_order_id B
 SQL SECURITY INVOKER
 adjustment: BEGIN
  DECLARE v_status VARCHAR(20) DEFAULT NULL;
- DECLARE v_existing_id BIGINT UNSIGNED DEFAULT NULL;
+ DECLARE v_existing_id,v_user_id,v_existing_order BIGINT UNSIGNED DEFAULT NULL;
+ DECLARE v_existing_type VARCHAR(20);
+ DECLARE v_existing_points INT;
+ DECLARE v_existing_carbon DECIMAL(12,4);
+ DECLARE v_existing_reason VARCHAR(300);
+ DECLARE v_balance_points BIGINT;
+ DECLARE v_balance_carbon DECIMAL(20,4);
  DECLARE v_id BIGINT UNSIGNED;
  DECLARE v_factor DECIMAL(20,8) DEFAULT 0.21;
  DECLARE v_version VARCHAR(30) DEFAULT 'carbon-v1';
- SELECT status INTO v_status FROM ride_orders WHERE id=p_order_id FOR UPDATE;
+ SELECT status,user_id INTO v_status,v_user_id FROM ride_orders WHERE id=p_order_id FOR UPDATE;
  IF v_status IS NULL OR v_status<>'PAID' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_ADJUSTMENT'; END IF;
- SELECT id INTO v_existing_id FROM carbon_transactions WHERE idempotency_key=p_key;
+ SELECT id,order_id,entry_type,points_change,carbon_kg_change,reason
+ INTO v_existing_id,v_existing_order,v_existing_type,v_existing_points,v_existing_carbon,v_existing_reason
+ FROM carbon_transactions WHERE idempotency_key=p_key;
  IF v_existing_id IS NOT NULL THEN
+  IF v_existing_order<>p_order_id OR v_existing_type<>'ADJUSTMENT' OR v_existing_points<>p_points
+   OR v_existing_carbon<>p_carbon OR BINARY v_existing_reason<>BINARY p_reason THEN
+   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ADJUSTMENT_IDEMPOTENCY_CONFLICT';
+  END IF;
   SELECT c.*,TRUE AS duplicate FROM carbon_transactions c WHERE c.id=v_existing_id;
   LEAVE adjustment;
+ END IF;
+ IF p_points=0 AND p_carbon=0 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ADJUSTMENT_ZERO'; END IF;
+ IF p_points<0 OR p_carbon<0 THEN
+  SELECT COALESCE(SUM(c.points_change),0),COALESCE(SUM(c.carbon_kg_change),0) INTO v_balance_points,v_balance_carbon
+  FROM ride_orders r JOIN carbon_transactions c ON c.order_id=r.id WHERE r.user_id=v_user_id;
+  IF (p_points<0 AND v_balance_points+p_points<0) OR (p_carbon<0 AND v_balance_carbon+p_carbon<0) THEN
+   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INSUFFICIENT_CARBON_BALANCE';
+  END IF;
  END IF;
  SELECT COALESCE(CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(value,'$.kg_per_km')),'null') AS DECIMAL(20,8)),0.21),
         COALESCE(NULLIF(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(value,'$.rule_version')),'null'),''),'carbon-v1')

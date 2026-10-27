@@ -1455,8 +1455,10 @@ export function Carbon({ d, user, run }: Props) {
             <>
               {v.me && (
                 <div className="leaderboard-me">
-                  <span>{v.me.private ? "仅自己可见" : "已参与公开榜单"}</span>
-                  <strong>我的排名 #{v.me.rank}</strong>
+                  <span>{v.me.private ? "仅自己可见" : "昵称已公开"}</span>
+                  <strong>
+                    {v.me.rank === null ? "暂无排名" : `我的排名 #${v.me.rank}`}
+                  </strong>
                   <small>
                     {v.me.points} 分 · {(v.me.distance_m / 1000).toFixed(2)} km
                   </small>

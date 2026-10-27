@@ -69,13 +69,14 @@ export async function analytics(pool, filter) {
   });
 }
 export async function leaderboard(pool, period, metric, viewerId) {
-  const [result] = await pool.query("CALL sp_leaderboard(?,?)", [
+  const [result] = await pool.query("CALL sp_leaderboard(?,?,?)", [
     period,
     metric,
+    viewerId,
   ]);
   const ranked = result[0].map((row) => ({
     ...row,
-    rank: Number(row.rank),
+    rank: row.rank === null ? null : Number(row.rank),
     rides: Number(row.rides),
     distance_m: Number(row.distance_m),
     points: Number(row.points),
@@ -84,7 +85,7 @@ export async function leaderboard(pool, period, metric, viewerId) {
   }));
   const own = ranked.find((row) => row.user_id === Number(viewerId));
   const rows = ranked
-    .filter((row) => row.visible)
+    .filter((row) => row.visible && row.rank !== null)
     .map(({ visible, ...row }) => row);
   const me = own
     ? (({ visible, ...row }) => ({ ...row, private: !visible }))(own)
