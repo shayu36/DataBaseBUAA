@@ -139,17 +139,24 @@ export function aggregateHotspots(
       h[key] = round(h[key]);
     h.net_flow = h.return_count - h.borrow_count;
   }
-  const inventory_series = [...grouped.entries()].flatMap(([zoneId, list]) =>
-    list
+  const inventory_series = [...grouped.entries()].flatMap(([zoneId, list]) => {
+    let previous = null,
+      segment = 0;
+    return list
       .filter((s) => included(s.captured_at))
-      .map((s) => ({
-        zone_id: zoneId,
-        captured_at: s.captured_at,
-        available: number(s.available),
-        occupied: number(s.occupied),
-        capacity: number(s.capacity),
-      })),
-  );
+      .map((s) => {
+        if (previous === null || s.t - previous > 300000) segment++;
+        previous = s.t;
+        return {
+          zone_id: zoneId,
+          captured_at: s.captured_at,
+          available: number(s.available),
+          occupied: number(s.occupied),
+          capacity: number(s.capacity),
+          segment_id: segment,
+        };
+      });
+  });
   const perZonePossible = selectedMinutes(start, end),
     possibleMinutes = selectedZones.length * perZonePossible,
     covered = hotspots.reduce((sum, h) => sum + h.coverage_minutes, 0);

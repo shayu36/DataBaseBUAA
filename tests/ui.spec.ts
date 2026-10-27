@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test.describe("北京时间的运营分析", () => {
   test.use({ timezoneId: "America/Los_Angeles" });
 
-  test("日期默认值和库存曲线标签不受浏览器时区影响", async ({ page }) => {
+  test("日期与库存曲线正确处理跨时区和采样缺口", async ({ page }) => {
     await page.clock.setFixedTime(new Date("2026-10-04T18:30:00Z"));
     await page.route("**/api/analytics?**", async (route) => {
       const response = await route.fetch();
@@ -14,12 +14,35 @@ test.describe("北京时间的运营分析", () => {
           captured_at: "2026-10-04T18:00:00Z",
           available: 2,
           capacity: 10,
+          segment_id: 1,
         },
         {
           zone_id: 1,
-          captured_at: "2026-10-04T18:04:00Z",
+          captured_at: "2026-10-04T18:10:00Z",
           available: 3,
           capacity: 10,
+          segment_id: 1,
+        },
+        {
+          zone_id: 1,
+          captured_at: "2026-10-04T18:20:00Z",
+          available: 4,
+          capacity: 10,
+          segment_id: 2,
+        },
+        {
+          zone_id: 1,
+          captured_at: "2026-10-04T18:21:00Z",
+          available: 5,
+          capacity: 10,
+          segment_id: 2,
+        },
+        {
+          zone_id: 1,
+          captured_at: "2026-10-04T18:31:00Z",
+          available: 6,
+          capacity: 10,
+          segment_id: 3,
         },
       ];
       await route.fulfill({ response, json: data });
@@ -32,6 +55,8 @@ test.describe("北京时间的运营分析", () => {
       name: "停车区可用车辆库存时间序列",
     });
     await expect(chart).toContainText("10/5 02时");
+    await expect(chart.locator("polyline")).toHaveCount(2);
+    await expect(chart.locator("circle")).toHaveCount(1);
     await page.getByRole("button", { name: "自定义筛选" }).click();
     await expect(page.getByLabel("开始日期")).toHaveValue("2026-09-29");
     await expect(page.getByLabel("结束日期")).toHaveValue("2026-10-05");

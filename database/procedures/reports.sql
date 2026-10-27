@@ -80,15 +80,20 @@ BEGIN
   ROUND(SUM(IF(available<=capacity*0.2,minutes,0)),2) AS shortage_minutes,
   ROUND(SUM(IF(occupied>=capacity,minutes,0)),2) AS full_minutes FROM eligible GROUP BY zone_id;
  WITH filtered AS (
-  SELECT id,zone_id,captured_at,available,COUNT(*) OVER (PARTITION BY zone_id) AS zone_count FROM zone_snapshots
+  SELECT id,zone_id,captured_at,available,COUNT(*) OVER (PARTITION BY zone_id) AS zone_count,
+   LAG(captured_at) OVER (PARTITION BY zone_id ORDER BY captured_at,id) AS previous_at FROM zone_snapshots
   WHERE captured_at>=p_start AND captured_at<p_end AND (p_zone IS NULL OR zone_id=p_zone)
   AND HOUR(captured_at+INTERVAL 8 HOUR)>=p_hour_start AND HOUR(captured_at+INTERVAL 8 HOUR)<p_hour_end
   AND (p_day_type='ALL' OR (p_day_type='WEEKDAY' AND WEEKDAY(captured_at+INTERVAL 8 HOUR)<5) OR (p_day_type='WEEKEND' AND WEEKDAY(captured_at+INTERVAL 8 HOUR)>=5))
+ ), segmented AS (
+  SELECT *,SUM(IF(previous_at IS NULL OR captured_at>previous_at+INTERVAL 5 MINUTE,1,0))
+   OVER (PARTITION BY zone_id ORDER BY captured_at,id ROWS UNBOUNDED PRECEDING) AS segment_id
+  FROM filtered
  ), buckets AS (
   SELECT *,IF(zone_count<=1200,id,LEAST(299,FLOOR(300*TIMESTAMPDIFF(MICROSECOND,p_start,captured_at)/
    GREATEST(1,TIMESTAMPDIFF(MICROSECOND,p_start,p_end))))) AS bucket,
    CONCAT(DATE_FORMAT(captured_at,'%Y%m%d%H%i%s%f'),LPAD(id,20,'0')) AS time_key
-  FROM filtered
+  FROM segmented
  ), bucket_extremes AS (
   SELECT zone_id,bucket,
    CAST(RIGHT(MIN(time_key),20) AS UNSIGNED) AS first_id,
@@ -100,8 +105,9 @@ BEGIN
   SELECT first_id AS id FROM bucket_extremes UNION SELECT last_id FROM bucket_extremes
   UNION SELECT min_id FROM bucket_extremes UNION SELECT max_id FROM bucket_extremes
  )
- SELECT s.zone_id,s.captured_at,s.available,s.occupied,s.capacity FROM selected chosen
- JOIN zone_snapshots s ON s.id=chosen.id ORDER BY s.zone_id,s.captured_at,s.id;
+ SELECT s.zone_id,s.captured_at,s.available,s.occupied,s.capacity,segment.segment_id FROM selected chosen
+ JOIN segmented segment ON segment.id=chosen.id JOIN zone_snapshots s ON s.id=chosen.id
+ ORDER BY s.zone_id,s.captured_at,s.id;
  WITH RECURSIVE days AS (
   SELECT DATE(p_start+INTERVAL 8 HOUR) AS local_day
   UNION ALL SELECT local_day+INTERVAL 1 DAY FROM days WHERE local_day<DATE(p_end+INTERVAL 8 HOUR)

@@ -186,6 +186,34 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
     assert.ok(dense.inventory_series.some((sample) => sample.available === 0));
     assert.ok(dense.inventory_series.some((sample) => sample.available === 23));
     assert.equal(dense.hotspots[0].coverage_minutes, 1299);
+    assert.deepEqual(
+      [...new Set(dense.inventory_series.map((sample) => sample.segment_id))],
+      [1],
+    );
+    assert.ok(
+      dense.inventory_series.some(
+        (sample, index, series) =>
+          index > 0 &&
+          sample.captured_at - series[index - 1].captured_at > 300000,
+      ),
+    );
+    await pool.query(`DELETE FROM zone_snapshots WHERE zone_id=1
+      AND captured_at>=TIMESTAMP('2026-09-01 00:00:00')+INTERVAL 650 MINUTE
+      AND captured_at<TIMESTAMP('2026-09-01 00:00:00')+INTERVAL 660 MINUTE`);
+    const withGap = (
+      await hotspotReport(
+        pool,
+        { start: "2026-09-01", end: "2026-09-02", zoneId: 1 },
+        new Date("2026-09-03T00:00:00Z"),
+      )
+    ).report;
+    assert.equal(withGap.snapshot_count, 1290);
+    assert.equal(withGap.hotspots[0].coverage_minutes, 1288);
+    assert.deepEqual(
+      [...new Set(withGap.inventory_series.map((sample) => sample.segment_id))],
+      [1, 2],
+    );
+    assert.ok(withGap.inventory_series.length <= 1200);
     const [[user]] = await pool.query(
       "SELECT password_hash FROM users WHERE id=1",
     );

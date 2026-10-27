@@ -749,23 +749,40 @@ function InventoryChart({ series, zones }: { series: Row[]; zones: Row[] }) {
           0
         </text>
         {zoneIds.map((zoneId, index) => {
-          const points = (groups.get(zoneId) || [])
-            .sort(
+          const segments = new Map<number, Row[]>();
+          for (const sample of groups.get(zoneId) || []) {
+            const id = Number(sample.segment_id ?? 0);
+            if (!segments.has(id)) segments.set(id, []);
+            segments.get(id)!.push(sample);
+          }
+          return [...segments].map(([id, samples]) => {
+            samples.sort(
               (a, b) =>
                 new Date(a.captured_at).getTime() -
                 new Date(b.captured_at).getTime(),
-            )
-            .map((s) => `${x(s.captured_at)},${y(s.available)}`)
-            .join(" ");
-          return (
-            <polyline
-              key={zoneId}
-              points={points}
-              fill="none"
-              stroke={colors[index]}
-              strokeWidth="3"
-            />
-          );
+            );
+            if (samples.length === 1)
+              return (
+                <circle
+                  key={`${zoneId}-${id}`}
+                  cx={x(samples[0].captured_at)}
+                  cy={y(samples[0].available)}
+                  r="3"
+                  fill={colors[index]}
+                />
+              );
+            return (
+              <polyline
+                key={`${zoneId}-${id}`}
+                points={samples
+                  .map((s) => `${x(s.captured_at)},${y(s.available)}`)
+                  .join(" ")}
+                fill="none"
+                stroke={colors[index]}
+                strokeWidth="3"
+              />
+            );
+          });
         })}
         <text x="55" y="212">
           {new Date(start).toLocaleString("zh-CN", {
