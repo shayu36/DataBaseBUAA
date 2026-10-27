@@ -401,7 +401,12 @@ export default function App() {
             正在同步数据…
           </div>
         )}
-        <div className="page-content" aria-busy={busy} inert={busy}>
+        <fieldset
+          className="page-content"
+          aria-busy={busy}
+          inert={busy}
+          disabled={busy}
+        >
           {page === "schema" ? (
             <Schema />
           ) : props && Page ? (
@@ -409,7 +414,7 @@ export default function App() {
           ) : (
             <div className="loading">正在读取校园数据…</div>
           )}
-        </div>
+        </fieldset>
         <footer>
           青行 Qingxing · 校园共享自行车系统<span>轻盈出发，自在抵达。</span>
         </footer>

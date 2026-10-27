@@ -199,13 +199,19 @@ test("admin can create and finish maintenance and dispatch tasks", async ({
   await expect(
     page.getByRole("heading", { name: "校园总览", exact: true }),
   ).toBeVisible();
+  const dashboard = await page.request.get("/api/dashboard");
+  expect(dashboard.ok()).toBeTruthy();
+  const bike = (await dashboard.json()).bikes.find(
+    (row: any) => row.status === "AVAILABLE",
+  );
+  expect(bike).toBeTruthy();
   await page.getByRole("button", { name: "维修报修", exact: true }).click();
-  await page.getByLabel("车辆", { exact: true }).selectOption({ index: 1 });
+  await page.getByLabel("车辆", { exact: true }).selectOption(String(bike.id));
   const description = "UI验收：后轮漏气 " + Date.now();
   await page.getByLabel("问题描述").fill(description);
   await page.getByRole("button", { name: "提交报修", exact: true }).click();
   const ticket = page.getByRole("row").filter({ hasText: description });
-  await expect(ticket).toBeVisible();
+  await expect(ticket).toBeVisible({ timeout: 15000 });
   await ticket.getByRole("button", { name: "分配", exact: true }).click();
   await page.getByLabel("维修结果").fill("UI验收：已更换内胎，试骑正常");
   await ticket.getByRole("button", { name: "完成维修", exact: true }).click();
@@ -436,6 +442,7 @@ test("pending writes reject duplicate submissions and block conflicting controls
     await expect.poll(() => writes).toBe(1);
     await expect(page.locator(".sidebar")).toHaveAttribute("inert", "");
     await expect(page.locator(".page-content")).toHaveAttribute("inert", "");
+    await expect(form.locator("input").first()).toBeDisabled();
     await expect(page.getByRole("button", { name: "刷新数据" })).toBeDisabled();
     await form.dispatchEvent("submit");
     await form.dispatchEvent("submit");

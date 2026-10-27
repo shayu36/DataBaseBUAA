@@ -283,6 +283,10 @@ header h1 {
   border: 1px solid #e3e7da;
 }
 .page-content {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
   display: flex;
   flex-direction: column;
   gap: 23px;

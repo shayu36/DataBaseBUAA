@@ -1,4 +1,4 @@
-import { createPool, ledgerTransaction } from "./db.mjs";
+import { createPool, ledgerTransaction, errorCodes } from "./db.mjs";
 import { createApp } from "./app.mjs";
 import { sql } from "./sql-statements.mjs";
 const pool = createPool();
@@ -17,7 +17,13 @@ const server = createApp(pool).listen(port, host, () =>
 const capture = () =>
   ledgerTransaction(pool, (c) =>
     c.query("CALL sp_capture_zone_snapshots()"),
-  ).catch((e) => console.error("[snapshot]", e.code || e.message));
+  ).catch((e) =>
+    console.error(
+      "[snapshot]",
+      e.code || e.message,
+      ...(e instanceof AggregateError ? [errorCodes(e).join(", ")] : []),
+    ),
+  );
 await capture();
 const timer = setInterval(capture, 60000);
 timer.unref();

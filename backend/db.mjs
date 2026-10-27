@@ -27,13 +27,21 @@ export class AppError extends Error {
   }
 }
 
+// Report nested error types without including SQL parameters or other error data.
+export function errorCodes(error) {
+  if (error instanceof AggregateError) return error.errors.flatMap(errorCodes);
+  return [String(error?.code || error?.name || "UNKNOWN")];
+}
+
 // GET_LOCK is connection-scoped, including across DDL implicit commits.
 export async function withNamedLock(db, work) {
   const pooled = typeof db.getConnection === "function";
   const connection = pooled ? await db.getConnection() : db;
   let locked = false,
     lockUncertain = true,
-    destroyed = false;
+    destroyed = false,
+    failed = false,
+    failure;
   const discard = () => {
     destroyed = true;
     connection.destroy();
@@ -46,11 +54,24 @@ export async function withNamedLock(db, work) {
     locked = true;
     return await work(connection, discard);
   } catch (error) {
+    failed = true;
+    failure = error;
     if (lockUncertain) discard();
     throw error;
   } finally {
     if (!destroyed) {
-      if (locked) await releaseNamedLock(connection);
+      if (locked) {
+        try {
+          await releaseNamedLock(connection);
+        } catch (releaseError) {
+          if (failed)
+            throw new AggregateError(
+              [failure, releaseError],
+              "数据库操作及锁释放均失败",
+            );
+          throw releaseError;
+        }
+      }
       if (pooled) connection.release();
     }
   }

@@ -6,7 +6,7 @@ import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { AppError } from "./db.mjs";
+import { AppError, errorCodes } from "./db.mjs";
 import { authenticate, login, register, issueCookie, logout } from "./auth.mjs";
 import {
   startRide,
@@ -383,7 +383,12 @@ export function createApp(pool) {
       return res
         .status(409)
         .json({ error: "该操作不满足数据完整性约束", code: "CONSTRAINT" });
-    console.error("[api]", e.code || e.name, e.message);
+    console.error(
+      "[api]",
+      e.code || e.name,
+      e.message,
+      ...(e instanceof AggregateError ? [errorCodes(e).join(", ")] : []),
+    );
     res
       .status(500)
       .json({ error: "服务暂时不可用，请稍后重试", code: "INTERNAL_ERROR" });

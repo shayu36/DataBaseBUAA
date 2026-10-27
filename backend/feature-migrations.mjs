@@ -16,7 +16,9 @@ export async function applyFeatureMigrationsLocked(connection) {
     new URL("../database/feature-migration.sql", import.meta.url),
     "utf8",
   );
-  let created = false;
+  let created = false,
+    failed = false,
+    failure;
   try {
     await connection.query(
       migrationSql.replace("__MIGRATION_PROCEDURE__", `\`${name}\``),
@@ -26,8 +28,22 @@ export async function applyFeatureMigrationsLocked(connection) {
       name,
     ]);
     return { applied: result[0][0].migrated ? ["pdf_expansion@11"] : [] };
+  } catch (error) {
+    failed = true;
+    failure = error;
+    throw error;
   } finally {
-    if (created)
-      await connection.query(sql("drop_temporary_procedure"), [name]);
+    if (created) {
+      try {
+        await connection.query(sql("drop_temporary_procedure"), [name]);
+      } catch (cleanupError) {
+        if (failed)
+          throw new AggregateError(
+            [failure, cleanupError],
+            "数据库迁移及临时过程清理均失败",
+          );
+        throw cleanupError;
+      }
+    }
   }
 }
