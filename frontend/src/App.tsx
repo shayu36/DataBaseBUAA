@@ -212,11 +212,14 @@ export default function App() {
     [initial, setInitial] = useState(true);
   const refresh = async () => {
     setBusy(true);
+    setNotice("");
     try {
       setD(await api("/dashboard"));
       setError("");
+      return true;
     } catch (e) {
       setError((e as Error).message);
+      return false;
     } finally {
       setBusy(false);
     }
@@ -236,8 +239,12 @@ export default function App() {
     setNotice("");
     try {
       await api(path, body);
-      await refresh();
-      setNotice("操作已保存，页面已刷新。");
+      const refreshed = await refresh();
+      setNotice(
+        refreshed
+          ? "操作已保存，页面已刷新。"
+          : "操作已保存，但页面刷新失败；请点击刷新数据获取最新状态。",
+      );
       return true;
     } catch (e) {
       setError((e as Error).message);

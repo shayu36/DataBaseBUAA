@@ -384,6 +384,78 @@ test("admin draft survives rejection; edited bike date and blank staff password 
     submissions.find((s) => s.path === "/api/admin/staff")?.body,
   ).not.toHaveProperty("password");
 });
+test("successful save reports a failed refresh and manual refresh recovers", async ({
+  page,
+}) => {
+  let failRefresh = false;
+  let failAfterSave = true;
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: 1,
+            name: "管理员",
+            email: "admin@test.local",
+            role: "ADMIN",
+            status: "ACTIVE",
+          },
+        },
+      });
+    if (path === "/api/dashboard")
+      return failRefresh
+        ? route.fulfill({
+            status: 503,
+            json: { error: "测试刷新失败", code: "DATABASE_UNAVAILABLE" },
+          })
+        : route.fulfill({ json: regressionDashboard });
+    if (path === "/api/admin/users")
+      return route.fulfill({ json: { users: [] } });
+    if (path === "/api/admin/bikes") {
+      failRefresh = failAfterSave;
+      return route.fulfill({ json: { id: 1 } });
+    }
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "基础资料", exact: true }).click();
+  await page.getByRole("button", { name: "车辆管理", exact: true }).click();
+  await page
+    .getByRole("row")
+    .filter({ hasText: "QX-REGRESSION" })
+    .getByRole("button", { name: "编辑", exact: true })
+    .click();
+  await page.getByLabel("车辆编号").fill("QX-SAVED");
+  await page.getByRole("button", { name: "保存资料", exact: true }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "操作已保存，但页面刷新失败" }),
+  ).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("测试刷新失败");
+  await expect(page.getByText("操作已保存，页面已刷新。")).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "新增资料", exact: true }),
+  ).toBeVisible();
+  failRefresh = false;
+  await page.getByRole("button", { name: "刷新数据" }).click();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(
+    page.getByText("操作已保存，但页面刷新失败", { exact: false }),
+  ).toHaveCount(0);
+  failAfterSave = false;
+  await page
+    .getByRole("row")
+    .filter({ hasText: "QX-REGRESSION" })
+    .getByRole("button", { name: "编辑", exact: true })
+    .click();
+  await page.getByRole("button", { name: "保存资料", exact: true }).click();
+  await expect(page.getByText("操作已保存，页面已刷新。")).toBeVisible();
+  failRefresh = true;
+  await page.getByRole("button", { name: "刷新数据" }).click();
+  await expect(page.getByRole("alert")).toContainText("测试刷新失败");
+  await expect(page.getByText("操作已保存，页面已刷新。")).toHaveCount(0);
+});
+
 test("analytics refetches after suggestion creation and manual refresh while retaining selected period", async ({
   page,
 }) => {

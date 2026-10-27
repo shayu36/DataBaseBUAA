@@ -1,6 +1,6 @@
 # 固定接口规范
 
-除特别说明外，路径均加 /api；查询返回 JSON，写入使用 POST JSON。错误格式为 {error,code}；业务字段使用 snake_case，运营筛选参数使用下文列出的 camelCase。id 为数字，金额以整数分表示，日期为 ISO 格式。用户 {id,name,email,phone,role,status} role=STUDENT/ADMIN/OPERATOR，status=ACTIVE/SUSPENDED。除健康检查、登录、注册和退出外，接口均需登录；管理员或运维权限按下文和业务状态检查。前端以响应为准刷新，不伪造成功。
+除特别说明外，路径均加 /api；查询返回 JSON，写入使用 POST JSON。错误格式为 {error,code}；业务字段使用 snake_case，运营筛选参数使用下文列出的 camelCase。id 为数字，金额以整数分表示，日期为 ISO 格式。用户 {id,name,email,phone,role,status} role=STUDENT/ADMIN/OPERATOR，status=ACTIVE/SUSPENDED。除健康检查、登录、注册和退出外，接口均需登录；管理员或运维权限按下文和业务状态检查。前端以响应为准刷新，不伪造成功；写入成功但刷新失败时保留保存成功的结果并提示手动刷新，刷新成功或重新刷新时清除旧提示。
 
 - GET /health {status:'ok',system:'campus-bike'}
 - POST /auth/login {email,password} -> {user}; POST /auth/register {name,email,phone,password}->{user}; GET /auth/me->{user}; POST /auth/logout-> {ok:true}。
