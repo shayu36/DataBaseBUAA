@@ -109,7 +109,34 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
       `GRANT SELECT, INSERT, UPDATE, DELETE, EXECUTE ON \`${database}\`.* TO '${username}'@'localhost'`,
     );
     appPool = createPool({ database, user: username, password });
-    assert.equal(await seedDemo(appPool, pool), true);
+    const guardedActions = [];
+    const guardedAdmin = {
+      async getConnection() {
+        const connection = await pool.getConnection();
+        return {
+          async query(statement, ...args) {
+            const action = statement.includes("CREATE PROCEDURE")
+              ? "create"
+              : statement.startsWith("DROP PROCEDURE")
+                ? "drop"
+                : null;
+            if (action) {
+              const [[{ available }]] = await pool.query(
+                "SELECT IS_FREE_LOCK(CONCAT('campus-bike:',DATABASE())) AS available",
+              );
+              assert.equal(available, 0, `演示过程${action}时必须持有数据库锁`);
+              guardedActions.push(action);
+            }
+            return connection.query(statement, ...args);
+          },
+          release() {
+            connection.release();
+          },
+        };
+      },
+    };
+    assert.equal(await seedDemo(appPool, guardedAdmin), true);
+    assert.deepEqual(guardedActions, ["create", "drop"]);
     const [[counts]] = await pool.query(
       "SELECT (SELECT COUNT(*) FROM users) users, (SELECT COUNT(*) FROM bikes) bikes, (SELECT COUNT(*) FROM parking_zones) zones, (SELECT COUNT(*) FROM ride_orders) rides, (SELECT COUNT(*) FROM payments) payments, (SELECT COUNT(*) FROM carbon_transactions) credits",
     );

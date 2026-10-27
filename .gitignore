@@ -30,4 +30,5 @@ Thumbs.db
 /docs/screenshots/
 /docs/evidence/
 /database/demo-snapshot.sql
-/database/.demo-snapshot.sql-*.tmp
+/database/.*demo-snapshot.sql-*.tmp
+/database/.demo-snapshot.sql-*.stage

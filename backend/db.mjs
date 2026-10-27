@@ -79,25 +79,30 @@ export async function withNamedLock(db, work) {
 
 // A course-scale single-writer transaction boundary, with locks on affected rows.
 export function ledgerTransaction(pool, work) {
-  return withNamedLock(pool, async (connection, discard) => {
+  return withNamedLock(pool, (connection, discard) =>
+    transactionLocked(connection, discard, work),
+  );
+}
+
+// The caller holds the database named lock for the entire transaction.
+export async function transactionLocked(connection, discard, work) {
+  try {
+    await connection.beginTransaction();
+    const result = await work(connection);
+    await connection.commit();
+    return result;
+  } catch (error) {
     try {
-      await connection.beginTransaction();
-      const result = await work(connection);
-      await connection.commit();
-      return result;
-    } catch (error) {
-      try {
-        await connection.rollback();
-      } catch (rollbackError) {
-        discard();
-        throw new AggregateError(
-          [error, rollbackError],
-          "数据库回滚失败，连接已关闭",
-        );
-      }
-      throw error;
+      await connection.rollback();
+    } catch (rollbackError) {
+      discard();
+      throw new AggregateError(
+        [error, rollbackError],
+        "数据库回滚失败，连接已关闭",
+      );
     }
-  });
+    throw error;
+  }
 }
 
 // A connection must not be reused if releasing its named lock cannot be confirmed.
