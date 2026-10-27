@@ -269,28 +269,65 @@ function PaginatedRows({
     [before, setBefore] = useState(initialBefore),
     [loading, setLoading] = useState(false),
     [error, setError] = useState("");
-  const generation = useRef(0);
+  const generation = useRef(0),
+    oldestLoaded = useRef<number | null>(null),
+    identity = useRef({ path, field });
+  const pagePath = (cursor: number) =>
+    `${path}${path.includes("?") ? "&" : "?"}before=${cursor}`;
   useEffect(() => {
-    generation.current++;
+    const current = ++generation.current;
+    const target =
+      identity.current.path === path && identity.current.field === field
+        ? oldestLoaded.current
+        : null;
+    identity.current = { path, field };
+    oldestLoaded.current = target;
     setRows(initialRows);
     setBefore(initialBefore);
-    setLoading(false);
     setError("");
+    const needsRestore =
+      target != null && initialBefore != null && initialBefore > target;
+    setLoading(needsRestore);
+    async function restorePages() {
+      let cursor = initialBefore;
+      let lastId: number | null = null;
+      try {
+        while (target != null && cursor != null) {
+          const page = await api(pagePath(cursor));
+          if (current !== generation.current) return;
+          setRows((existing) => [...existing, ...page[field]]);
+          lastId = page[field].at(-1)?.id ?? lastId;
+          cursor = page.next_before;
+          setBefore(cursor);
+          if (lastId != null && lastId <= target) break;
+        }
+        oldestLoaded.current = lastId;
+      } catch (e) {
+        if (current === generation.current)
+          setError(e instanceof Error ? e.message : "读取历史记录失败");
+      } finally {
+        if (current === generation.current) setLoading(false);
+      }
+    }
+    if (needsRestore) void restorePages();
+    else oldestLoaded.current = null;
     return () => {
       generation.current++;
     };
   }, [initialRows, initialBefore, path, field]);
   async function loadMore() {
+    if (before == null) return;
     const current = generation.current;
     setLoading(true);
     setError("");
     try {
-      const page = await api(
-        `${path}${path.includes("?") ? "&" : "?"}before=${before}`,
-      );
+      const page = await api(pagePath(before));
       if (current !== generation.current) return;
       setRows((existing) => [...existing, ...page[field]]);
       setBefore(page.next_before);
+      const lastId = page[field].at(-1)?.id;
+      if (lastId != null)
+        oldestLoaded.current = Math.min(oldestLoaded.current ?? lastId, lastId);
     } catch (e) {
       if (current === generation.current)
         setError(e instanceof Error ? e.message : "读取历史记录失败");
@@ -807,31 +844,48 @@ function Remote({
   children: (v: any) => React.ReactNode;
   refreshKey?: unknown;
 }) {
-  const [data, setData] = useState<any>(),
-    [error, setError] = useState("");
+  const [data, setData] = useState<{
+      path: string;
+      key: unknown;
+      value: any;
+    }>(),
+    [error, setError] = useState(""),
+    [loading, setLoading] = useState(true);
   useEffect(() => {
     let live = true;
-    setData(undefined);
+    setLoading(true);
     setError("");
     api(path)
-      .then((v) => {
-        if (live) setData(v);
+      .then((value) => {
+        if (live) setData({ path, key: refreshKey, value });
       })
       .catch((e) => {
         if (live) setError(e.message);
+      })
+      .finally(() => {
+        if (live) setLoading(false);
       });
     return () => {
       live = false;
     };
   }, [path, refreshKey]);
-  return error ? (
-    <div className="error" role="alert">
-      {error}
-    </div>
-  ) : data ? (
-    children(data)
-  ) : (
-    <div className="loading">正在读取数据…</div>
+  const current = data?.path === path ? data : undefined;
+  const updating = loading || (current && current.key !== refreshKey);
+  return (
+    <>
+      {error && (
+        <div className="error" role="alert">
+          {error}
+        </div>
+      )}
+      {current ? (
+        <div aria-busy={Boolean(updating)} inert={Boolean(updating || error)}>
+          {children(current.value)}
+        </div>
+      ) : !error ? (
+        <div className="loading">正在读取数据…</div>
+      ) : null}
+    </>
   );
 }
 function InventoryChart({ series, zones }: { series: Row[]; zones: Row[] }) {
@@ -1828,6 +1882,7 @@ export function Admin({ d, run }: Props) {
     [adjustReason, setAdjustReason] = useState("课程演示人工校正"),
     [userError, setUserError] = useState("");
   useEffect(() => {
+    let live = true;
     Promise.all([
       api("/admin/users"),
       api("/admin/roads"),
@@ -1835,6 +1890,7 @@ export function Admin({ d, run }: Props) {
       api("/admin/orders/review"),
     ])
       .then(([u, r, a, q]) => {
+        if (!live) return;
         setUsers(u.users);
         setRoads(r.roads || []);
         setAttempts(a.attempts || []);
@@ -1842,7 +1898,12 @@ export function Admin({ d, run }: Props) {
         setReviews(q.orders || []);
         setUserError("");
       })
-      .catch((e) => setUserError(e.message));
+      .catch((e) => {
+        if (live) setUserError(e.message);
+      });
+    return () => {
+      live = false;
+    };
   }, [d]);
   const fields =
     kind === "zones"

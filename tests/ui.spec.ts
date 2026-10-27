@@ -1082,9 +1082,75 @@ test("administrator and operator can load older risk alerts", async ({
   ).toHaveCount(0);
 });
 
+test("reviewing an older risk keeps the loaded boundary when new alerts arrive", async ({
+  page,
+}) => {
+  let resolved = false;
+  const records = () =>
+    (resolved
+      ? [105, 104, 103, 102, 101, 100, 99]
+      : [104, 103, 102, 101, 100, 99]
+    ).map((id) => ({
+      id,
+      bike_code: `BIKE-${id}`,
+      score: 30,
+      level: "MEDIUM",
+      status: id === 101 && resolved ? "RESOLVED" : "OPEN",
+      reasons: [],
+    }));
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: 3,
+            name: "运维员",
+            email: "operator@test.local",
+            role: "OPERATOR",
+            status: "ACTIVE",
+          },
+        },
+      });
+    if (url.pathname === "/api/dashboard")
+      return route.fulfill({ json: regressionDashboard });
+    if (url.pathname === "/api/risks/101/resolve") {
+      resolved = true;
+      return route.fulfill({ json: { id: 101, status: "RESOLVED" } });
+    }
+    if (url.pathname === "/api/risks") {
+      const before = Number(url.searchParams.get("before") || Infinity);
+      const all = records().filter((r) => r.id < before);
+      const risks = all.slice(0, 2);
+      return route.fulfill({
+        json: { risks, next_before: all.length > 2 ? risks.at(-1)?.id : null },
+      });
+    }
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "风险处置", exact: true }).click();
+  await page.getByRole("button", { name: "加载更早风险记录" }).click();
+  const oldRow = page.getByRole("row").filter({ hasText: "BIKE-101" });
+  await expect(oldRow).toBeVisible();
+  await oldRow.getByRole("button", { name: "解决", exact: true }).click();
+  await expect(
+    page.getByRole("row").filter({ hasText: "BIKE-105" }),
+  ).toBeVisible();
+  await expect(oldRow).toContainText("已结束");
+  await expect(
+    page.getByRole("row").filter({ hasText: "BIKE-100" }),
+  ).toBeVisible();
+  for (const id of [105, 104, 103, 102, 101, 100])
+    await expect(
+      page.getByRole("row").filter({ hasText: `BIKE-${id}` }),
+    ).toHaveCount(1);
+});
+
 test("personal and administrator return histories load older records", async ({
   page,
 }) => {
+  let resolved = false;
   const attempt = (id: number, orderId: number) => ({
     id,
     order_id: orderId,
@@ -1094,7 +1160,8 @@ test("personal and administrator return histories load older records", async ({
     y: 20,
     reason: "OUTSIDE_FENCE",
     location_source: "MAP_SIMULATION",
-    review_status: "PENDING",
+    review_status: id === 200 && resolved ? "RESOLVED" : "PENDING",
+    review_note: id === 200 && resolved ? "复核已完成" : null,
     created_at: "2026-10-27T00:00:00Z",
   });
   await page.route("**/api/**", async (route) => {
@@ -1119,6 +1186,10 @@ test("personal and administrator return histories load older records", async ({
           attempts_next_before: 101,
         },
       });
+    if (url.pathname === "/api/returns/200/review") {
+      resolved = true;
+      return route.fulfill({ json: { id: 200, review_status: "RESOLVED" } });
+    }
     if (url.pathname === "/api/return-attempts") {
       if (url.searchParams.get("scope") === "own") {
         expect(url.searchParams.get("before")).toBe("101");
@@ -1154,6 +1225,9 @@ test("personal and administrator return histories load older records", async ({
   await expect(page.getByText("#801 · TEST", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "加载更早归还记录" }).click();
   await expect(page.getByText("#800 · TEST", { exact: true })).toBeVisible();
+  const oldRow = page.getByRole("row").filter({ hasText: "#800 · TEST" });
+  await oldRow.getByRole("button", { name: "标记已处理" }).click();
+  await expect(oldRow).toContainText("复核已完成");
   await expect(
     page.getByRole("button", { name: "加载更早归还记录" }),
   ).toHaveCount(0);
