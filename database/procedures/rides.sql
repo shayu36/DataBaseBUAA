@@ -218,7 +218,7 @@ prepare_return: BEGIN
  DECLARE v_started DATETIME(3);
  DECLARE v_status VARCHAR(20);
  DECLARE v_zone_status VARCHAR(20) DEFAULT NULL;
- DECLARE v_x,v_y,v_radius DECIMAL(10,2);
+ DECLARE v_x,v_y,v_radius,v_input_x,v_input_y DECIMAL(10,2);
  DECLARE v_occupied,v_reserved,v_capacity INT;
  DECLARE v_now DATETIME(3) DEFAULT UTC_TIMESTAMP(3);
  DECLARE v_captured DATETIME(3);
@@ -232,11 +232,11 @@ prepare_return: BEGIN
  IF v_zone_status IS NULL THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ZONE_NOT_FOUND'; END IF;
  CALL sp_zone_load(p_zone_id,v_occupied,v_reserved);
  SELECT id INTO v_bike FROM bikes WHERE id=v_bike FOR UPDATE;
- SET v_captured=COALESCE(p_captured,v_now);
+ SET v_captured=COALESCE(p_captured,v_now),v_input_x=p_x,v_input_y=p_y;
  IF p_x<0 OR p_x>2000 OR p_y<0 OR p_y>2000 THEN SET v_reason='INVALID_LOCATION';
  ELSEIF v_captured<v_started OR v_captured>v_now + INTERVAL 30 SECOND OR v_captured<v_now - INTERVAL 5 MINUTE THEN SET v_reason='LOCATION_STALE';
  ELSEIF v_zone_status<>'ACTIVE' THEN SET v_reason='ZONE_CLOSED';
- ELSEIF SQRT(POW(p_x-v_x,2)+POW(p_y-v_y,2))>v_radius+0.00000001 THEN SET v_reason='OUTSIDE_FENCE';
+ ELSEIF SQRT(POW(v_input_x-v_x,2)+POW(v_input_y-v_y,2))>v_radius+0.00000001 THEN SET v_reason='OUTSIDE_FENCE';
  ELSEIF v_occupied+v_reserved>=v_capacity THEN SET v_reason='ZONE_FULL';
  END IF;
  IF v_reason IS NOT NULL THEN

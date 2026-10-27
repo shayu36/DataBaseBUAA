@@ -20,14 +20,15 @@ BEGIN
  DECLARE v_id,v_node,v_nearest BIGINT UNSIGNED DEFAULT NULL;
  DECLARE v_name VARCHAR(60);
  DECLARE v_location VARCHAR(160);
- DECLARE v_x,v_y,v_radius,v_old_x,v_old_y,v_old_radius DOUBLE;
+ DECLARE v_x,v_y,v_old_x,v_old_y DECIMAL(10,2);
+ DECLARE v_radius,v_old_radius DECIMAL(8,2);
  DECLARE v_capacity,v_occupied,v_reserved INT;
  DECLARE v_status,v_old_status VARCHAR(20);
  DECLARE v_changed,v_geometry BOOLEAN DEFAULT FALSE;
  DECLARE v_distance INT;
  SELECT id,name,location,x,y,radius,capacity,status INTO v_id,v_name,v_location,v_x,v_y,v_radius,v_capacity,v_status
  FROM JSON_TABLE(p_data,'$' COLUMNS(id BIGINT UNSIGNED PATH '$.id' NULL ON EMPTY,name VARCHAR(60) PATH '$.name',location VARCHAR(160) PATH '$.location',
- x DOUBLE PATH '$.x',y DOUBLE PATH '$.y',radius DOUBLE PATH '$.radius',capacity INT PATH '$.capacity',status VARCHAR(20) PATH '$.status')) input_data;
+ x DECIMAL(10,2) PATH '$.x',y DECIMAL(10,2) PATH '$.y',radius DECIMAL(8,2) PATH '$.radius',capacity INT PATH '$.capacity',status VARCHAR(20) PATH '$.status')) input_data;
  IF v_id IS NOT NULL THEN
   SELECT status,x,y,radius INTO v_old_status,v_old_x,v_old_y,v_old_radius FROM parking_zones WHERE id=v_id FOR UPDATE;
   IF v_old_status IS NULL THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ZONE_NOT_FOUND'; END IF;

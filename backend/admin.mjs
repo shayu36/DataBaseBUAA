@@ -25,7 +25,7 @@ const zoneSchema = z.object({
   location: text(160),
   x: coord,
   y: coord,
-  radius: z.number().finite().positive().max(2000),
+  radius: z.number().finite().min(0.005).max(2000),
   capacity: z.number().int().min(1).max(1000),
   status: z.enum(["ACTIVE", "CLOSED"]),
 });

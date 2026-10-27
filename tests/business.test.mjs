@@ -127,6 +127,24 @@ test("outside geofence rejection commits violation but leaves order running", as
   );
   assert.equal(v.n, 1);
 });
+test("geofence decisions use the same precision as stored evidence", async () => {
+  const { id } = await business.startRide(pool, user, { bike_id: 1 });
+  await assert.rejects(
+    business.returnRide(pool, user, id, { zone_id: 1, x: 140.006, y: 100 }),
+    { code: "OUTSIDE_FENCE" },
+  );
+  const [[attempt]] = await pool.query(
+    "SELECT x,y,reason FROM return_attempts WHERE order_id=?",
+    [id],
+  );
+  assert.deepEqual(attempt, { x: 140.01, y: 100, reason: "OUTSIDE_FENCE" });
+  await business.returnRide(pool, user, id, { zone_id: 1, x: 140.004, y: 100 });
+  const [[order]] = await pool.query(
+    "SELECT return_x,return_y,status FROM ride_orders WHERE id=?",
+    [id],
+  );
+  assert.deepEqual(order, { return_x: 140, return_y: 100, status: "UNPAID" });
+});
 test("full station rejects return without losing bike", async () => {
   const { id } = await business.startRide(pool, user, { bike_id: 1 });
   await assert.rejects(

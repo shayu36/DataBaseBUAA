@@ -148,6 +148,38 @@ test("zone capacity, closing and geometry protect occupied bikes and reservation
     { code: "ZONE_FULL" },
   );
 });
+test("zone edits and new road lengths use stored coordinate precision", async () => {
+  await saveZone(pool, admin, zone({ x: 100.004, y: 100.004, radius: 40.004 }));
+  const [[unchanged]] = await pool.query(
+    "SELECT x,y,radius FROM parking_zones WHERE id=1",
+  );
+  assert.deepEqual(unchanged, { x: 100, y: 100, radius: 40 });
+  await assert.rejects(saveZone(pool, admin, zone({ x: 100.006 })), {
+    code: "INVALID_STATE",
+  });
+  await assert.rejects(saveZone(pool, admin, zone({ radius: 0.004 })));
+  const { id } = await saveZone(
+    pool,
+    admin,
+    zone({ id: undefined, name: "精度站", x: 601.496, y: 100 }),
+  );
+  const [[newRoad]] = await pool.query(
+    `SELECT z.x,n.x AS node_x,e.distance_m FROM parking_zones z
+    JOIN road_nodes n ON n.zone_id=z.id JOIN road_edges e ON e.to_node_id=n.id WHERE z.id=?`,
+    [id],
+  );
+  assert.deepEqual(newRoad, { x: 601.5, node_x: 601.5, distance_m: 102 });
+  const minimum = await saveZone(
+    pool,
+    admin,
+    zone({ id: undefined, name: "最小围栏", x: 700, radius: 0.005 }),
+  );
+  const [[small]] = await pool.query(
+    "SELECT radius FROM parking_zones WHERE id=?",
+    [minimum.id],
+  );
+  assert.equal(small.radius, 0.01);
+});
 test("new zone connects to nearest road node and empty zone edits sync graph", async () => {
   const { id } = await saveZone(
     pool,
