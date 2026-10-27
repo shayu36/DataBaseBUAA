@@ -163,6 +163,16 @@ test("new students receive an unranked private leaderboard summary", async () =>
 });
 test("students cannot list users or mutate administrator resources", async () => {
   assert.equal(
+    (
+      await request(
+        "/api/carbon/entries?before=invalid",
+        undefined,
+        studentCookie,
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
     (await request("/api/risks?before=1", undefined, studentCookie)).status,
     403,
   );
@@ -326,6 +336,20 @@ test("HTTP lifecycle has private orders and one payment", async () => {
   );
   const d = (await request("/api/dashboard", undefined, studentCookie)).data;
   assert.equal(d.carbon.points, 4);
+  assert.equal(d.carbon.ride_count, 1);
+  const ownEntries = await request(
+    "/api/carbon/entries",
+    undefined,
+    studentCookie,
+  );
+  const adminEntries = await request(
+    "/api/carbon/entries",
+    undefined,
+    adminCookie,
+  );
+  assert.equal(ownEntries.data.entries.length, 1);
+  assert.equal(ownEntries.data.entries[0].order_id, id);
+  assert.deepEqual(adminEntries.data.entries, []);
   assert.equal(d.staff.length, 0);
   assert.equal(d.attempts.length, 1);
 });

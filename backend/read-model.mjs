@@ -34,7 +34,8 @@ export async function dashboard(pool, user) {
       task.bike_ids = bikesByTask.get(task.id) || [];
     const carbon = carbonRows[0],
       summary = summaryRows[0],
-      attemptPage = pageById(attempts, "attempts");
+      attemptPage = pageById(attempts, "attempts"),
+      entryPage = pageById(entries, "entries");
     return {
       zones,
       bikes,
@@ -43,7 +44,11 @@ export async function dashboard(pool, user) {
       staff,
       dispatches,
       tickets,
-      carbon: { ...carbon, entries },
+      carbon: {
+        ...carbon,
+        entries: entryPage.entries,
+        entries_next_before: entryPage.next_before,
+      },
       summary,
       attempts: attemptPage.attempts,
       attempts_next_before: attemptPage.next_before,

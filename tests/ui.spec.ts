@@ -721,6 +721,69 @@ test("maintenance operator can view and acknowledge risk alerts", async ({
   ).toBeVisible();
 });
 
+test("carbon history pagination keeps the qualifying ride count", async ({
+  page,
+}) => {
+  const entry = (id: number, type: string) => ({
+    id,
+    order_id: 42,
+    entry_type: type,
+    points: 1,
+    carbon_kg: 0,
+    rule_version: "carbon-v1",
+    reason: `流水 ${id}`,
+    created_at: "2026-10-27T00:00:00Z",
+  });
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: 2,
+            name: "学生",
+            email: "student@test.local",
+            role: "STUDENT",
+            status: "ACTIVE",
+          },
+        },
+      });
+    if (url.pathname === "/api/dashboard")
+      return route.fulfill({
+        json: {
+          ...regressionDashboard,
+          carbon: {
+            points: 11,
+            carbon_kg: 0.21,
+            distance_m: 1000,
+            ride_count: 1,
+            entries: [entry(101, "ADJUSTMENT"), entry(100, "AWARD")],
+            entries_next_before: 100,
+          },
+        },
+      });
+    if (url.pathname === "/api/carbon/entries") {
+      expect(url.searchParams.get("before")).toBe("100");
+      return route.fulfill({
+        json: { entries: [entry(99, "ADJUSTMENT")], next_before: null },
+      });
+    }
+    if (url.pathname === "/api/leaderboard")
+      return route.fulfill({ json: { rows: [], me: null } });
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "碳积分", exact: true }).click();
+  const count = page.locator(".stat").filter({ hasText: "绿色行程" });
+  await expect(count.locator("strong")).toHaveText("1");
+  await page.getByRole("button", { name: "加载更早积分流水" }).click();
+  await expect(page.getByText("流水 99", { exact: true })).toBeVisible();
+  await expect(count.locator("strong")).toHaveText("1");
+  await expect(
+    page.getByRole("button", { name: "加载更早积分流水" }),
+  ).toHaveCount(0);
+});
+
 test("administrator and operator can load older risk alerts", async ({
   page,
 }) => {

@@ -254,7 +254,7 @@ function PaginatedRows({
   initialRows: Row[];
   initialBefore: number | null;
   path: string;
-  field: "attempts" | "suggestions" | "risks";
+  field: "attempts" | "suggestions" | "risks" | "entries";
   label: string;
   children: (rows: Row[]) => React.ReactNode;
 }) {
@@ -1553,8 +1553,8 @@ export function Carbon({ d, user, run }: Props) {
         />
         <Stat
           label="绿色行程"
-          value={d.carbon.entries.length}
-          detail="每公里 10 分，取整"
+          value={d.carbon.ride_count ?? 0}
+          detail="有效且已支付的行程"
         />
       </div>
       <section className="panel">
@@ -1653,35 +1653,48 @@ export function Carbon({ d, user, run }: Props) {
         <p className="muted">
           发放与人工调整均新增流水，不覆盖历史记录；每条记录保留规则版本和原因。
         </p>
-        <Table
-          rows={d.carbon.entries}
-          columns={[
-            { label: "关联订单", render: (r) => "#" + r.order_id },
-            { label: "类型", render: (r) => <Badge value={r.entry_type} /> },
-            {
-              label: "积分变动",
-              render: (r) => (r.points > 0 ? "+" : "") + r.points,
-            },
-            {
-              label: "减排变动",
-              render: (r) =>
-                (Number(r.carbon_kg) > 0 ? "+" : "") +
-                Number(r.carbon_kg).toFixed(4) +
-                " kg",
-            },
-            {
-              label: "规则 / 原因",
-              render: (r) => (
-                <>
-                  <code>{r.rule_version}</code>
-                  <br />
-                  <small>{r.reason}</small>
-                </>
-              ),
-            },
-            { label: "记录时间", render: (r) => date(r.created_at) },
-          ]}
-        />
+        <PaginatedRows
+          initialRows={d.carbon.entries}
+          initialBefore={d.carbon.entries_next_before ?? null}
+          path="/carbon/entries"
+          field="entries"
+          label="加载更早积分流水"
+        >
+          {(entries) => (
+            <Table
+              rows={entries}
+              columns={[
+                { label: "关联订单", render: (r) => "#" + r.order_id },
+                {
+                  label: "类型",
+                  render: (r) => <Badge value={r.entry_type} />,
+                },
+                {
+                  label: "积分变动",
+                  render: (r) => (r.points > 0 ? "+" : "") + r.points,
+                },
+                {
+                  label: "减排变动",
+                  render: (r) =>
+                    (Number(r.carbon_kg) > 0 ? "+" : "") +
+                    Number(r.carbon_kg).toFixed(4) +
+                    " kg",
+                },
+                {
+                  label: "规则 / 原因",
+                  render: (r) => (
+                    <>
+                      <code>{r.rule_version}</code>
+                      <br />
+                      <small>{r.reason}</small>
+                    </>
+                  ),
+                },
+                { label: "记录时间", render: (r) => date(r.created_at) },
+              ]}
+            />
+          )}
+        </PaginatedRows>
       </section>
     </>
   );

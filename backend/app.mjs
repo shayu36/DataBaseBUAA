@@ -32,7 +32,11 @@ import {
 import { refreshRiskAlerts, actOnRisk, listRiskAlerts } from "./risks.mjs";
 import { saveRoad } from "./roads.mjs";
 import { reviewReturnAttempt, listReturnAttempts } from "./returns.mjs";
-import { reviewOrderQualification, adjustCarbon } from "./carbon.mjs";
+import {
+  reviewOrderQualification,
+  adjustCarbon,
+  listCarbonEntries,
+} from "./carbon.mjs";
 import { updateLeaderboardProfile } from "./profile.mjs";
 import { schemaInfo } from "./schema-info.mjs";
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -249,6 +253,12 @@ export function createApp(pool) {
   app.post("/api/carbon/adjustments", async (req, res) =>
     res.status(201).json(await adjustCarbon(pool, req.user, req.body)),
   );
+  app.get("/api/carbon/entries", async (req, res) => {
+    const { before } = z
+      .object({ before: idSchema.optional() })
+      .parse(req.query);
+    res.json(await listCarbonEntries(pool, req.user, before));
+  });
   app.post("/api/profile/leaderboard", async (req, res) =>
     res.json(await updateLeaderboardProfile(pool, req.user, req.body)),
   );

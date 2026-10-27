@@ -1,7 +1,18 @@
 import { z } from "zod";
 import { AppError, actorTransaction, callProcedure } from "./db.mjs";
+import { sql } from "./sql-statements.mjs";
+import { pageById } from "./pagination.mjs";
 
 const id = z.coerce.number().int().positive().safe();
+
+export async function listCarbonEntries(pool, actor, before = null) {
+  const [rows] = await pool.query(sql("carbon_entries_own"), [
+    actor.id,
+    before,
+    before,
+  ]);
+  return pageById(rows, "entries");
+}
 
 export function reviewOrderQualification(pool, actor, orderId, input) {
   if (actor.role !== "ADMIN")

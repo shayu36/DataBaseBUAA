@@ -18,7 +18,9 @@ export type Dashboard = {
     points: number;
     carbon_kg: number;
     distance_m: number;
+    ride_count: number;
     entries: Row[];
+    entries_next_before: number | null;
   };
   summary: Record<string, number>;
 };

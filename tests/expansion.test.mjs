@@ -20,7 +20,11 @@ import {
   reviewReturnAttempt,
   listReturnAttempts,
 } from "../backend/returns.mjs";
-import { reviewOrderQualification, adjustCarbon } from "../backend/carbon.mjs";
+import {
+  reviewOrderQualification,
+  adjustCarbon,
+  listCarbonEntries,
+} from "../backend/carbon.mjs";
 import { updateLeaderboardProfile } from "../backend/profile.mjs";
 import { leaderboard, dashboard } from "../backend/read-model.mjs";
 import { buildLeaderboard } from "./leaderboard-reference.mjs";
@@ -213,6 +217,51 @@ test("risk alerts paginate and older alerts remain actionable", async () => {
   });
   const refreshed = await listRiskAlerts(pool, first.next_before);
   assert.equal(refreshed.risks.at(-1).status, "DISMISSED");
+});
+
+test("carbon summaries count qualifying rides and page only the rider's history", async () => {
+  await pool.query(
+    "INSERT INTO ride_orders(id,user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(1,2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID'),(2,3,2,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
+  );
+  await business.payRide(pool, student, 1, {
+    idempotency_key: "carbon-page-user",
+  });
+  await business.payRide(pool, operator, 2, {
+    idempotency_key: "carbon-page-other",
+  });
+  await pool.query(`INSERT INTO carbon_transactions(order_id,entry_type,idempotency_key,distance_m,points_change,carbon_kg_change,factor_kg_per_km,rule_version,reason)
+    WITH RECURSIVE n AS (SELECT 1 AS value UNION ALL SELECT value+1 FROM n WHERE value<105)
+    SELECT 1,'ADJUSTMENT',CONCAT('history-',value),0,1,0,0.21,'carbon-v1','人工测试' FROM n`);
+  const initial = await dashboard(pool, student);
+  assert.equal(Number(initial.carbon.ride_count), 1);
+  assert.equal(Number(initial.carbon.distance_m), 1000);
+  assert.equal(Number(initial.carbon.points), 115);
+  assert.equal(initial.carbon.entries.length, 100);
+  const older = await listCarbonEntries(
+    pool,
+    student,
+    initial.carbon.entries_next_before,
+  );
+  assert.equal(older.entries.length, 6);
+  assert.equal(older.next_before, null);
+  assert.ok(
+    [...initial.carbon.entries, ...older.entries].every(
+      (row) => row.order_id === 1,
+    ),
+  );
+  assert.equal((await listCarbonEntries(pool, operator)).entries.length, 1);
+  await pool.query(
+    "UPDATE ride_orders SET qualification_status='UNDER_REVIEW',qualification_reason='重新复核' WHERE id=1",
+  );
+  await reviewOrderQualification(pool, admin, 1, {
+    decision: "EXCLUDED",
+    reason: "人工复核排除",
+  });
+  const excluded = await dashboard(pool, student);
+  assert.equal(Number(excluded.carbon.ride_count), 0);
+  assert.equal(Number(excluded.carbon.distance_m), 0);
+  assert.equal(Number(excluded.carbon.points), 105);
+  assert.equal(Number(excluded.carbon.carbon_kg), 0);
 });
 
 test("old oversized dispatch suggestions become stale with an actionable reason", async () => {

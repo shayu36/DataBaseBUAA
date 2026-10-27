@@ -35,6 +35,9 @@ SELECT a.*,r.user_id,b.code bike_code,z.name zone_name,u.name reviewer_name
 FROM return_attempts a JOIN ride_orders r ON r.id=a.order_id JOIN bikes b ON b.id=r.bike_id
 JOIN parking_zones z ON z.id=a.zone_id LEFT JOIN users u ON u.id=a.reviewer_id
 WHERE r.user_id=? AND (? IS NULL OR a.id<?) ORDER BY a.id DESC LIMIT 101;
+-- name: carbon_entries_own
+SELECT c.*,c.points_change points,c.carbon_kg_change carbon_kg FROM carbon_transactions c
+JOIN ride_orders r ON r.id=c.order_id WHERE r.user_id=? AND (? IS NULL OR c.id<?) ORDER BY c.id DESC LIMIT 101;
 -- name: admin_roads
 SELECT e.*,a.name from_name,b.name to_name FROM road_edges e
 JOIN road_nodes a ON a.id=e.from_node_id JOIN road_nodes b ON b.id=e.to_node_id ORDER BY e.id;

@@ -153,8 +153,11 @@ BEGIN
   SELECT * FROM dispatch_bikes;
   SELECT t.*,b.code bike_code,s.name staff_name FROM maintenance_tickets t JOIN bikes b ON b.id=t.bike_id LEFT JOIN staff s ON s.id=t.staff_id ORDER BY t.id DESC;
  END IF;
- SELECT points,carbon_kg,distance_m FROM v_user_carbon WHERE user_id=p_user;
- SELECT c.*,c.points_change points,c.carbon_kg_change carbon_kg FROM carbon_transactions c JOIN ride_orders r ON r.id=c.order_id WHERE r.user_id=p_user ORDER BY c.id DESC;
+ SELECT COALESCE(SUM(c.points_change),0) AS points,COALESCE(SUM(c.carbon_kg_change),0) AS carbon_kg,
+  COALESCE(SUM(CASE WHEN c.entry_type='AWARD' AND r.status='PAID' AND r.qualification_status='VALID' THEN c.distance_m ELSE 0 END),0) AS distance_m,
+  COUNT(CASE WHEN c.entry_type='AWARD' AND r.status='PAID' AND r.qualification_status='VALID' THEN c.id END) AS ride_count
+ FROM ride_orders r JOIN carbon_transactions c ON c.order_id=r.id WHERE r.user_id=p_user;
+ SELECT c.*,c.points_change points,c.carbon_kg_change carbon_kg FROM carbon_transactions c JOIN ride_orders r ON r.id=c.order_id WHERE r.user_id=p_user ORDER BY c.id DESC LIMIT 101;
  SELECT a.* FROM return_attempts a JOIN ride_orders r ON r.id=a.order_id WHERE r.user_id=p_user ORDER BY a.id DESC LIMIT 101;
  SELECT (SELECT COUNT(*) FROM bikes WHERE status<>'RETIRED') total_bikes,(SELECT COUNT(*) FROM bikes WHERE status='AVAILABLE') available_bikes,
   (SELECT COUNT(*) FROM ride_orders WHERE status='RUNNING') active_rides,
