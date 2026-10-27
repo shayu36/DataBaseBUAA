@@ -722,6 +722,84 @@ test("maintenance operator can view and acknowledge risk alerts", async ({
   ).toBeVisible();
 });
 
+test("work pages keep active tasks visible and load older history", async ({
+  page,
+}) => {
+  const ticket = (id: number, status: string) => ({
+    id,
+    bike_code: `BIKE-${id}`,
+    fault_type: "OTHER",
+    description: `工单 ${id}`,
+    staff_id: 1,
+    staff_name: "员工",
+    status,
+    result: status === "COMPLETED" ? "已处理" : null,
+  });
+  const dispatch = (id: number, status: string) => ({
+    id,
+    source_name: "源站",
+    target_name: "目标站",
+    bike_ids: [1],
+    staff_id: 1,
+    staff_name: "员工",
+    status,
+  });
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: 1,
+            name: "管理员",
+            email: "admin@test.local",
+            role: "ADMIN",
+            status: "ACTIVE",
+          },
+        },
+      });
+    if (url.pathname === "/api/dashboard")
+      return route.fulfill({
+        json: {
+          ...regressionDashboard,
+          tickets: [ticket(1, "OPEN"), ticket(101, "COMPLETED")],
+          tickets_next_before: 101,
+          dispatches: [dispatch(1, "PENDING"), dispatch(201, "COMPLETED")],
+          dispatches_next_before: 201,
+        },
+      });
+    if (url.pathname === "/api/maintenance") {
+      expect(url.searchParams.get("before")).toBe("101");
+      return route.fulfill({
+        json: { tickets: [ticket(100, "COMPLETED")], next_before: null },
+      });
+    }
+    if (url.pathname === "/api/dispatches") {
+      expect(url.searchParams.get("before")).toBe("201");
+      return route.fulfill({
+        json: { dispatches: [dispatch(200, "COMPLETED")], next_before: null },
+      });
+    }
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "维修报修", exact: true }).click();
+  await expect(page.getByText("工单 1", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "加载更早工单" }).click();
+  await expect(page.getByText("工单 100", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "车辆调度", exact: true }).click();
+  await expect(
+    page
+      .getByRole("row")
+      .filter({ hasText: "#1" })
+      .getByRole("button", { name: "开始执行" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "加载更早调度任务" }).click();
+  await expect(
+    page.getByRole("cell", { name: "#200", exact: true }),
+  ).toBeVisible();
+});
+
 test("ride history pagination preserves actionable rides, filtering and export", async ({
   page,
 }) => {

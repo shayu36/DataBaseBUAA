@@ -144,15 +144,25 @@ BEGIN
  SELECT p.* FROM payments p JOIN ride_orders r ON r.id=p.order_id WHERE r.user_id=p_user ORDER BY p.id DESC LIMIT 101;
  IF p_role='STUDENT' THEN
   SELECT s.*,u.email FROM staff s JOIN users u ON u.id=s.user_id WHERE FALSE;
-  SELECT t.*,s.name staff_name,a.name source_name,b.name target_name FROM dispatch_tasks t LEFT JOIN staff s ON s.id=t.staff_id JOIN parking_zones a ON a.id=t.source_zone_id JOIN parking_zones b ON b.id=t.target_zone_id WHERE FALSE;
-  SELECT * FROM dispatch_bikes WHERE FALSE;
-  SELECT t.*,b.code bike_code,s.name staff_name FROM maintenance_tickets t JOIN bikes b ON b.id=t.bike_id LEFT JOIN staff s ON s.id=t.staff_id WHERE t.reporter_id=p_user ORDER BY t.id DESC;
+  SELECT t.*,s.name staff_name,a.name source_name,b.name target_name,JSON_ARRAY() AS bike_ids FROM dispatch_tasks t LEFT JOIN staff s ON s.id=t.staff_id JOIN parking_zones a ON a.id=t.source_zone_id JOIN parking_zones b ON b.id=t.target_zone_id WHERE FALSE;
  ELSE
   SELECT s.*,u.email FROM staff s JOIN users u ON u.id=s.user_id ORDER BY s.id;
-  SELECT t.*,s.name staff_name,a.name source_name,b.name target_name FROM dispatch_tasks t LEFT JOIN staff s ON s.id=t.staff_id JOIN parking_zones a ON a.id=t.source_zone_id JOIN parking_zones b ON b.id=t.target_zone_id ORDER BY t.id DESC;
-  SELECT * FROM dispatch_bikes;
-  SELECT t.*,b.code bike_code,s.name staff_name FROM maintenance_tickets t JOIN bikes b ON b.id=t.bike_id LEFT JOIN staff s ON s.id=t.staff_id ORDER BY t.id DESC;
+  WITH selected AS (
+   SELECT id FROM dispatch_tasks WHERE status IN ('PENDING','IN_PROGRESS')
+   UNION ALL SELECT id FROM (SELECT id FROM dispatch_tasks WHERE status IN ('COMPLETED','CANCELLED') ORDER BY id DESC LIMIT 101) recent
+  )
+  SELECT t.*,s.name staff_name,a.name source_name,b.name target_name,
+   COALESCE((SELECT JSON_ARRAYAGG(d.bike_id) FROM dispatch_bikes d WHERE d.task_id=t.id),JSON_ARRAY()) AS bike_ids
+  FROM selected chosen JOIN dispatch_tasks t ON t.id=chosen.id LEFT JOIN staff s ON s.id=t.staff_id
+  JOIN parking_zones a ON a.id=t.source_zone_id JOIN parking_zones b ON b.id=t.target_zone_id
+  ORDER BY (t.status IN ('COMPLETED','CANCELLED')),t.id DESC;
  END IF;
+ WITH selected AS (
+  SELECT id FROM maintenance_tickets WHERE status<>'COMPLETED' AND (p_role<>'STUDENT' OR reporter_id=p_user)
+  UNION ALL SELECT id FROM (SELECT id FROM maintenance_tickets WHERE status='COMPLETED' AND (p_role<>'STUDENT' OR reporter_id=p_user) ORDER BY id DESC LIMIT 101) recent
+ )
+ SELECT t.*,b.code bike_code,s.name staff_name FROM selected chosen JOIN maintenance_tickets t ON t.id=chosen.id
+ JOIN bikes b ON b.id=t.bike_id LEFT JOIN staff s ON s.id=t.staff_id ORDER BY (t.status='COMPLETED'),t.id DESC;
  SELECT COALESCE(SUM(c.points_change),0) AS points,COALESCE(SUM(c.carbon_kg_change),0) AS carbon_kg,
   COALESCE(SUM(CASE WHEN c.entry_type='AWARD' AND r.status='PAID' AND r.qualification_status='VALID' THEN c.distance_m ELSE 0 END),0) AS distance_m,
   COUNT(CASE WHEN c.entry_type='AWARD' AND r.status='PAID' AND r.qualification_status='VALID' THEN c.id END) AS ride_count

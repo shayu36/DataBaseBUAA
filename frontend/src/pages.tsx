@@ -254,7 +254,14 @@ function PaginatedRows({
   initialRows: Row[];
   initialBefore: number | null;
   path: string;
-  field: "attempts" | "suggestions" | "risks" | "entries" | "rides";
+  field:
+    | "attempts"
+    | "suggestions"
+    | "risks"
+    | "entries"
+    | "rides"
+    | "dispatches"
+    | "tickets";
   label: string;
   children: (rows: Row[]) => React.ReactNode;
 }) {
@@ -519,52 +526,64 @@ export function Maintenance({ d, user, run }: Props) {
             </Field>
           </div>
         )}
-        <Table
-          rows={d.tickets}
-          columns={[
-            {
-              label: "车辆 / 故障",
-              render: (r) => r.bike_code + " · " + r.fault_type,
-            },
-            { label: "描述", render: (r) => r.description },
-            { label: "负责人", render: (r) => r.staff_name || "待分配" },
-            { label: "状态", render: (r) => <Badge value={r.status} /> },
-            {
-              label: "结果 / 操作",
-              render: (r) => (
-                <div className="actions">
-                  {r.result}
-                  {user.role === "ADMIN" &&
-                    !["COMPLETED", "CANCELLED"].includes(r.status) && (
-                      <button
-                        className="tiny"
-                        onClick={() =>
-                          run("/maintenance/" + r.id + "/assign", {
-                            staff_id: staff,
-                          })
-                        }
-                      >
-                        分配
-                      </button>
-                    )}
-                  {user.role !== "STUDENT" &&
-                    r.staff_id &&
-                    r.status !== "COMPLETED" && (
-                      <button
-                        className="tiny"
-                        disabled={!result.trim()}
-                        onClick={() =>
-                          run("/maintenance/" + r.id + "/complete", { result })
-                        }
-                      >
-                        完成维修
-                      </button>
-                    )}
-                </div>
-              ),
-            },
-          ]}
-        />
+        <PaginatedRows
+          initialRows={d.tickets}
+          initialBefore={d.tickets_next_before ?? null}
+          path="/maintenance"
+          field="tickets"
+          label="加载更早工单"
+        >
+          {(tickets) => (
+            <Table
+              rows={tickets}
+              columns={[
+                {
+                  label: "车辆 / 故障",
+                  render: (r) => r.bike_code + " · " + r.fault_type,
+                },
+                { label: "描述", render: (r) => r.description },
+                { label: "负责人", render: (r) => r.staff_name || "待分配" },
+                { label: "状态", render: (r) => <Badge value={r.status} /> },
+                {
+                  label: "结果 / 操作",
+                  render: (r) => (
+                    <div className="actions">
+                      {r.result}
+                      {user.role === "ADMIN" &&
+                        !["COMPLETED", "CANCELLED"].includes(r.status) && (
+                          <button
+                            className="tiny"
+                            onClick={() =>
+                              run("/maintenance/" + r.id + "/assign", {
+                                staff_id: staff,
+                              })
+                            }
+                          >
+                            分配
+                          </button>
+                        )}
+                      {user.role !== "STUDENT" &&
+                        r.staff_id &&
+                        r.status !== "COMPLETED" && (
+                          <button
+                            className="tiny"
+                            disabled={!result.trim()}
+                            onClick={() =>
+                              run("/maintenance/" + r.id + "/complete", {
+                                result,
+                              })
+                            }
+                          >
+                            完成维修
+                          </button>
+                        )}
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          )}
+        </PaginatedRows>
       </section>
     </>
   );
@@ -699,68 +718,82 @@ export function Dispatch({ d, user, run }: Props) {
       )}
       <section className="panel">
         <h2>调度任务</h2>
-        <Table
-          rows={d.dispatches}
-          columns={[
-            { label: "任务", render: (r) => "#" + r.id },
-            {
-              label: "路径",
-              render: (r) => r.source_name + " → " + r.target_name,
-            },
-            { label: "车辆", render: (r) => r.bike_ids.join(", ") },
-            { label: "负责人", render: (r) => r.staff_name || "待分配" },
-            { label: "状态", render: (r) => <Badge value={r.status} /> },
-            {
-              label: "两站库存",
-              render: (r) => <DispatchInventory task={r} />,
-            },
-            {
-              label: "操作",
-              render: (r) => (
-                <div className="actions">
-                  {user.role === "ADMIN" && r.status === "PENDING" && (
-                    <button
-                      className="tiny"
-                      onClick={() =>
-                        run("/dispatches/" + r.id + "/assign", {
-                          staff_id: staff,
-                        })
-                      }
-                    >
-                      分配员工
-                    </button>
-                  )}
-                  {r.status === "PENDING" && (
-                    <button
-                      className="tiny"
-                      onClick={() => run("/dispatches/" + r.id + "/start", {})}
-                    >
-                      开始执行
-                    </button>
-                  )}
-                  {r.status === "IN_PROGRESS" && (
-                    <button
-                      className="tiny"
-                      onClick={() =>
-                        run("/dispatches/" + r.id + "/complete", {})
-                      }
-                    >
-                      确认完成
-                    </button>
-                  )}
-                  {user.role === "ADMIN" && r.status === "PENDING" && (
-                    <button
-                      className="tiny secondary"
-                      onClick={() => run("/dispatches/" + r.id + "/cancel", {})}
-                    >
-                      取消
-                    </button>
-                  )}
-                </div>
-              ),
-            },
-          ]}
-        />
+        <PaginatedRows
+          initialRows={d.dispatches}
+          initialBefore={d.dispatches_next_before ?? null}
+          path="/dispatches"
+          field="dispatches"
+          label="加载更早调度任务"
+        >
+          {(dispatches) => (
+            <Table
+              rows={dispatches}
+              columns={[
+                { label: "任务", render: (r) => "#" + r.id },
+                {
+                  label: "路径",
+                  render: (r) => r.source_name + " → " + r.target_name,
+                },
+                { label: "车辆", render: (r) => r.bike_ids.join(", ") },
+                { label: "负责人", render: (r) => r.staff_name || "待分配" },
+                { label: "状态", render: (r) => <Badge value={r.status} /> },
+                {
+                  label: "两站库存",
+                  render: (r) => <DispatchInventory task={r} />,
+                },
+                {
+                  label: "操作",
+                  render: (r) => (
+                    <div className="actions">
+                      {user.role === "ADMIN" && r.status === "PENDING" && (
+                        <button
+                          className="tiny"
+                          onClick={() =>
+                            run("/dispatches/" + r.id + "/assign", {
+                              staff_id: staff,
+                            })
+                          }
+                        >
+                          分配员工
+                        </button>
+                      )}
+                      {r.status === "PENDING" && (
+                        <button
+                          className="tiny"
+                          onClick={() =>
+                            run("/dispatches/" + r.id + "/start", {})
+                          }
+                        >
+                          开始执行
+                        </button>
+                      )}
+                      {r.status === "IN_PROGRESS" && (
+                        <button
+                          className="tiny"
+                          onClick={() =>
+                            run("/dispatches/" + r.id + "/complete", {})
+                          }
+                        >
+                          确认完成
+                        </button>
+                      )}
+                      {user.role === "ADMIN" && r.status === "PENDING" && (
+                        <button
+                          className="tiny secondary"
+                          onClick={() =>
+                            run("/dispatches/" + r.id + "/cancel", {})
+                          }
+                        >
+                          取消
+                        </button>
+                      )}
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          )}
+        </PaginatedRows>
       </section>
     </>
   );

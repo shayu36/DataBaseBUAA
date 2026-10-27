@@ -23,6 +23,31 @@ export async function paymentHistory(pool, actor, before = null) {
   return pageById(rows, "payments");
 }
 
+export function normalizeDispatches(rows) {
+  for (const row of rows) {
+    const bikes =
+      typeof row.bike_ids === "string"
+        ? JSON.parse(row.bike_ids)
+        : row.bike_ids;
+    row.bike_ids = (bikes ?? []).map(Number).sort((a, b) => a - b);
+  }
+  return rows;
+}
+
+export async function dispatchHistory(pool, before = null) {
+  const [rows] = await pool.query(sql("dispatch_history"), [before, before]);
+  return pageById(normalizeDispatches(rows), "dispatches");
+}
+
+export async function ticketHistory(pool, actor, before = null) {
+  const all = actor.role !== "STUDENT";
+  const [rows] = await pool.query(
+    sql(all ? "ticket_history_all" : "ticket_history_own"),
+    all ? [before, before] : [actor.id, before, before],
+  );
+  return pageById(rows, "tickets");
+}
+
 const fields = [
   "id",
   "bike_code",

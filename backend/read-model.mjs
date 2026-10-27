@@ -5,6 +5,7 @@ import { dispatchSuggestions } from "./dispatch-suggestions.mjs";
 import { listDispatchSuggestions } from "./operations.mjs";
 import { listRiskAlerts } from "./risks.mjs";
 import { pageById } from "./pagination.mjs";
+import { normalizeDispatches } from "./history.mjs";
 export async function dashboard(pool, user) {
   return readSnapshot(pool, async (c) => {
     const [result] = await c.query("CALL sp_dashboard(?,?)", [
@@ -18,7 +19,6 @@ export async function dashboard(pool, user) {
       payments,
       staff,
       dispatches,
-      items,
       tickets,
       carbonRows,
       entries,
@@ -26,13 +26,21 @@ export async function dashboard(pool, user) {
       summaryRows,
       actionableRides,
     ] = result;
-    const bikesByTask = new Map();
-    for (const item of items) {
-      if (!bikesByTask.has(item.task_id)) bikesByTask.set(item.task_id, []);
-      bikesByTask.get(item.task_id).push(item.bike_id);
-    }
-    for (const task of dispatches)
-      task.bike_ids = bikesByTask.get(task.id) || [];
+    normalizeDispatches(dispatches);
+    const activeDispatches = dispatches.filter((row) =>
+      ["PENDING", "IN_PROGRESS"].includes(row.status),
+    );
+    const pastDispatches = pageById(
+      dispatches.filter((row) =>
+        ["COMPLETED", "CANCELLED"].includes(row.status),
+      ),
+      "dispatches",
+    );
+    const activeTickets = tickets.filter((row) => row.status !== "COMPLETED");
+    const pastTickets = pageById(
+      tickets.filter((row) => row.status === "COMPLETED"),
+      "tickets",
+    );
     const carbon = carbonRows[0],
       summary = summaryRows[0],
       attemptPage = pageById(attempts, "attempts"),
@@ -48,8 +56,10 @@ export async function dashboard(pool, user) {
       payments: paymentPage.payments,
       payments_next_before: paymentPage.next_before,
       staff,
-      dispatches,
-      tickets,
+      dispatches: [...activeDispatches, ...pastDispatches.dispatches],
+      dispatches_next_before: pastDispatches.next_before,
+      tickets: [...activeTickets, ...pastTickets.tickets],
+      tickets_next_before: pastTickets.next_before,
       carbon: {
         ...carbon,
         entries: entryPage.entries,

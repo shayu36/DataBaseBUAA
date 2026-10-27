@@ -14,7 +14,9 @@ export type Dashboard = {
   payments_next_before: number | null;
   staff: Row[];
   dispatches: Row[];
+  dispatches_next_before: number | null;
   tickets: Row[];
+  tickets_next_before: number | null;
   attempts: Row[];
   attempts_next_before: number | null;
   carbon: {

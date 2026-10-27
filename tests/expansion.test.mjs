@@ -27,7 +27,12 @@ import {
 } from "../backend/carbon.mjs";
 import { updateLeaderboardProfile } from "../backend/profile.mjs";
 import { leaderboard, dashboard } from "../backend/read-model.mjs";
-import { rideHistory, paymentHistory } from "../backend/history.mjs";
+import {
+  rideHistory,
+  paymentHistory,
+  dispatchHistory,
+  ticketHistory,
+} from "../backend/history.mjs";
 import { buildLeaderboard } from "./leaderboard-reference.mjs";
 import { bikeRisks } from "./risk-reference.mjs";
 import { riskData } from "../backend/risk-data.mjs";
@@ -320,6 +325,68 @@ test("ride and payment history stays paginated while old actionable rides remain
   assert.ok(
     [...data.payments, ...payments.payments].every(
       (payment) => payment.order_id !== 200,
+    ),
+  );
+});
+
+test("work history is paginated without hiding active tasks or exposing student tickets", async () => {
+  await pool.query(
+    "INSERT INTO dispatch_tasks(id,staff_id,source_zone_id,target_zone_id,status) VALUES(1,1,1,2,'PENDING')",
+  );
+  await pool.query("INSERT INTO dispatch_bikes(task_id,bike_id) VALUES(1,2)");
+  await pool.query(`INSERT INTO dispatch_tasks(id,staff_id,source_zone_id,target_zone_id,status,completed_at)
+    WITH RECURSIVE n AS (SELECT 10 AS value UNION ALL SELECT value+1 FROM n WHERE value<114)
+    SELECT value,1,1,2,'COMPLETED',UTC_TIMESTAMP(3) FROM n`);
+  await pool.query(
+    "INSERT INTO dispatch_bikes(task_id,bike_id) SELECT id,1 FROM dispatch_tasks WHERE id BETWEEN 10 AND 114",
+  );
+  await pool.query(
+    "INSERT INTO dispatch_bikes(task_id,bike_id) SELECT id,3 FROM dispatch_tasks WHERE id BETWEEN 10 AND 114",
+  );
+  await pool.query(
+    "INSERT INTO maintenance_tickets(id,bike_id,reporter_id,fault_type,description,status) VALUES(1,4,2,'OTHER','待处理','OPEN')",
+  );
+  await pool.query(`INSERT INTO maintenance_tickets(id,bike_id,reporter_id,staff_id,fault_type,description,status,result,completed_at)
+    WITH RECURSIVE n AS (SELECT 10 AS value UNION ALL SELECT value+1 FROM n WHERE value<114)
+    SELECT value,1,2,1,'OTHER','历史工单','COMPLETED','已处理',UTC_TIMESTAMP(3) FROM n`);
+  await pool.query(
+    "INSERT INTO maintenance_tickets(id,bike_id,reporter_id,staff_id,fault_type,description,status,result,completed_at) VALUES(200,1,3,1,'OTHER','其他用户','COMPLETED','已处理',UTC_TIMESTAMP(3))",
+  );
+  const management = await dashboard(pool, admin);
+  assert.equal(management.dispatches.length, 101);
+  assert.equal(management.dispatches[0].id, 1);
+  assert.deepEqual(management.dispatches[0].bike_ids, [2]);
+  assert.deepEqual(management.dispatches[1].bike_ids, [1, 3]);
+  const olderTasks = await dispatchHistory(
+    pool,
+    management.dispatches_next_before,
+  );
+  assert.equal(olderTasks.dispatches.length, 5);
+  assert.ok(
+    olderTasks.dispatches.every((task) => task.bike_ids.join(",") === "1,3"),
+  );
+  assert.equal(olderTasks.next_before, null);
+  assert.equal(management.tickets.length, 101);
+  assert.equal(management.tickets[0].id, 1);
+  const olderTickets = await ticketHistory(
+    pool,
+    admin,
+    management.tickets_next_before,
+  );
+  assert.equal(olderTickets.tickets.length, 6);
+  const personal = await dashboard(pool, student);
+  assert.deepEqual(personal.dispatches, []);
+  assert.equal(personal.tickets.length, 101);
+  assert.equal(personal.tickets[0].id, 1);
+  const personalOlder = await ticketHistory(
+    pool,
+    student,
+    personal.tickets_next_before,
+  );
+  assert.equal(personalOlder.tickets.length, 5);
+  assert.ok(
+    [...personal.tickets, ...personalOlder.tickets].every(
+      (ticket) => ticket.reporter_id === student.id,
     ),
   );
 });

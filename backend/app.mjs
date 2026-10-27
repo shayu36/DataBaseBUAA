@@ -38,7 +38,13 @@ import {
   listCarbonEntries,
 } from "./carbon.mjs";
 import { updateLeaderboardProfile } from "./profile.mjs";
-import { rideHistory, paymentHistory, exportRides } from "./history.mjs";
+import {
+  rideHistory,
+  paymentHistory,
+  exportRides,
+  dispatchHistory,
+  ticketHistory,
+} from "./history.mjs";
 import { schemaInfo } from "./schema-info.mjs";
 const root = fileURLToPath(new URL("../", import.meta.url));
 export function createApp(pool) {
@@ -141,6 +147,12 @@ export function createApp(pool) {
   app.post("/api/maintenance", async (req, res) =>
     res.status(201).json(await reportFault(pool, req.user, req.body)),
   );
+  app.get("/api/maintenance", async (req, res) => {
+    const { before } = z
+      .object({ before: idSchema.optional() })
+      .parse(req.query);
+    res.json(await ticketHistory(pool, req.user, before));
+  });
   app.post("/api/maintenance/:id/:action", async (req, res) =>
     res.json(
       await maintenanceAction(
@@ -155,6 +167,14 @@ export function createApp(pool) {
   app.post("/api/dispatches", async (req, res) =>
     res.status(201).json(await createDispatch(pool, req.user, req.body)),
   );
+  app.get("/api/dispatches", async (req, res) => {
+    if (req.user.role === "STUDENT")
+      throw new AppError("没有调度查看权限", "FORBIDDEN", 403);
+    const { before } = z
+      .object({ before: idSchema.optional() })
+      .parse(req.query);
+    res.json(await dispatchHistory(pool, before));
+  });
   app.post("/api/dispatches/from-suggestion/:id", async (req, res) =>
     res
       .status(201)
