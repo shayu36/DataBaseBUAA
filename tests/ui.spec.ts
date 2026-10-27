@@ -721,6 +721,76 @@ test("maintenance operator can view and acknowledge risk alerts", async ({
   ).toBeVisible();
 });
 
+test("administrator and operator can load older risk alerts", async ({
+  page,
+}) => {
+  let role = "ADMIN";
+  const risk = (id: number) => ({
+    id,
+    bike_code: `BIKE-${id}`,
+    score: 30,
+    level: "MEDIUM",
+    status: "OPEN",
+    reasons: [],
+  });
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: 1,
+            name: "测试用户",
+            email: "test@test.local",
+            role,
+            status: "ACTIVE",
+          },
+        },
+      });
+    if (url.pathname === "/api/dashboard")
+      return route.fulfill({ json: regressionDashboard });
+    if (url.pathname === "/api/risks") {
+      if (url.searchParams.has("before")) {
+        expect(url.searchParams.get("before")).toBe("101");
+        return route.fulfill({
+          json: { risks: [risk(100)], next_before: null },
+        });
+      }
+      return route.fulfill({ json: { risks: [risk(101)], next_before: 101 } });
+    }
+    if (url.pathname === "/api/analytics")
+      return route.fulfill({
+        json: {
+          hotspots: [],
+          hourly: [],
+          weekday: [],
+          risks: [],
+          risk_alerts: [risk(101)],
+          risk_alerts_next_before: 101,
+          inventory_series: [],
+          snapshot_count: 0,
+          suggestions: [],
+          saved_suggestions: [],
+        },
+      });
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "运营分析", exact: true }).click();
+  await expect(page.getByLabel("风险 101 处置说明")).toBeVisible();
+  await page.getByRole("button", { name: "加载更早风险记录" }).click();
+  await expect(page.getByLabel("风险 100 处置说明")).toBeVisible();
+  role = "OPERATOR";
+  await page.reload();
+  await page.getByRole("button", { name: "风险处置", exact: true }).click();
+  await expect(page.getByLabel("风险 101 处置说明")).toBeVisible();
+  await page.getByRole("button", { name: "加载更早风险记录" }).click();
+  await expect(page.getByLabel("风险 100 处置说明")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "加载更早风险记录" }),
+  ).toHaveCount(0);
+});
+
 test("personal and administrator return histories load older records", async ({
   page,
 }) => {

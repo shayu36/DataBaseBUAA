@@ -243,15 +243,19 @@ export function Rides({ d, run }: Props) {
     </>
   );
 }
-function ReturnAttemptPages({
+function PaginatedRows({
   initialRows,
   initialBefore,
-  scope,
+  path,
+  field,
+  label,
   children,
 }: {
   initialRows: Row[];
   initialBefore: number | null;
-  scope: "own" | "all";
+  path: string;
+  field: "attempts" | "suggestions" | "risks";
+  label: string;
   children: (rows: Row[]) => React.ReactNode;
 }) {
   const [rows, setRows] = useState(initialRows),
@@ -268,21 +272,21 @@ function ReturnAttemptPages({
     return () => {
       generation.current++;
     };
-  }, [initialRows, initialBefore, scope]);
+  }, [initialRows, initialBefore, path, field]);
   async function loadMore() {
     const current = generation.current;
     setLoading(true);
     setError("");
     try {
       const page = await api(
-        `/return-attempts?scope=${scope}&before=${before}`,
+        `${path}${path.includes("?") ? "&" : "?"}before=${before}`,
       );
       if (current !== generation.current) return;
-      setRows((existing) => [...existing, ...page.attempts]);
+      setRows((existing) => [...existing, ...page[field]]);
       setBefore(page.next_before);
     } catch (e) {
       if (current === generation.current)
-        setError(e instanceof Error ? e.message : "读取归还记录失败");
+        setError(e instanceof Error ? e.message : "读取历史记录失败");
     } finally {
       if (current === generation.current) setLoading(false);
     }
@@ -297,7 +301,7 @@ function ReturnAttemptPages({
       )}
       {before != null && (
         <button className="secondary" disabled={loading} onClick={loadMore}>
-          {loading ? "正在读取…" : "加载更早归还记录"}
+          {loading ? "正在读取…" : label}
         </button>
       )}
     </>
@@ -386,10 +390,12 @@ export function Orders({ d }: Props) {
         ]}
       />
       <h3>电子围栏归还尝试</h3>
-      <ReturnAttemptPages
+      <PaginatedRows
         initialRows={d.attempts}
         initialBefore={d.attempts_next_before ?? null}
-        scope="own"
+        path="/return-attempts?scope=own"
+        field="attempts"
+        label="加载更早归还记录"
       >
         {(attempts) => (
           <Table
@@ -410,7 +416,7 @@ export function Orders({ d }: Props) {
             ]}
           />
         )}
-      </ReturnAttemptPages>
+      </PaginatedRows>
     </section>
   );
 }
@@ -938,62 +944,43 @@ function SavedSuggestions({
   initialBefore: number | null;
   run: Props["run"];
 }) {
-  const [rows, setRows] = useState(initialRows),
-    [before, setBefore] = useState(initialBefore),
-    [loading, setLoading] = useState(false),
-    [error, setError] = useState("");
-  async function loadMore() {
-    setLoading(true);
-    setError("");
-    try {
-      const page = await api(`/analytics/suggestions?before=${before}`);
-      setRows((current) => [...current, ...page.suggestions]);
-      setBefore(page.next_before);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "读取建议失败");
-    } finally {
-      setLoading(false);
-    }
-  }
   return (
-    <>
-      <Table
-        rows={rows}
-        columns={[
-          {
-            label: "建议",
-            render: (r) =>
-              `${r.source_name} → ${r.target_name} · ${r.quantity} 辆`,
-          },
-          {
-            label: "依据",
-            render: (r) =>
-              `借 ${r.borrow_count} / 还 ${r.return_count} · 目标库存 ${r.desired_inventory}`,
-          },
-          { label: "版本", render: (r) => r.algorithm_version },
-          { label: "状态", render: (r) => <Badge value={r.status} /> },
-          {
-            label: "操作",
-            render: (r) =>
-              r.status === "OPEN" ? (
-                <SuggestionActions suggestion={r} run={run} />
-              ) : (
-                r.resolution_note || "已处理"
-              ),
-          },
-        ]}
-      />
-      {error && (
-        <div className="error" role="alert">
-          {error}
-        </div>
+    <PaginatedRows
+      initialRows={initialRows}
+      initialBefore={initialBefore}
+      path="/analytics/suggestions"
+      field="suggestions"
+      label="加载更早建议"
+    >
+      {(rows) => (
+        <Table
+          rows={rows}
+          columns={[
+            {
+              label: "建议",
+              render: (r) =>
+                `${r.source_name} → ${r.target_name} · ${r.quantity} 辆`,
+            },
+            {
+              label: "依据",
+              render: (r) =>
+                `借 ${r.borrow_count} / 还 ${r.return_count} · 目标库存 ${r.desired_inventory}`,
+            },
+            { label: "版本", render: (r) => r.algorithm_version },
+            { label: "状态", render: (r) => <Badge value={r.status} /> },
+            {
+              label: "操作",
+              render: (r) =>
+                r.status === "OPEN" ? (
+                  <SuggestionActions suggestion={r} run={run} />
+                ) : (
+                  r.resolution_note || "已处理"
+                ),
+            },
+          ]}
+        />
       )}
-      {before != null && (
-        <button className="secondary" disabled={loading} onClick={loadMore}>
-          {loading ? "正在读取…" : "加载更早建议"}
-        </button>
-      )}
-    </>
+    </PaginatedRows>
   );
 }
 function RiskActions({ risk, run }: { risk: Row; run: Props["run"] }) {
@@ -1075,7 +1062,17 @@ export function RiskAlerts({ d, run }: Props) {
       <h2>车辆风险预警与处置</h2>
       <p className="muted">根据风险告警核对车辆，并记录处理结果。</p>
       <Remote path="/risks" refreshKey={d}>
-        {(v) => <RiskTable risks={v.risks || []} run={run} />}
+        {(v) => (
+          <PaginatedRows
+            initialRows={v.risks || []}
+            initialBefore={v.next_before ?? null}
+            path="/risks"
+            field="risks"
+            label="加载更早风险记录"
+          >
+            {(risks) => <RiskTable risks={risks} run={run} />}
+          </PaginatedRows>
+        )}
       </Remote>
     </section>
   );
@@ -1371,7 +1368,15 @@ export function Analytics({ d, run }: Props) {
                   运行规则并保存告警
                 </button>
               </div>
-              <RiskTable risks={v.risk_alerts || []} run={run} />
+              <PaginatedRows
+                initialRows={v.risk_alerts || []}
+                initialBefore={v.risk_alerts_next_before ?? null}
+                path="/risks"
+                field="risks"
+                label="加载更早风险记录"
+              >
+                {(risks) => <RiskTable risks={risks} run={run} />}
+              </PaginatedRows>
             </section>
           </>
         )}
@@ -2107,10 +2112,12 @@ export function Admin({ d, run }: Props) {
       </section>
       <section className="panel">
         <h2>电子围栏违规复核</h2>
-        <ReturnAttemptPages
+        <PaginatedRows
           initialRows={attempts}
           initialBefore={attemptsBefore}
-          scope="all"
+          path="/return-attempts?scope=all"
+          field="attempts"
+          label="加载更早归还记录"
         >
           {(attempts) => (
             <Table
@@ -2167,7 +2174,7 @@ export function Admin({ d, run }: Props) {
               ]}
             />
           )}
-        </ReturnAttemptPages>
+        </PaginatedRows>
       </section>
       <section className="panel">
         <h2>异常行程资格复核</h2>

@@ -66,7 +66,8 @@ export async function analytics(pool, filter) {
       ...hot,
       suggestions,
       risks,
-      risk_alerts: riskAlerts,
+      risk_alerts: riskAlerts.risks,
+      risk_alerts_next_before: riskAlerts.next_before,
       saved_suggestions: savedSuggestions.suggestions,
       saved_suggestions_next_before: savedSuggestions.next_before,
     };

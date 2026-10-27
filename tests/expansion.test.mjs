@@ -11,7 +11,11 @@ import {
   confirmDispatchSuggestion,
   dismissDispatchSuggestion,
 } from "../backend/operations.mjs";
-import { refreshRiskAlerts, actOnRisk } from "../backend/risks.mjs";
+import {
+  refreshRiskAlerts,
+  actOnRisk,
+  listRiskAlerts,
+} from "../backend/risks.mjs";
 import {
   reviewReturnAttempt,
   listReturnAttempts,
@@ -190,6 +194,25 @@ test("return attempts paginate without exposing other users and older records re
   });
   const reviewed = await listReturnAttempts(pool, student, own.next_before);
   assert.equal(reviewed.attempts.at(-1).review_status, "RESOLVED");
+});
+
+test("risk alerts paginate and older alerts remain actionable", async () => {
+  await pool.query(`INSERT INTO risk_alerts(bike_id,score,level,reasons,ticket_ids,fingerprint,rule_version,recommendation)
+    WITH RECURSIVE n AS (SELECT 1 AS value UNION ALL SELECT value+1 FROM n WHERE value<105)
+    SELECT 1,30,'MEDIUM',JSON_ARRAY(),JSON_ARRAY(),SHA2(CONCAT('pagination-',value),256),'risk-v1','请检查' FROM n`);
+  const first = await listRiskAlerts(pool);
+  const older = await listRiskAlerts(pool, first.next_before);
+  assert.equal(first.risks.length, 100);
+  assert.equal(older.risks.length, 5);
+  assert.equal(older.next_before, null);
+  const ids = [...first.risks, ...older.risks].map((row) => row.id);
+  assert.equal(new Set(ids).size, 105);
+  assert.ok(ids.every((id, i) => i === 0 || ids[i - 1] > id));
+  await actOnRisk(pool, admin, older.risks.at(-1).id, "dismiss", {
+    note: "已核对历史告警",
+  });
+  const refreshed = await listRiskAlerts(pool, first.next_before);
+  assert.equal(refreshed.risks.at(-1).status, "DISMISSED");
 });
 
 test("old oversized dispatch suggestions become stale with an actionable reason", async () => {

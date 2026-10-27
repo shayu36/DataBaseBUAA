@@ -211,7 +211,10 @@ export function createApp(pool) {
   app.get("/api/risks", async (req, res) => {
     if (req.user.role === "STUDENT")
       throw new AppError("没有风险查看权限", "FORBIDDEN", 403);
-    res.json({ risks: await listRiskAlerts(pool) });
+    const { before } = z
+      .object({ before: idSchema.optional() })
+      .parse(req.query);
+    res.json(await listRiskAlerts(pool, before));
   });
   app.post("/api/risks/:id/:action", async (req, res) =>
     res.json(

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { sql } from "./sql-statements.mjs";
 import { AppError, actorTransaction, callProcedure } from "./db.mjs";
 import { riskData } from "./risk-data.mjs";
+import { pageById } from "./pagination.mjs";
 
 const RULE_VERSION = "risk-v1";
 export function refreshRiskAlerts(pool, actor, now = new Date()) {
@@ -88,7 +89,7 @@ export function actOnRisk(pool, actor, riskId, action, input = {}) {
     ),
   );
 }
-export async function listRiskAlerts(pool) {
-  const [rows] = await pool.query(sql("risk_alerts"));
-  return rows;
+export async function listRiskAlerts(pool, before = null) {
+  const [rows] = await pool.query(sql("risk_alerts"), [before, before]);
+  return pageById(rows, "risks");
 }
