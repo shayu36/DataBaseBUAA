@@ -11,7 +11,7 @@
 - POST /carbon/adjustments {order_id,points_change,carbon_kg_change,reason,idempotency_key}；人工扣减不得超过账户余额，相同请求编号内容不一致返回 `IDEMPOTENCY_CONFLICT`。
 - POST /maintenance {bike_id,fault_type:'BRAKE'|'TIRE'|'LOCK'|'CHAIN'|'OTHER',description} -> {id}
 - POST /maintenance/:id/assign {staff_id}; POST /maintenance/:id/complete {result}; 都返回 {ok:true}
-- POST /analytics/suggestions {days? 或 start/end?,dayType?,startHour?,endHour?,zoneId?} -> {suggestions,filter}；GET /analytics/suggestions -> {suggestions}；POST /analytics/suggestions/:id/dismiss {note} -> {id,status,resolution_note}。均需管理员权限；不执行建议须记录原因。
+- POST /analytics/suggestions {days? 或 start/end?,dayType?,startHour?,endHour?,zoneId?} -> {suggestions,filter}；GET /analytics/suggestions -> {suggestions}；POST /analytics/suggestions/:id/dismiss {note} -> {id,status,resolution_note}。均需管理员权限；不执行建议须记录原因。超过 100 辆的分配拆成多条建议；确认升级前的超量建议会将其标记为过期，需重新生成。
 - POST /dispatches/from-suggestion/:id {staff_id?} -> {id,suggestion_id}；管理员确认建议时重新校验车辆和目标容量，失效返回 SUGGESTION_STALE。
 - POST /dispatches {source_zone_id,target_zone_id,bike_ids:number[],staff_id?:number} -> {id}; POST /dispatches/:id/assign {staff_id}; POST /dispatches/:id/start {}; POST /dispatches/:id/complete {}; POST /dispatches/:id/cancel {} -> {ok:true}
 - POST /admin/zones {id?:number,name,location,x,y,radius,capacity,status:'ACTIVE'|'CLOSED'} -> {id}；坐标和半径按米保留两位小数，输入半径最小为 0.005 米；POST /admin/bikes {id?:number,code,zone_id,deployed_at?:string,status?:'AVAILABLE'|'RETIRED'} -> {id}

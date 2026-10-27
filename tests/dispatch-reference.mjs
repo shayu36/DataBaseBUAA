@@ -41,15 +41,16 @@ export function dispatchSuggestions(zones, demand = []) {
     for (const source of sources) {
       const quantity = Math.min(source.supply, target.need, target.free);
       if (quantity <= 0 || source.id === target.id) continue;
-      result.push({
-        source_zone_id: source.id,
-        target_zone_id: target.id,
-        source_name: source.name,
-        target_name: target.name,
-        quantity,
-        desired_inventory: target.desired,
-        reason: `目标库存 ${target.available}，建议保有 ${target.desired}；按容量、预留车位及历史净借车需求估算`,
-      });
+      for (let remaining = quantity; remaining > 0; remaining -= 100)
+        result.push({
+          source_zone_id: source.id,
+          target_zone_id: target.id,
+          source_name: source.name,
+          target_name: target.name,
+          quantity: Math.min(100, remaining),
+          desired_inventory: target.desired,
+          reason: `目标库存 ${target.available}，建议保有 ${target.desired}；按容量、预留车位及历史净借车需求估算`,
+        });
       source.supply -= quantity;
       target.need -= quantity;
       target.free -= quantity;

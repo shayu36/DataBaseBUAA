@@ -152,6 +152,14 @@ prepare_suggestion: BEGIN
  SELECT status,source_zone_id,target_zone_id,quantity INTO v_status,v_source,v_target,v_quantity FROM dispatch_suggestions WHERE id=p_id FOR UPDATE;
  IF v_status IS NULL THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='SUGGESTION_NOT_FOUND'; END IF;
  IF v_status<>'OPEN' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='SUGGESTION_NOT_OPEN'; END IF;
+ IF v_quantity>100 THEN
+  SET v_note='旧建议超过单次调度上限，请重新生成建议';
+  UPDATE dispatch_suggestions SET status='STALE',resolution_note=v_note,resolved_at=UTC_TIMESTAMP(3) WHERE id=p_id;
+  INSERT INTO audit_logs(actor_id,action,entity_type,entity_id,detail)
+  VALUES(p_actor,'SUGGESTION_STALE','dispatch_suggestions',p_id,JSON_OBJECT('note',v_note));
+  SELECT v_note AS stale;
+  LEAVE prepare_suggestion;
+ END IF;
  SELECT status INTO v_source_status FROM parking_zones WHERE id=v_source FOR UPDATE;
  SELECT status,capacity INTO v_target_status,v_capacity FROM parking_zones WHERE id=v_target FOR UPDATE;
  CALL sp_zone_load(v_target,v_occupied,v_reserved);
@@ -183,12 +191,15 @@ END$$
 DELIMITER ;
 
 -- Greedy allocations are intersections of cumulative supply and demand ranges.
+-- Capacity is at most 1000, so ten 100-bike chunks cover every allocation.
 DROP PROCEDURE IF EXISTS sp_dispatch_suggestions;
 DELIMITER $$
 CREATE PROCEDURE sp_dispatch_suggestions(IN p_zones JSON, IN p_demand JSON)
 SQL SECURITY INVOKER
 BEGIN
- WITH base AS (
+ WITH RECURSIVE chunks AS (
+  SELECT 0 AS n UNION ALL SELECT n+1 FROM chunks WHERE n<9
+ ), base AS (
   SELECT z.id,z.name,z.capacity,z.available,z.occupied,z.reserved,
    LEAST(CEIL(z.capacity*0.8),GREATEST(CEIL(z.capacity*0.4),CEIL(z.capacity*0.4+(COALESCE(d.borrow_count,0)-COALESCE(d.return_count,0))*0.2))) AS desired
   FROM JSON_TABLE(p_zones,'$[*]' COLUMNS(id BIGINT UNSIGNED PATH '$.id',name VARCHAR(60) PATH '$.name',capacity INT PATH '$.capacity',
@@ -208,9 +219,10 @@ BEGIN
    t.desired AS desired_inventory,t.available AS target_available,t.need AS sort_need,s.supply AS sort_supply
   FROM targets t JOIN sources s ON s.supply_end>t.demand_end-LEAST(t.need,t.free) AND t.demand_end>s.supply_end-s.supply
  )
- SELECT source_zone_id,target_zone_id,source_name,target_name,quantity,desired_inventory,
-  CONCAT('目标库存 ',target_available,'，建议保有 ',desired_inventory,'；按容量、预留车位及历史净借车需求估算') AS reason
- FROM allocations WHERE quantity>0 ORDER BY sort_need DESC,target_zone_id,sort_supply DESC,source_zone_id;
+ SELECT a.source_zone_id,a.target_zone_id,a.source_name,a.target_name,LEAST(100,a.quantity-chunks.n*100) AS quantity,a.desired_inventory,
+  CONCAT('目标库存 ',a.target_available,'，建议保有 ',a.desired_inventory,'；按容量、预留车位及历史净借车需求估算') AS reason
+ FROM allocations a JOIN chunks ON chunks.n*100<a.quantity
+ ORDER BY a.sort_need DESC,a.target_zone_id,a.sort_supply DESC,a.source_zone_id,chunks.n;
 END$$
 DELIMITER ;
 

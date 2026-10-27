@@ -106,6 +106,47 @@ test("saved dispatch suggestions keep their basis and create a revalidated task"
   assert.ok(saved.source_available > saved.desired_inventory);
 });
 
+test("large dispatch allocations are split into executable suggestions", async () => {
+  await pool.query(
+    "UPDATE parking_zones SET capacity=CASE id WHEN 1 THEN 500 ELSE 750 END",
+  );
+  await pool.query("UPDATE bikes SET current_zone_id=1 WHERE id=9");
+  await pool.query(`INSERT INTO bikes(code,deployed_at,current_zone_id)
+    WITH RECURSIVE n AS (SELECT 1 AS value UNION ALL SELECT value+1 FROM n WHERE value<441)
+    SELECT CONCAT('BULK-',value),'2026-01-01',1 FROM n`);
+  const generated = await createDispatchSuggestions(pool, admin, { days: 7 });
+  assert.deepEqual(
+    generated.suggestions.map((item) => item.quantity),
+    [100, 100, 50],
+  );
+  for (const suggestion of generated.suggestions) {
+    await confirmDispatchSuggestion(pool, admin, suggestion.id, 1);
+  }
+  const [[totals]] = await pool.query(
+    "SELECT COUNT(DISTINCT task_id) tasks,COUNT(*) bikes FROM dispatch_bikes",
+  );
+  assert.deepEqual(totals, { tasks: 3, bikes: 250 });
+});
+
+test("old oversized dispatch suggestions become stale with an actionable reason", async () => {
+  const generated = await createDispatchSuggestions(pool, admin, { days: 7 });
+  const suggestion = generated.suggestions[0];
+  await pool.query("UPDATE dispatch_suggestions SET quantity=101 WHERE id=?", [
+    suggestion.id,
+  ]);
+  await assert.rejects(
+    confirmDispatchSuggestion(pool, admin, suggestion.id, 1),
+    { code: "SUGGESTION_STALE" },
+  );
+  const [[saved]] = await pool.query(
+    "SELECT status,resolution_note,task_id FROM dispatch_suggestions WHERE id=?",
+    [suggestion.id],
+  );
+  assert.equal(saved.status, "STALE");
+  assert.match(saved.resolution_note, /重新生成/);
+  assert.equal(saved.task_id, null);
+});
+
 test("stale dispatch suggestion is persisted without creating a task", async () => {
   const generated = await createDispatchSuggestions(pool, admin, { days: 7 });
   assert.ok(generated.suggestions.length > 0);
