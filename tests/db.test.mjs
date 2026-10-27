@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ledgerTransaction, readSnapshot } from "../backend/db.mjs";
+import { applyFeatureMigrations } from "../backend/feature-migrations.mjs";
 
 function fixture(releaseResult, options = {}) {
   const events = [];
@@ -24,6 +25,18 @@ function fixture(releaseResult, options = {}) {
         if (releaseResult instanceof Error) throw releaseResult;
         return [[{ released: releaseResult }]];
       }
+      if (options.migration && statement.includes("CREATE PROCEDURE")) {
+        events.push("create");
+        return [];
+      }
+      if (options.migration && statement.startsWith("CALL ??")) {
+        events.push("migrate");
+        return [[[{ migrated: 1 }]]];
+      }
+      if (options.migration && statement.startsWith("DROP PROCEDURE")) {
+        events.push("drop");
+        return [];
+      }
       throw new Error("意外的数据库操作");
     },
     async beginTransaction() {
@@ -44,6 +57,7 @@ function fixture(releaseResult, options = {}) {
     },
   };
   return {
+    connection,
     pool: {
       async getConnection() {
         return connection;
@@ -57,6 +71,35 @@ test("a successful transaction unlocks before returning the connection", async (
   const { pool, events } = fixture(1);
   assert.equal(await ledgerTransaction(pool, async () => 42), 42);
   assert.deepEqual(events, ["begin", "commit", "unlock", "release"]);
+});
+
+test("migration discards connections when lock acquisition is uncertain", async () => {
+  for (const pooled of [true, false]) {
+    const failure = new Error("迁移锁响应中断");
+    const { pool, connection, events } = fixture(1, { lockError: failure });
+    await assert.rejects(
+      applyFeatureMigrations(pooled ? pool : connection),
+      (error) => error === failure,
+    );
+    assert.deepEqual(events, ["destroy"]);
+  }
+});
+
+test("migration returns a pooled connection when its lock is busy", async () => {
+  const { pool, events } = fixture(1, { acquired: 0 });
+  await assert.rejects(
+    applyFeatureMigrations(pool),
+    /Could not acquire migration lock/,
+  );
+  assert.deepEqual(events, ["release"]);
+});
+
+test("migration drops its temporary procedure and releases a confirmed lock", async () => {
+  const { pool, events } = fixture(1, { migration: true });
+  assert.deepEqual(await applyFeatureMigrations(pool), {
+    applied: ["pdf_expansion@10"],
+  });
+  assert.deepEqual(events, ["create", "migrate", "drop", "unlock", "release"]);
 });
 
 test("uncertain lock acquisition discards the connection", async () => {

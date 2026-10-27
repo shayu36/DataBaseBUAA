@@ -15,8 +15,10 @@ export async function applyFeatureMigrations(db) {
     typeof db.getConnection === "function" ? await db.getConnection() : db;
   let created = false;
   let locked = false;
+  let lockUncertain = true;
   try {
     const [[{ acquired }]] = await connection.query(sql("acquire_lock"));
+    lockUncertain = false;
     if (acquired !== 1) throw new Error("Could not acquire migration lock");
     locked = true;
     await connection.query(
@@ -28,18 +30,22 @@ export async function applyFeatureMigrations(db) {
     ]);
     return { applied: result[0][0].migrated ? ["pdf_expansion@10"] : [] };
   } finally {
-    try {
-      if (created)
-        await connection.query(sql("drop_temporary_procedure"), [name]);
-    } finally {
-      let destroyed = false;
+    if (lockUncertain) {
+      connection.destroy();
+    } else {
       try {
-        if (locked) await releaseNamedLock(connection);
-      } catch (error) {
-        destroyed = true;
-        throw error;
+        if (created)
+          await connection.query(sql("drop_temporary_procedure"), [name]);
       } finally {
-        if (connection !== db && !destroyed) connection.release();
+        let destroyed = false;
+        try {
+          if (locked) await releaseNamedLock(connection);
+        } catch (error) {
+          destroyed = true;
+          throw error;
+        } finally {
+          if (connection !== db && !destroyed) connection.release();
+        }
       }
     }
   }
