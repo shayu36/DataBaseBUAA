@@ -26,7 +26,7 @@ export async function applyFeatureMigrations(db) {
     const [result] = await connection.query(sql("call_temporary_procedure"), [
       name,
     ]);
-    return { applied: result[0][0].migrated ? ["pdf_expansion@9"] : [] };
+    return { applied: result[0][0].migrated ? ["pdf_expansion@10"] : [] };
   } finally {
     try {
       if (created)

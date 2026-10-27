@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
  password_hash VARCHAR(100) NOT NULL, role ENUM('STUDENT','ADMIN','OPERATOR') NOT NULL DEFAULT 'STUDENT',
  status ENUM('ACTIVE','SUSPENDED') NOT NULL DEFAULT 'ACTIVE',
  leaderboard_alias VARCHAR(40) NOT NULL DEFAULT '骑行者', leaderboard_visible BOOLEAN NOT NULL DEFAULT FALSE,
- created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+ created_at DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3))
 ) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS parking_zones (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, name VARCHAR(60) NOT NULL UNIQUE, location VARCHAR(160) NOT NULL,
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS bikes (
 CREATE TABLE IF NOT EXISTS ride_orders (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id BIGINT UNSIGNED NOT NULL, bike_id BIGINT UNSIGNED NOT NULL,
  start_zone_id BIGINT UNSIGNED NOT NULL, end_zone_id BIGINT UNSIGNED NULL,
- started_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), ended_at DATETIME(3) NULL,
+ started_at DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)), ended_at DATETIME(3) NULL,
  amount_cents INT NOT NULL DEFAULT 0, distance_m INT NOT NULL DEFAULT 0,
  distance_source ENUM('ROUTE_ESTIMATE') NOT NULL DEFAULT 'ROUTE_ESTIMATE', route_mode ENUM('shortest','safe','comfortable') NOT NULL DEFAULT 'shortest',
  qualification_status ENUM('VALID','UNDER_REVIEW','EXCLUDED') NOT NULL DEFAULT 'VALID',
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS ride_orders (
 CREATE TABLE IF NOT EXISTS payments (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, order_id BIGINT UNSIGNED NOT NULL UNIQUE,
  idempotency_key VARCHAR(100) NOT NULL UNIQUE, amount_cents INT NOT NULL,
- paid_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), method ENUM('SIMULATED') NOT NULL DEFAULT 'SIMULATED',
+ paid_at DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)), method ENUM('SIMULATED') NOT NULL DEFAULT 'SIMULATED',
  FOREIGN KEY(order_id) REFERENCES ride_orders(id), CHECK(amount_cents>0)
 ) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS staff (
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS dispatch_tasks (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, staff_id BIGINT UNSIGNED NULL,
  source_zone_id BIGINT UNSIGNED NOT NULL, target_zone_id BIGINT UNSIGNED NOT NULL,
  status ENUM('PENDING','IN_PROGRESS','COMPLETED','CANCELLED') NOT NULL DEFAULT 'PENDING',
- created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), started_at DATETIME(3) NULL, completed_at DATETIME(3) NULL,
+ created_at DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)), started_at DATETIME(3) NULL, completed_at DATETIME(3) NULL,
  inventory_created JSON NULL, inventory_started JSON NULL, inventory_completed JSON NULL,
  FOREIGN KEY(staff_id) REFERENCES staff(id), FOREIGN KEY(source_zone_id) REFERENCES parking_zones(id), FOREIGN KEY(target_zone_id) REFERENCES parking_zones(id),
  CHECK(source_zone_id<>target_zone_id), CHECK(status<>'IN_PROGRESS' OR (staff_id IS NOT NULL AND started_at IS NOT NULL)),
@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS maintenance_tickets (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, bike_id BIGINT UNSIGNED NOT NULL, reporter_id BIGINT UNSIGNED NOT NULL, staff_id BIGINT UNSIGNED NULL,
  fault_type ENUM('BRAKE','TIRE','LOCK','CHAIN','OTHER') NOT NULL, description VARCHAR(500) NOT NULL,
  status ENUM('OPEN','ASSIGNED','COMPLETED') NOT NULL DEFAULT 'OPEN', result VARCHAR(500) NULL,
- created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), completed_at DATETIME(3) NULL,
+ created_at DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)), completed_at DATETIME(3) NULL,
  active_bike BIGINT UNSIGNED GENERATED ALWAYS AS (CASE WHEN status<>'COMPLETED' THEN bike_id END) STORED UNIQUE,
  FOREIGN KEY(bike_id) REFERENCES bikes(id), FOREIGN KEY(reporter_id) REFERENCES users(id), FOREIGN KEY(staff_id) REFERENCES staff(id),
  INDEX idx_ticket_bike_time(bike_id,created_at), INDEX idx_ticket_created_bike(created_at,bike_id), INDEX idx_ticket_completed_bike(status,bike_id,completed_at),
@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS maintenance_tickets (
 ) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS zone_snapshots (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, zone_id BIGINT UNSIGNED NOT NULL,
- available INT NOT NULL, occupied INT NOT NULL, capacity INT NOT NULL, captured_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+ available INT NOT NULL, occupied INT NOT NULL, capacity INT NOT NULL, captured_at DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)),
  source ENUM('LIVE','DEMO') NOT NULL DEFAULT 'LIVE', FOREIGN KEY(zone_id) REFERENCES parking_zones(id), INDEX idx_snapshot_zone_time(zone_id,captured_at), INDEX idx_snapshot_time(captured_at),
  CHECK(available>=0 AND occupied>=available AND capacity>0 AND occupied<=capacity)
 ) ENGINE=InnoDB;
@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS return_attempts (
  location_captured_at DATETIME(3) NOT NULL, location_source ENUM('MAP_SIMULATION','DEVICE_GPS','MANUAL','HISTORICAL_SIMULATION') NOT NULL,
  review_status ENUM('PENDING','RESOLVED','DISMISSED') NOT NULL DEFAULT 'PENDING',
  reviewer_id BIGINT UNSIGNED NULL, review_note VARCHAR(300) NULL, reviewed_at DATETIME(3) NULL,
- created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), FOREIGN KEY(order_id) REFERENCES ride_orders(id), FOREIGN KEY(zone_id) REFERENCES parking_zones(id), FOREIGN KEY(reviewer_id) REFERENCES users(id),
+ created_at DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)), FOREIGN KEY(order_id) REFERENCES ride_orders(id), FOREIGN KEY(zone_id) REFERENCES parking_zones(id), FOREIGN KEY(reviewer_id) REFERENCES users(id),
  CONSTRAINT chk_return_review_state CHECK((review_status='PENDING' AND reviewer_id IS NULL AND reviewed_at IS NULL) OR (review_status<>'PENDING' AND reviewer_id IS NOT NULL AND reviewed_at IS NOT NULL AND review_note IS NOT NULL))
 ) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS road_nodes (
@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS dispatch_suggestions (
  borrow_count INT NOT NULL, return_count INT NOT NULL, desired_inventory INT NOT NULL,
  window_start DATETIME(3) NOT NULL, window_end DATETIME(3) NOT NULL, reason VARCHAR(500) NOT NULL, algorithm_version VARCHAR(30) NOT NULL,
  status ENUM('OPEN','CONFIRMED','STALE','DISMISSED') NOT NULL DEFAULT 'OPEN', task_id BIGINT UNSIGNED NULL, created_by BIGINT UNSIGNED NOT NULL,
- resolution_note VARCHAR(500) NULL, created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), resolved_at DATETIME(3) NULL,
+ resolution_note VARCHAR(500) NULL, created_at DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)), resolved_at DATETIME(3) NULL,
  FOREIGN KEY(source_zone_id) REFERENCES parking_zones(id), FOREIGN KEY(target_zone_id) REFERENCES parking_zones(id),
  FOREIGN KEY(task_id) REFERENCES dispatch_tasks(id), FOREIGN KEY(created_by) REFERENCES users(id), CHECK(quantity>0 AND source_zone_id<>target_zone_id),
  CONSTRAINT chk_suggestion_state CHECK((status='OPEN' AND task_id IS NULL AND resolved_at IS NULL) OR (status='CONFIRMED' AND task_id IS NOT NULL AND resolved_at IS NOT NULL) OR (status IN('STALE','DISMISSED') AND task_id IS NULL AND resolved_at IS NOT NULL))
@@ -128,7 +128,7 @@ CREATE TABLE IF NOT EXISTS risk_alerts (
  fingerprint CHAR(64) NOT NULL, open_fingerprint CHAR(64) GENERATED ALWAYS AS (CASE WHEN status IN('OPEN','ACKNOWLEDGED') THEN fingerprint END) STORED UNIQUE,
  rule_version VARCHAR(30) NOT NULL, status ENUM('OPEN','ACKNOWLEDGED','RESOLVED','DISMISSED') NOT NULL DEFAULT 'OPEN',
  recommendation VARCHAR(300) NOT NULL, handler_id BIGINT UNSIGNED NULL, maintenance_ticket_id BIGINT UNSIGNED NULL,
- resolution_note VARCHAR(500) NULL, triggered_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), acknowledged_at DATETIME(3) NULL, resolved_at DATETIME(3) NULL,
+ resolution_note VARCHAR(500) NULL, triggered_at DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)), acknowledged_at DATETIME(3) NULL, resolved_at DATETIME(3) NULL,
  FOREIGN KEY(bike_id) REFERENCES bikes(id), FOREIGN KEY(handler_id) REFERENCES users(id), FOREIGN KEY(maintenance_ticket_id) REFERENCES maintenance_tickets(id), CHECK(score BETWEEN 0 AND 100),
  CONSTRAINT chk_risk_state CHECK((status='OPEN' AND handler_id IS NULL AND acknowledged_at IS NULL AND resolved_at IS NULL) OR (status='ACKNOWLEDGED' AND handler_id IS NOT NULL AND acknowledged_at IS NOT NULL AND resolved_at IS NULL) OR (status IN('RESOLVED','DISMISSED') AND handler_id IS NOT NULL AND resolved_at IS NOT NULL))
 ) ENGINE=InnoDB;
@@ -139,12 +139,12 @@ CREATE TABLE IF NOT EXISTS carbon_transactions (
  points_change INT NOT NULL, carbon_kg_change DECIMAL(12,4) NOT NULL, factor_kg_per_km DECIMAL(20,8) NOT NULL DEFAULT 0.21,
  points_per_km DECIMAL(20,8) NULL,
  rule_version VARCHAR(30) NOT NULL, reason VARCHAR(300) NOT NULL, actor_id BIGINT UNSIGNED NULL,
- created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), FOREIGN KEY(order_id) REFERENCES ride_orders(id), FOREIGN KEY(actor_id) REFERENCES users(id), INDEX idx_carbon_created_order(created_at,order_id), CHECK(distance_m>=0)
+ created_at DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)), FOREIGN KEY(order_id) REFERENCES ride_orders(id), FOREIGN KEY(actor_id) REFERENCES users(id), INDEX idx_carbon_created_order(created_at,order_id), CHECK(distance_m>=0)
 ) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS audit_logs (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, actor_id BIGINT UNSIGNED NULL, action VARCHAR(60) NOT NULL,
  entity_type VARCHAR(40) NOT NULL, entity_id BIGINT UNSIGNED NULL, detail JSON NULL,
- created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), FOREIGN KEY(actor_id) REFERENCES users(id)
+ created_at DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)), FOREIGN KEY(actor_id) REFERENCES users(id)
 ) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS system_settings (name VARCHAR(50) PRIMARY KEY, value JSON NOT NULL) ENGINE=InnoDB;
 CREATE OR REPLACE VIEW v_zone_inventory AS

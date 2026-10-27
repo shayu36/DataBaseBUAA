@@ -49,6 +49,62 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
     assert.ok(counts.rides > 0);
     assert.equal(counts.payments, counts.rides);
     assert.equal(counts.credits, counts.rides);
+    const [[defaults]] =
+      await pool.query(`SELECT COUNT(*) AS count FROM information_schema.columns c
+      JOIN information_schema.tables t ON t.table_schema=c.table_schema AND t.table_name=c.table_name AND t.table_type='BASE TABLE'
+      WHERE c.table_schema=DATABASE() AND LOWER(c.column_default) LIKE '%utc_timestamp(3)%'`);
+    assert.equal(defaults.count, 11);
+    const connection = await pool.getConnection();
+    try {
+      await connection.query("SET time_zone='+08:00'");
+      await connection.beginTransaction();
+      const [[bike]] =
+        await connection.query(`SELECT b.id,z.id AS zone_id,z.x,z.y FROM bikes b
+        JOIN parking_zones z ON z.id=b.current_zone_id WHERE b.status='AVAILABLE' ORDER BY b.id LIMIT 1`);
+      const [started] = await connection.query("CALL sp_start_ride(?,?)", [
+        2,
+        bike.id,
+      ]);
+      const orderId = started[0][0].id;
+      const [prepared] = await connection.query(
+        "CALL sp_prepare_ride_return(?,?,?,?,?,?,?)",
+        [2, orderId, bike.zone_id, bike.x, bike.y, null, "MAP_SIMULATION"],
+      );
+      assert.equal(prepared[0][0].rejected, undefined);
+      await connection.query(
+        "CALL sp_finish_ride_return(?,?,?,?,?,?,?,?,?,?)",
+        [
+          2,
+          orderId,
+          bike.zone_id,
+          bike.x,
+          bike.y,
+          prepared[0][0].captured_at,
+          "MAP_SIMULATION",
+          "shortest",
+          0,
+          prepared[0][0].return_time,
+        ],
+      );
+      await connection.query("CALL sp_pay_ride(?,?,?)", [
+        2,
+        orderId,
+        "timezone-probe",
+      ]);
+      const [[clock]] = await connection.query(
+        `SELECT
+        ABS(TIMESTAMPDIFF(SECOND,r.started_at,UTC_TIMESTAMP(3))) AS ride_delta,
+        ABS(TIMESTAMPDIFF(SECOND,p.paid_at,UTC_TIMESTAMP(3))) AS payment_delta,
+        ABS(TIMESTAMPDIFF(SECOND,c.created_at,UTC_TIMESTAMP(3))) AS carbon_delta
+        FROM ride_orders r JOIN payments p ON p.order_id=r.id JOIN carbon_transactions c ON c.order_id=r.id AND c.entry_type='AWARD' WHERE r.id=?`,
+        [orderId],
+      );
+      assert.ok(Object.values(clock).every((delta) => delta <= 30));
+    } finally {
+      await connection.rollback();
+      await connection.query("SET time_zone='+00:00'");
+      connection.release();
+    }
     const now = new Date();
     const boundary = now.getTime() - 7 * 86400000;
     await pool.query(

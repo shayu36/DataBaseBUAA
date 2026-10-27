@@ -12,7 +12,7 @@ migration: BEGIN
     LEAVE migration;
   END IF;
   SELECT COALESCE(MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)),0) INTO current_version FROM system_settings WHERE name='pdf_expansion';
-  IF current_version >= 9 THEN
+  IF current_version >= 10 THEN
     SELECT 0 AS migrated;
     LEAVE migration;
   END IF;
@@ -116,7 +116,7 @@ migration: BEGIN
       rule_version VARCHAR(30) NOT NULL,
       reason VARCHAR(300) NOT NULL,
       actor_id BIGINT UNSIGNED NULL,
-      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      created_at DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)),
       FOREIGN KEY(order_id) REFERENCES ride_orders(id),
       FOREIGN KEY(actor_id) REFERENCES users(id), CHECK(distance_m>=0)
     ) ENGINE=InnoDB;
@@ -140,7 +140,7 @@ migration: BEGIN
       borrow_count INT NOT NULL, return_count INT NOT NULL, desired_inventory INT NOT NULL,
       window_start DATETIME(3) NOT NULL, window_end DATETIME(3) NOT NULL, reason VARCHAR(500) NOT NULL, algorithm_version VARCHAR(30) NOT NULL,
       status ENUM('OPEN','CONFIRMED','STALE','DISMISSED') NOT NULL DEFAULT 'OPEN', task_id BIGINT UNSIGNED NULL, created_by BIGINT UNSIGNED NOT NULL,
-      resolution_note VARCHAR(500) NULL, created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), resolved_at DATETIME(3) NULL,
+      resolution_note VARCHAR(500) NULL, created_at DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)), resolved_at DATETIME(3) NULL,
       FOREIGN KEY(source_zone_id) REFERENCES parking_zones(id), FOREIGN KEY(target_zone_id) REFERENCES parking_zones(id),
       FOREIGN KEY(task_id) REFERENCES dispatch_tasks(id), FOREIGN KEY(created_by) REFERENCES users(id), CHECK(quantity>0 AND source_zone_id<>target_zone_id)
     ) ENGINE=InnoDB;
@@ -152,7 +152,7 @@ migration: BEGIN
       open_fingerprint CHAR(64) GENERATED ALWAYS AS (CASE WHEN status IN('OPEN','ACKNOWLEDGED') THEN fingerprint END) STORED UNIQUE,
       rule_version VARCHAR(30) NOT NULL, status ENUM('OPEN','ACKNOWLEDGED','RESOLVED','DISMISSED') NOT NULL DEFAULT 'OPEN',
       recommendation VARCHAR(300) NOT NULL, handler_id BIGINT UNSIGNED NULL, maintenance_ticket_id BIGINT UNSIGNED NULL,
-      resolution_note VARCHAR(500) NULL, triggered_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), acknowledged_at DATETIME(3) NULL, resolved_at DATETIME(3) NULL,
+      resolution_note VARCHAR(500) NULL, triggered_at DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)), acknowledged_at DATETIME(3) NULL, resolved_at DATETIME(3) NULL,
       FOREIGN KEY(bike_id) REFERENCES bikes(id), FOREIGN KEY(handler_id) REFERENCES users(id), FOREIGN KEY(maintenance_ticket_id) REFERENCES maintenance_tickets(id), CHECK(score BETWEEN 0 AND 100)
     ) ENGINE=InnoDB;
     END IF;
@@ -229,6 +229,40 @@ migration: BEGIN
       SELECT id,order_id,distance_m,points_change points,carbon_kg_change carbon_kg,factor_kg_per_km,created_at
       FROM carbon_transactions WHERE entry_type='AWARD';
   END IF;
-  INSERT INTO system_settings(name,value) VALUES('pdf_expansion',JSON_OBJECT('version',9,'applied_at',UTC_TIMESTAMP(3))) ON DUPLICATE KEY UPDATE value=VALUES(value);
+  IF current_version < 10 THEN
+    BEGIN
+      DECLARE done BOOLEAN DEFAULT FALSE;
+      DECLARE v_table,v_column VARCHAR(64);
+      DECLARE defaults_cursor CURSOR FOR
+        SELECT c.table_name,c.column_name FROM information_schema.columns c
+        JOIN information_schema.tables t ON t.table_schema=c.table_schema AND t.table_name=c.table_name AND t.table_type='BASE TABLE'
+        WHERE c.table_schema=DATABASE() AND c.data_type='datetime' AND (
+          (c.table_name='users' AND c.column_name='created_at') OR
+          (c.table_name='ride_orders' AND c.column_name='started_at') OR
+          (c.table_name='payments' AND c.column_name='paid_at') OR
+          (c.table_name='dispatch_tasks' AND c.column_name='created_at') OR
+          (c.table_name='maintenance_tickets' AND c.column_name='created_at') OR
+          (c.table_name='zone_snapshots' AND c.column_name='captured_at') OR
+          (c.table_name='return_attempts' AND c.column_name='created_at') OR
+          (c.table_name='dispatch_suggestions' AND c.column_name='created_at') OR
+          (c.table_name='risk_alerts' AND c.column_name='triggered_at') OR
+          (c.table_name='carbon_transactions' AND c.column_name='created_at') OR
+          (c.table_name='audit_logs' AND c.column_name='created_at')
+        ) AND (c.column_default IS NULL OR LOWER(c.column_default) NOT IN ('utc_timestamp(3)','(utc_timestamp(3))'));
+      DECLARE CONTINUE HANDLER FOR NOT FOUND SET done=TRUE;
+      OPEN defaults_cursor;
+      defaults_loop: LOOP
+        FETCH defaults_cursor INTO v_table,v_column;
+        IF done THEN LEAVE defaults_loop; END IF;
+        SET @qingxing_utc_default_sql=CONCAT('ALTER TABLE `',v_table,'` ALTER COLUMN `',v_column,'` SET DEFAULT (UTC_TIMESTAMP(3))');
+        PREPARE qingxing_utc_default FROM @qingxing_utc_default_sql;
+        EXECUTE qingxing_utc_default;
+        DEALLOCATE PREPARE qingxing_utc_default;
+      END LOOP;
+      CLOSE defaults_cursor;
+      SET @qingxing_utc_default_sql=NULL;
+    END;
+  END IF;
+  INSERT INTO system_settings(name,value) VALUES('pdf_expansion',JSON_OBJECT('version',10,'applied_at',UTC_TIMESTAMP(3))) ON DUPLICATE KEY UPDATE value=VALUES(value);
   SELECT 1 AS migrated;
 END

@@ -9,7 +9,7 @@
 - 已启动的本机 MySQL 8.0.21 及以上版本；初始化账号需要建库、建用户和授权权限。
 - 仅在生成交付压缩包时需要 Python 和 uv。
 
-不需要 Docker。MySQL 版本要求与 `JSON_TABLE` 对 JSON 空值的处理有关，详见 [MySQL 官方手册](https://dev.mysql.com/doc/refman/8.0/en/json-table-functions.html)。
+不需要 Docker。MySQL 版本要求与 `JSON_TABLE` 对 JSON 空值的处理有关，详见 [MySQL 官方手册](https://dev.mysql.com/doc/refman/8.0/en/json-table-functions.html)。数据库默认时间使用 MySQL 的 [表达式默认值](https://dev.mysql.com/doc/refman/8.0/en/data-type-defaults.html)。
 
 ## 首次启动
 
@@ -103,7 +103,7 @@ node scripts/restore.mjs backups/备份文件.sql campus_bike_restore_demo
 node scripts/check.mjs campus_bike_restore_demo
 ```
 
-恢复目标必须是尚不存在的 `campus_bike_restore_` 前缀数据库。MySQL 结构变更会隐式提交；迁移失败时应检查错误并从备份恢复，不能依赖事务回滚已完成的结构变更。新版积分发放会保存当时的精确碳系数和积分比例；旧流水中未记录的比例保留为空，旧版已舍入的系数无法还原。若历史系数与已发放减排量不一致，不变量检查会提示人工核对。
+恢复目标必须是尚不存在的 `campus_bike_restore_` 前缀数据库。MySQL 结构变更会隐式提交；迁移失败时应检查错误并从备份恢复，不能依赖事务回滚已完成的结构变更。新版数据库使用 UTC 默认时间，不依赖 MySQL 服务器时区；迁移不修改历史时间，若旧库使用过非 UTC 服务器时区，应根据原始环境和备份核对历史记录。新版积分发放会保存当时的精确碳系数和积分比例；旧流水中未记录的比例保留为空，旧版已舍入的系数无法还原。若历史系数与已发放减排量不一致，不变量检查会提示人工核对。
 
 ## 目录与文档
 

@@ -174,6 +174,26 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
     );
     assert.deepEqual(column, { numeric_precision: 20, numeric_scale: 8 });
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
+    // Version 9 defaults depended on the MySQL session timezone.
+    const [[beforeUtcUpgrade]] = await pool.query(
+      "SELECT created_at FROM users WHERE id=1",
+    );
+    await pool.query(
+      "ALTER TABLE users ALTER COLUMN created_at SET DEFAULT (CURRENT_TIMESTAMP(3))",
+    );
+    await pool.query(
+      "UPDATE system_settings SET value=JSON_OBJECT('version',9) WHERE name='pdf_expansion'",
+    );
+    assert.ok((await applyFeatureMigrations(pool)).applied.length > 0);
+    const [[afterUtcUpgrade]] = await pool.query(
+      "SELECT created_at FROM users WHERE id=1",
+    );
+    assert.deepEqual(afterUtcUpgrade, beforeUtcUpgrade);
+    const [[utcDefault]] = await pool.query(
+      "SELECT LOWER(column_default) AS value FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='users' AND column_name='created_at'",
+    );
+    assert.match(utcDefault.value, /utc_timestamp\(3\)/);
+    assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
   } finally {
     await pool.end();
     await admin.query(`DROP DATABASE IF EXISTS \`${dbName}\``);
