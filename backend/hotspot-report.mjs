@@ -105,7 +105,7 @@ export async function hotspotReport(db, filter, now) {
       hourly,
       weekday,
       inventory_series: series,
-      snapshot_count: Number(possibleRows[0].snapshot_count),
+      snapshot_count: Number(intervals[0]?.snapshot_count ?? 0),
       coverage_ratio: possible ? round(covered / possible) : 0,
       filter: window,
       methodology: {

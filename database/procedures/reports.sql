@@ -62,9 +62,15 @@ report: BEGIN
  GROUP BY e.zone_id,hour,weekday;
  IF NOT p_details THEN LEAVE report; END IF;
  WITH intervals AS (
-  SELECT s.*,LEAD(captured_at) OVER (PARTITION BY zone_id ORDER BY captured_at,id) AS next_at
+  SELECT s.id,s.zone_id,s.captured_at,s.available,s.occupied,s.capacity,
+   LEAD(captured_at) OVER (PARTITION BY zone_id ORDER BY captured_at,id) AS next_at
   FROM zone_snapshots s WHERE s.captured_at BETWEEN p_start-INTERVAL 5 MINUTE AND LEAST(p_end+INTERVAL 5 MINUTE,p_as_of)
    AND (p_zone IS NULL OR zone_id=p_zone)
+ ), sample_counts AS (
+  SELECT zone_id,SUM(captured_at>=p_start AND captured_at<p_end
+   AND HOUR(captured_at+INTERVAL 8 HOUR)>=p_hour_start AND HOUR(captured_at+INTERVAL 8 HOUR)<p_hour_end
+   AND (p_day_type='ALL' OR (p_day_type='WEEKDAY' AND WEEKDAY(captured_at+INTERVAL 8 HOUR)<5) OR (p_day_type='WEEKEND' AND WEEKDAY(captured_at+INTERVAL 8 HOUR)>=5))) AS sample_count
+  FROM intervals GROUP BY zone_id
  ), interval_days AS (
   SELECT zone_id,available,occupied,capacity,captured_at,next_at,DATE(captured_at+INTERVAL 8 HOUR) AS local_day
   FROM intervals WHERE next_at>captured_at AND next_at<=captured_at+INTERVAL 5 MINUTE
@@ -78,10 +84,15 @@ report: BEGIN
    GREATEST(captured_at,p_start,TIMESTAMP(local_day)+INTERVAL p_hour_start HOUR-INTERVAL 8 HOUR),
    LEAST(next_at,p_end,TIMESTAMP(local_day)+INTERVAL p_hour_end HOUR-INTERVAL 8 HOUR)))/60000000 AS minutes
   FROM interval_days WHERE p_day_type='ALL' OR (p_day_type='WEEKDAY' AND WEEKDAY(local_day)<5) OR (p_day_type='WEEKEND' AND WEEKDAY(local_day)>=5)
+ ), coverage AS (
+  SELECT zone_id,ROUND(SUM(minutes),2) AS coverage_minutes,
+   ROUND(SUM(IF(available<=capacity*0.2,minutes,0)),2) AS shortage_minutes,
+   ROUND(SUM(IF(occupied>=capacity,minutes,0)),2) AS full_minutes FROM eligible GROUP BY zone_id
  )
- SELECT zone_id,ROUND(SUM(minutes),2) AS coverage_minutes,
-  ROUND(SUM(IF(available<=capacity*0.2,minutes,0)),2) AS shortage_minutes,
-  ROUND(SUM(IF(occupied>=capacity,minutes,0)),2) AS full_minutes FROM eligible GROUP BY zone_id;
+ SELECT counts.zone_id,COALESCE(coverage.coverage_minutes,0) AS coverage_minutes,
+  COALESCE(coverage.shortage_minutes,0) AS shortage_minutes,COALESCE(coverage.full_minutes,0) AS full_minutes,
+  SUM(counts.sample_count) OVER () AS snapshot_count
+ FROM sample_counts counts LEFT JOIN coverage ON coverage.zone_id=counts.zone_id;
  WITH filtered AS (
   SELECT id,zone_id,captured_at,available,COUNT(*) OVER (PARTITION BY zone_id) AS zone_count,
    LAG(captured_at) OVER (PARTITION BY zone_id ORDER BY captured_at,id) AS previous_at FROM zone_snapshots
@@ -117,10 +128,7 @@ report: BEGIN
  )
  SELECT COALESCE(SUM(GREATEST(0,TIMESTAMPDIFF(MICROSECOND,
   GREATEST(p_start,TIMESTAMP(local_day)+INTERVAL p_hour_start HOUR-INTERVAL 8 HOUR),
-  LEAST(p_end,TIMESTAMP(local_day)+INTERVAL p_hour_end HOUR-INTERVAL 8 HOUR)))),0)/60000000 AS possible_minutes,
-  (SELECT COUNT(*) FROM zone_snapshots WHERE captured_at>=p_start AND captured_at<p_end AND (p_zone IS NULL OR zone_id=p_zone)
-   AND HOUR(captured_at+INTERVAL 8 HOUR)>=p_hour_start AND HOUR(captured_at+INTERVAL 8 HOUR)<p_hour_end
-   AND (p_day_type='ALL' OR (p_day_type='WEEKDAY' AND WEEKDAY(captured_at+INTERVAL 8 HOUR)<5) OR (p_day_type='WEEKEND' AND WEEKDAY(captured_at+INTERVAL 8 HOUR)>=5))) AS snapshot_count
+  LEAST(p_end,TIMESTAMP(local_day)+INTERVAL p_hour_end HOUR-INTERVAL 8 HOUR)))),0)/60000000 AS possible_minutes
  FROM days WHERE p_day_type='ALL' OR (p_day_type='WEEKDAY' AND WEEKDAY(local_day)<5) OR (p_day_type='WEEKEND' AND WEEKDAY(local_day)>=5);
 END$$
 DELIMITER ;

@@ -351,6 +351,7 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
       )
     ).report;
     assert.equal(notYetObserved.hotspots[0].coverage_minutes, 0);
+    assert.equal(notYetObserved.snapshot_count, 1);
     const gap = (
       await hotspotReport(
         pool,
@@ -359,6 +360,17 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
       )
     ).report;
     assert.equal(gap.hotspots[0].coverage_minutes, 0);
+    assert.equal(gap.snapshot_count, 1);
+    const empty = (
+      await hotspotReport(
+        pool,
+        { start: "2025-01-01", end: "2025-01-01", zoneId: 1 },
+        new Date("2026-07-05T16:04:00Z"),
+      )
+    ).report;
+    assert.equal(empty.snapshot_count, 0);
+    assert.equal(empty.hotspots[0].coverage_minutes, 0);
+    assert.deepEqual(empty.inventory_series, []);
     await pool.query("DELETE FROM system_settings WHERE name='seed_version'");
     await assert.rejects(seedDemo(appPool, pool), /Nonempty unmarked database/);
     const [[afterFailure]] = await pool.query(
