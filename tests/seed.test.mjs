@@ -6,7 +6,7 @@ import { createPool, ledgerTransaction } from "../backend/db.mjs";
 import { upgradeCampusMap } from "../backend/campus.mjs";
 import { seedDemo } from "../backend/demo-seed.mjs";
 import { applySchema } from "../scripts/sql.mjs";
-import { hotspotReport } from "../backend/hotspot-report.mjs";
+import { hotspotDemand, hotspotReport } from "../backend/hotspot-report.mjs";
 import { aggregateHotspots } from "./hotspot-reference.mjs";
 import { dispatchSuggestions as expectedSuggestions } from "./dispatch-reference.mjs";
 import { dispatchSuggestions } from "../backend/dispatch-suggestions.mjs";
@@ -122,7 +122,22 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
         filter,
         now,
       );
-      const actual = (await hotspotReport(pool, filter, now)).report;
+      const { zones, report: actual } = await hotspotReport(pool, filter, now);
+      const quick = await hotspotDemand(pool, filter, now);
+      assert.deepEqual(quick.zones, zones);
+      assert.deepEqual(quick.filter, actual.filter);
+      assert.deepEqual(
+        quick.demand,
+        actual.hotspots.map(({ zone_id, borrow_count, return_count }) => ({
+          zone_id,
+          borrow_count,
+          return_count,
+        })),
+      );
+      assert.deepEqual(
+        await dispatchSuggestions(pool, quick.zones, quick.demand),
+        await dispatchSuggestions(pool, zones, actual.hotspots),
+      );
       const sortSeries = (rows) =>
         rows.sort(
           (a, b) =>

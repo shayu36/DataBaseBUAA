@@ -2,16 +2,39 @@ import { reportFilter } from "./analytics.mjs";
 
 const round = (value) => Math.round(value * 100) / 100;
 
-export async function hotspotReport(db, filter, now) {
+async function hotspotInputs(db, filter, now, details) {
   const normalized = reportFilter(filter, now);
-  const [result] = await db.query("CALL sp_hotspot_report(?,?,?,?,?,?)", [
+  const [result] = await db.query("CALL sp_hotspot_report(?,?,?,?,?,?,?)", [
     new Date(normalized.start),
     new Date(normalized.end),
     normalized.dayType,
     normalized.startHour,
     normalized.endHour,
     normalized.zoneId,
+    details,
   ]);
+  const window = {
+    ...normalized,
+    start: new Date(normalized.start).toISOString(),
+    end: new Date(normalized.end).toISOString(),
+  };
+  return { result, window };
+}
+
+export async function hotspotDemand(db, filter, now) {
+  const { result, window } = await hotspotInputs(db, filter, now, false);
+  const [zones, events] = result;
+  const byZone = new Map(events.map((event) => [event.zone_id, event]));
+  const demand = zones.map((zone) => ({
+    zone_id: zone.id,
+    borrow_count: Number(byZone.get(zone.id)?.borrow_count ?? 0),
+    return_count: Number(byZone.get(zone.id)?.return_count ?? 0),
+  }));
+  return { zones, demand, filter: window };
+}
+
+export async function hotspotReport(db, filter, now) {
+  const { result, window } = await hotspotInputs(db, filter, now, true);
   const [zones, events, intervals, series, possibleRows] = result;
   const hotspots = zones.map((z) => ({
     zone_id: z.id,
@@ -83,11 +106,7 @@ export async function hotspotReport(db, filter, now) {
       inventory_series: series,
       snapshot_count: Number(possibleRows[0].snapshot_count),
       coverage_ratio: possible ? round(covered / possible) : 0,
-      filter: {
-        ...normalized,
-        start: new Date(normalized.start).toISOString(),
-        end: new Date(normalized.end).toISOString(),
-      },
+      filter: window,
       methodology: {
         snapshot_gap_minutes: 5,
         shortage_threshold: "available <= 20% capacity",

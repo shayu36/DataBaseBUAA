@@ -1,4 +1,4 @@
-import { hotspotReport } from "./hotspot-report.mjs";
+import { hotspotDemand } from "./hotspot-report.mjs";
 import { dispatchSuggestions } from "./dispatch-suggestions.mjs";
 import { z } from "zod";
 import { sql } from "./sql-statements.mjs";
@@ -68,11 +68,15 @@ export async function createDispatchSuggestions(pool, actor, rawFilter) {
   const filter = reportFilterSchema.parse(rawFilter);
   return actorTransaction(pool, actor, async (c) => {
     const now = new Date();
-    const { zones, report } = await hotspotReport(c, filter, now);
-    const suggestions = await dispatchSuggestions(c, zones, report.hotspots);
+    const {
+      zones,
+      demand,
+      filter: window,
+    } = await hotspotDemand(c, filter, now);
+    const suggestions = await dispatchSuggestions(c, zones, demand);
     const zonesById = new Map(zones.map((zone) => [zone.id, zone]));
     const demandById = new Map(
-      report.hotspots.map((hotspot) => [hotspot.zone_id, hotspot]),
+      demand.map((hotspot) => [hotspot.zone_id, hotspot]),
     );
     const candidates = suggestions.map((suggestion) => {
       const source = zonesById.get(suggestion.source_zone_id);
@@ -93,8 +97,8 @@ export async function createDispatchSuggestions(pool, actor, rawFilter) {
       [
         actor.id,
         JSON.stringify(filter),
-        new Date(report.filter.start),
-        new Date(report.filter.end),
+        new Date(window.start),
+        new Date(window.end),
         JSON.stringify(candidates),
       ],
     );
@@ -103,7 +107,7 @@ export async function createDispatchSuggestions(pool, actor, rawFilter) {
       ...suggestions[index],
       status: "OPEN",
     }));
-    return { suggestions: created, filter: report.filter };
+    return { suggestions: created, filter: window };
   });
 }
 

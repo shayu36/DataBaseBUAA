@@ -44,21 +44,23 @@ DELIMITER ;
 DROP PROCEDURE IF EXISTS sp_hotspot_report;
 DELIMITER $$
 CREATE PROCEDURE sp_hotspot_report(IN p_start DATETIME(3), IN p_end DATETIME(3), IN p_day_type VARCHAR(10),
- IN p_hour_start INT, IN p_hour_end INT, IN p_zone BIGINT UNSIGNED)
+ IN p_hour_start INT, IN p_hour_end INT, IN p_zone BIGINT UNSIGNED, IN p_details BOOLEAN)
 SQL SECURITY INVOKER
-BEGIN
+report: BEGIN
  SELECT * FROM v_zone_inventory WHERE p_zone IS NULL OR id=p_zone ORDER BY id;
  WITH events AS (
   SELECT start_zone_id AS zone_id,started_at AS event_at,1 AS borrowed,0 AS returned FROM ride_orders WHERE started_at>=p_start AND started_at<p_end
   UNION ALL
   SELECT end_zone_id,ended_at,0,1 FROM ride_orders WHERE ended_at>=p_start AND ended_at<p_end
  )
- SELECT e.zone_id,HOUR(e.event_at+INTERVAL 8 HOUR) AS hour,DAYOFWEEK(e.event_at+INTERVAL 8 HOUR)-1 AS weekday,
+ SELECT e.zone_id,IF(p_details,HOUR(e.event_at+INTERVAL 8 HOUR),0) AS hour,
+ IF(p_details,DAYOFWEEK(e.event_at+INTERVAL 8 HOUR)-1,0) AS weekday,
  SUM(e.borrowed) AS borrow_count,SUM(e.returned) AS return_count
  FROM events e JOIN parking_zones z ON z.id=e.zone_id
  WHERE (p_zone IS NULL OR e.zone_id=p_zone) AND HOUR(e.event_at+INTERVAL 8 HOUR)>=p_hour_start AND HOUR(e.event_at+INTERVAL 8 HOUR)<p_hour_end
  AND (p_day_type='ALL' OR (p_day_type='WEEKDAY' AND WEEKDAY(e.event_at+INTERVAL 8 HOUR)<5) OR (p_day_type='WEEKEND' AND WEEKDAY(e.event_at+INTERVAL 8 HOUR)>=5))
  GROUP BY e.zone_id,hour,weekday;
+ IF NOT p_details THEN LEAVE report; END IF;
  WITH intervals AS (
   SELECT s.*,LEAD(captured_at) OVER (PARTITION BY zone_id ORDER BY captured_at,id) AS next_at
   FROM zone_snapshots s WHERE s.captured_at BETWEEN p_start-INTERVAL 5 MINUTE AND p_end AND (p_zone IS NULL OR zone_id=p_zone)
