@@ -64,7 +64,7 @@ const boxes = [
     1010,
     "运维人员",
     "staff",
-    ["PK id · UK/FK user_id", "同步姓名 · 联系电话", "工种 · 值勤状态"],
+    ["PK id · UK/FK user_id", "姓名与电话关联账户", "工种 · 值勤状态"],
   ],
 ];
 // Separate routed edges retain dual-role relationships. Labels include minimum participation.

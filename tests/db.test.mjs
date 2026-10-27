@@ -98,7 +98,7 @@ test("migration returns a pooled connection when its lock is busy", async () => 
 test("migration drops its temporary procedure and releases a confirmed lock", async () => {
   const { pool, events } = fixture(1, { migration: true });
   assert.deepEqual(await applyFeatureMigrations(pool), {
-    applied: ["pdf_expansion@10"],
+    applied: ["pdf_expansion@11"],
   });
   assert.deepEqual(events, ["create", "migrate", "drop", "unlock", "release"]);
 });

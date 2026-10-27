@@ -48,9 +48,7 @@ beforeEach(async () => {
   await pool.query(
     "INSERT INTO bikes(id,code,deployed_at,current_zone_id) VALUES(1,'QX01','2026-01-01',1),(2,'QX02','2026-01-01',1),(3,'QX03','2026-01-01',1),(4,'QX04','2026-01-01',3)",
   );
-  await pool.query(
-    "INSERT INTO staff(id,user_id,name,phone,job) VALUES(1,3,'运维','13800000003','BOTH')",
-  );
+  await pool.query("INSERT INTO staff(id,user_id,job) VALUES(1,3,'BOTH')");
   await pool.query(
     "INSERT INTO road_nodes(id,name,x,y,zone_id) SELECT id,name,x,y,id FROM parking_zones",
   );

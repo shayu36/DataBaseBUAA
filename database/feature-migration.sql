@@ -5,6 +5,7 @@ SQL SECURITY INVOKER
 migration: BEGIN
   DECLARE current_version INT DEFAULT 0;
   DECLARE old_count, new_count BIGINT DEFAULT 0;
+  DECLARE has_staff_name, has_staff_phone BOOLEAN DEFAULT FALSE;
   DECLARE old_points, new_points BIGINT DEFAULT 0;
   DECLARE old_carbon, new_carbon DECIMAL(20,4) DEFAULT 0;
   IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='users' AND table_type='BASE TABLE') THEN
@@ -12,9 +13,23 @@ migration: BEGIN
     LEAVE migration;
   END IF;
   SELECT COALESCE(MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)),0) INTO current_version FROM system_settings WHERE name='pdf_expansion';
-  IF current_version >= 10 THEN
+  IF current_version >= 11 THEN
     SELECT 0 AS migrated;
     LEAVE migration;
+  END IF;
+  -- Do not discard conflicting legacy contact data: require explicit reconciliation.
+  SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='staff' AND column_name='name'),
+         EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='staff' AND column_name='phone')
+  INTO has_staff_name,has_staff_phone;
+  IF has_staff_name THEN
+    IF EXISTS(SELECT 1 FROM staff s LEFT JOIN users u ON u.id=s.user_id WHERE u.id IS NULL OR NOT (BINARY s.name <=> BINARY u.name)) THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='STAFF_NAME_MISMATCH: reconcile staff and users before migration';
+    END IF;
+  END IF;
+  IF has_staff_phone THEN
+    IF EXISTS(SELECT 1 FROM staff s LEFT JOIN users u ON u.id=s.user_id WHERE u.id IS NULL OR NOT (BINARY s.phone <=> BINARY u.phone)) THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='STAFF_PHONE_MISMATCH: reconcile staff and users before migration';
+    END IF;
   END IF;
   IF current_version < 1 THEN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='users' AND column_name='leaderboard_alias') THEN
@@ -263,6 +278,13 @@ migration: BEGIN
       SET @qingxing_utc_default_sql=NULL;
     END;
   END IF;
-  INSERT INTO system_settings(name,value) VALUES('pdf_expansion',JSON_OBJECT('version',10,'applied_at',UTC_TIMESTAMP(3))) ON DUPLICATE KEY UPDATE value=VALUES(value);
+  IF has_staff_name AND has_staff_phone THEN
+    ALTER TABLE staff DROP COLUMN name, DROP COLUMN phone;
+  ELSEIF has_staff_name THEN
+    ALTER TABLE staff DROP COLUMN name;
+  ELSEIF has_staff_phone THEN
+    ALTER TABLE staff DROP COLUMN phone;
+  END IF;
+  INSERT INTO system_settings(name,value) VALUES('pdf_expansion',JSON_OBJECT('version',11,'applied_at',UTC_TIMESTAMP(3))) ON DUPLICATE KEY UPDATE value=VALUES(value);
   SELECT 1 AS migrated;
 END

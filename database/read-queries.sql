@@ -46,18 +46,18 @@ SELECT p.* FROM payments p JOIN ride_orders r ON r.id=p.order_id WHERE r.user_id
 SELECT id,bike_code,start_zone_name,end_zone_name,status,distance_m,amount_cents FROM v_ride_details
 WHERE user_id=? AND (?='ALL' OR status=?) ORDER BY id DESC;
 -- name: dispatch_history
-SELECT t.*,s.name staff_name,a.name source_name,b.name target_name,
+SELECT t.*,u.name staff_name,a.name source_name,b.name target_name,
  COALESCE((SELECT JSON_ARRAYAGG(d.bike_id) FROM dispatch_bikes d WHERE d.task_id=t.id),JSON_ARRAY()) AS bike_ids
 FROM (SELECT * FROM dispatch_tasks WHERE status IN ('COMPLETED','CANCELLED') AND (? IS NULL OR id<?) ORDER BY id DESC LIMIT 101) t
-LEFT JOIN staff s ON s.id=t.staff_id JOIN parking_zones a ON a.id=t.source_zone_id JOIN parking_zones b ON b.id=t.target_zone_id ORDER BY t.id DESC;
+LEFT JOIN staff s ON s.id=t.staff_id LEFT JOIN users u ON u.id=s.user_id JOIN parking_zones a ON a.id=t.source_zone_id JOIN parking_zones b ON b.id=t.target_zone_id ORDER BY t.id DESC;
 -- name: ticket_history_all
-SELECT t.*,b.code bike_code,s.name staff_name FROM
+SELECT t.*,b.code bike_code,u.name staff_name FROM
 (SELECT * FROM maintenance_tickets WHERE status='COMPLETED' AND (? IS NULL OR id<?) ORDER BY id DESC LIMIT 101) t
-JOIN bikes b ON b.id=t.bike_id LEFT JOIN staff s ON s.id=t.staff_id ORDER BY t.id DESC;
+JOIN bikes b ON b.id=t.bike_id LEFT JOIN staff s ON s.id=t.staff_id LEFT JOIN users u ON u.id=s.user_id ORDER BY t.id DESC;
 -- name: ticket_history_own
-SELECT t.*,b.code bike_code,s.name staff_name FROM
+SELECT t.*,b.code bike_code,u.name staff_name FROM
 (SELECT * FROM maintenance_tickets WHERE status='COMPLETED' AND reporter_id=? AND (? IS NULL OR id<?) ORDER BY id DESC LIMIT 101) t
-JOIN bikes b ON b.id=t.bike_id LEFT JOIN staff s ON s.id=t.staff_id ORDER BY t.id DESC;
+JOIN bikes b ON b.id=t.bike_id LEFT JOIN staff s ON s.id=t.staff_id LEFT JOIN users u ON u.id=s.user_id ORDER BY t.id DESC;
 -- name: admin_roads
 SELECT e.*,a.name from_name,b.name to_name FROM road_edges e
 JOIN road_nodes a ON a.id=e.from_node_id JOIN road_nodes b ON b.id=e.to_node_id ORDER BY e.id;

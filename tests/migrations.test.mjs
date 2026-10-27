@@ -22,6 +22,9 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
       "CREATE TABLE users(id BIGINT UNSIGNED PRIMARY KEY,name VARCHAR(40),email VARCHAR(160),phone VARCHAR(20),password_hash VARCHAR(100),role ENUM('STUDENT','ADMIN','OPERATOR') DEFAULT 'STUDENT',status ENUM('ACTIVE','SUSPENDED') DEFAULT 'ACTIVE',created_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3))",
     );
     await pool.query(
+      "CREATE TABLE staff(id BIGINT UNSIGNED PRIMARY KEY,user_id BIGINT UNSIGNED,name VARCHAR(40),phone VARCHAR(20),job VARCHAR(20),status VARCHAR(20))",
+    );
+    await pool.query(
       "CREATE TABLE parking_zones(id BIGINT UNSIGNED PRIMARY KEY,name VARCHAR(60),location VARCHAR(160),x DECIMAL(10,2),y DECIMAL(10,2),radius DECIMAL(8,2),capacity INT,status ENUM('ACTIVE','CLOSED') DEFAULT 'ACTIVE')",
     );
     await pool.query(
@@ -83,10 +86,25 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
     );
     await pool.query("INSERT INTO road_edges VALUES(1,1,2,100,1,1)");
 
+    await pool.query(
+      "INSERT INTO staff VALUES(1,1,'旧姓名','13800000000','BOTH','ACTIVE')",
+    );
+    await assert.rejects(applyFeatureMigrations(pool), /STAFF_NAME_MISMATCH/);
+    await pool.query("UPDATE staff SET name='学生',phone='旧电话' WHERE id=1");
+    await assert.rejects(applyFeatureMigrations(pool), /STAFF_PHONE_MISMATCH/);
+    await pool.query("UPDATE staff SET phone='13800000000' WHERE id=1");
     const first = await applyFeatureMigrations(pool);
     const second = await applyFeatureMigrations(pool);
     assert.ok(first.applied.length > 0);
     assert.deepEqual(second.applied, []);
+    const [staffColumns] = await pool.query(
+      "SELECT column_name FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='staff' AND column_name IN ('name','phone')",
+    );
+    assert.equal(staffColumns.length, 0);
+    const [[staff]] = await pool.query(
+      "SELECT s.id,u.name,u.phone FROM staff s JOIN users u ON u.id=s.user_id",
+    );
+    assert.deepEqual(staff, { id: 1, name: "学生", phone: "13800000000" });
     assert.equal(
       (await pool.query("SELECT COUNT(*) n FROM ride_orders"))[0][0].n,
       1,

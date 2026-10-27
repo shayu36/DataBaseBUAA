@@ -77,9 +77,7 @@ beforeEach(async () => {
      (4,'EX-04','2026-01-01',1),(5,'EX-05','2026-01-01',1),(6,'EX-06','2026-01-01',1),
      (7,'EX-07','2026-01-01',1),(8,'EX-08','2026-01-01',1),(9,'EX-09','2026-01-01',2)`,
   );
-  await pool.query(
-    "INSERT INTO staff(id,user_id,name,phone,job) VALUES(1,3,'运维','13700000003','BOTH')",
-  );
+  await pool.query("INSERT INTO staff(id,user_id,job) VALUES(1,3,'BOTH')");
   await pool.query(
     "INSERT INTO road_nodes(id,name,x,y,zone_id) SELECT id,name,x,y,id FROM parking_zones",
   );
@@ -352,7 +350,13 @@ test("work history is paginated without hiding active tasks or exposing student 
   await pool.query(
     "INSERT INTO maintenance_tickets(id,bike_id,reporter_id,staff_id,fault_type,description,status,result,completed_at) VALUES(200,1,3,1,'OTHER','其他用户','COMPLETED','已处理',UTC_TIMESTAMP(3))",
   );
+  await pool.query(
+    "UPDATE users SET name='更新后的运维',phone='13700000103' WHERE id=3",
+  );
   const management = await dashboard(pool, admin);
+  assert.equal(management.staff[0].name, "更新后的运维");
+  assert.equal(management.staff[0].phone, "13700000103");
+  assert.equal(management.dispatches[0].staff_name, "更新后的运维");
   assert.equal(management.dispatches.length, 101);
   assert.equal(management.dispatches[0].id, 1);
   assert.deepEqual(management.dispatches[0].bike_ids, [2]);
@@ -362,6 +366,9 @@ test("work history is paginated without hiding active tasks or exposing student 
     management.dispatches_next_before,
   );
   assert.equal(olderTasks.dispatches.length, 5);
+  assert.ok(
+    olderTasks.dispatches.every((task) => task.staff_name === "更新后的运维"),
+  );
   assert.ok(
     olderTasks.dispatches.every((task) => task.bike_ids.join(",") === "1,3"),
   );
@@ -374,6 +381,11 @@ test("work history is paginated without hiding active tasks or exposing student 
     management.tickets_next_before,
   );
   assert.equal(olderTickets.tickets.length, 6);
+  assert.ok(
+    olderTickets.tickets.every(
+      (ticket) => ticket.staff_name === "更新后的运维",
+    ),
+  );
   const personal = await dashboard(pool, student);
   assert.deepEqual(personal.dispatches, []);
   assert.equal(personal.tickets.length, 101);

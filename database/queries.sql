@@ -19,7 +19,7 @@ SELECT bike_id,fault_type,COUNT(*) occurrences FROM maintenance_tickets WHERE cr
 -- Q09: available bikes with no active maintenance ticket (NOT EXISTS).
 SELECT b.id,b.code FROM bikes b WHERE b.status='AVAILABLE' AND NOT EXISTS(SELECT 1 FROM maintenance_tickets t WHERE t.bike_id=b.id AND t.status<>'COMPLETED');
 -- Q10: dispatch workload without JOIN multiplication.
-SELECT s.id,s.name,(SELECT COUNT(*) FROM dispatch_tasks t WHERE t.staff_id=s.id AND t.status IN('PENDING','IN_PROGRESS')) dispatch_pending,(SELECT COUNT(*) FROM maintenance_tickets m WHERE m.staff_id=s.id AND m.status<>'COMPLETED') maintenance_pending FROM staff s;
+SELECT s.id,u.name,(SELECT COUNT(*) FROM dispatch_tasks t WHERE t.staff_id=s.id AND t.status IN('PENDING','IN_PROGRESS')) dispatch_pending,(SELECT COUNT(*) FROM maintenance_tickets m WHERE m.staff_id=s.id AND m.status<>'COMPLETED') maintenance_pending FROM staff s JOIN users u ON u.id=s.user_id;
 -- Q11: exact task members and both zone roles.
 SELECT t.id,t.status,src.name source_name,dst.name target_name,b.code FROM dispatch_tasks t JOIN parking_zones src ON src.id=t.source_zone_id JOIN parking_zones dst ON dst.id=t.target_zone_id JOIN dispatch_bikes db ON db.task_id=t.id JOIN bikes b ON b.id=db.bike_id ORDER BY t.id,b.id;
 -- Q12: privacy-aware paid-rider aggregate (window function); all-time teaching query, not UI week/month.

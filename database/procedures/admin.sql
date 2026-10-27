@@ -131,12 +131,12 @@ BEGIN
   IF v_dispatch AND v_job NOT IN ('BOTH','DISPATCH') THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='STAFF_DISPATCH_WORK'; END IF;
   IF v_maintenance AND v_job NOT IN ('BOTH','MAINTENANCE') THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='STAFF_MAINTENANCE_WORK'; END IF;
   UPDATE users SET name=v_name,phone=v_phone,email=v_email,role='OPERATOR',password_hash=COALESCE(p_hash,password_hash) WHERE id=v_uid;
-  UPDATE staff SET name=v_name,phone=v_phone,job=v_job,status=v_status WHERE id=v_id;
+  UPDATE staff SET job=v_job,status=v_status WHERE id=v_id;
  ELSE
   IF EXISTS(SELECT 1 FROM users WHERE email=v_email OR phone=v_phone) THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='STAFF_USER_COLLISION'; END IF;
   INSERT INTO users(name,email,phone,password_hash,role) VALUES(v_name,v_email,v_phone,p_hash,'OPERATOR');
   SET v_uid=LAST_INSERT_ID();
-  INSERT INTO staff(user_id,name,phone,job,status) VALUES(v_uid,v_name,v_phone,v_job,v_status);
+  INSERT INTO staff(user_id,job,status) VALUES(v_uid,v_job,v_status);
   SET v_id=LAST_INSERT_ID();
  END IF;
  INSERT INTO audit_logs(actor_id,action,entity_type,entity_id,detail)
