@@ -36,7 +36,11 @@ export const credentials = z.object({
     .email()
     .max(160)
     .transform((v) => v.toLowerCase()),
-  password: z.string().min(1).max(72),
+  password: z
+    .string()
+    .min(1)
+    .max(72)
+    .refine((v) => Buffer.byteLength(v, "utf8") <= 72, "密码最多72字节"),
 });
 const registration = credentials.extend({
   name: z.string().trim().min(1).max(40),

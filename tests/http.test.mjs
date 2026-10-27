@@ -101,6 +101,32 @@ test("session uses HttpOnly SameSite and login never returns password hash", asy
     401,
   );
 });
+test("login rejects passwords exceeding bcrypt's UTF-8 byte limit", async () => {
+  const password = "a".repeat(69) + "中";
+  const [[original]] = await pool.query(
+    "SELECT password_hash FROM users WHERE id=3",
+  );
+  await pool.query("UPDATE users SET password_hash=? WHERE id=3", [
+    await bcrypt.hash(password, 4),
+  ]);
+  try {
+    const valid = await request("/api/auth/login", {
+      email: "other@http.local",
+      password,
+    });
+    assert.equal(valid.status, 200);
+    const truncated = await request("/api/auth/login", {
+      email: "other@http.local",
+      password: password + "文",
+    });
+    assert.equal(truncated.status, 400);
+    assert.equal(truncated.cookie, null);
+  } finally {
+    await pool.query("UPDATE users SET password_hash=? WHERE id=3", [
+      original.password_hash,
+    ]);
+  }
+});
 test("registration cannot choose admin role; duplicate phone rejected", async () => {
   const r = await request("/api/auth/register", {
     name: "新同学",
