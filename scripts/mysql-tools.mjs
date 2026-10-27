@@ -2,7 +2,7 @@ import { writeFile, unlink, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
-import { spawn } from "node:child_process";
+import { runProcess } from "./process.mjs";
 import "../backend/db.mjs";
 export const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 export async function runMysqlTool(tool, args, { input, output } = {}) {
@@ -28,30 +28,11 @@ export async function runMysqlTool(tool, args, { input, output } = {}) {
     ? join(process.env.MYSQL_BASE, "bin", executable)
     : executable;
   try {
-    await new Promise((resolve, reject) => {
-      const child = spawn(
-        binary,
-        [`--defaults-extra-file=${credentialFile}`, ...args],
-        { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] },
-      );
-      let error = "";
-      child.stderr.on("data", (chunk) => {
-        error += chunk.toString();
-      });
-      child.on("error", reject);
-      child.on("close", (code) =>
-        code === 0
-          ? resolve()
-          : reject(new Error(`${tool} exited ${code}: ${error}`)),
-      );
-      if (output) child.stdout.pipe(output);
-      else child.stdout.resume();
-      if (input) input.pipe(child.stdin);
-      else child.stdin.end();
-      child.stdin.on("error", (e) => {
-        if (e.code !== "EPIPE") reject(e);
-      });
-    });
+    await runProcess(
+      binary,
+      [`--defaults-extra-file=${credentialFile}`, ...args],
+      { input, output },
+    );
   } finally {
     await unlink(credentialFile);
   }

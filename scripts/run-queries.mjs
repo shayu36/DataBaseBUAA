@@ -1,6 +1,5 @@
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { finished } from "node:stream/promises";
 import { join } from "node:path";
 import { runMysqlTool, projectRoot } from "./mysql-tools.mjs";
 const folder = join(projectRoot, "docs", "evidence");
@@ -14,7 +13,6 @@ await runMysqlTool(
     output,
   },
 );
-await finished(output);
 console.log(
   "All 27 SQL query groups executed; output saved to docs/evidence/sql-query-results.txt",
 );
