@@ -12,7 +12,7 @@ migration: BEGIN
     LEAVE migration;
   END IF;
   SELECT COALESCE(MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)),0) INTO current_version FROM system_settings WHERE name='pdf_expansion';
-  IF current_version >= 8 THEN
+  IF current_version >= 9 THEN
     SELECT 0 AS migrated;
     LEAVE migration;
   END IF;
@@ -218,6 +218,18 @@ migration: BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='dispatch_tasks' AND column_name='inventory_completed') THEN
     ALTER TABLE dispatch_tasks ADD COLUMN inventory_completed JSON NULL;
   END IF;
-  INSERT INTO system_settings(name,value) VALUES('pdf_expansion',JSON_OBJECT('version',8,'applied_at',UTC_TIMESTAMP(3))) ON DUPLICATE KEY UPDATE value=VALUES(value);
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='carbon_transactions'
+    AND column_name='factor_kg_per_km' AND numeric_precision=20 AND numeric_scale=8) THEN
+    ALTER TABLE carbon_transactions MODIFY factor_kg_per_km DECIMAL(20,8) NOT NULL DEFAULT 0.21;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='carbon_transactions' AND column_name='points_per_km') THEN
+    ALTER TABLE carbon_transactions ADD COLUMN points_per_km DECIMAL(20,8) NULL;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.views WHERE table_schema=DATABASE() AND table_name='carbon_ledger') THEN
+    CREATE OR REPLACE VIEW carbon_ledger AS
+      SELECT id,order_id,distance_m,points_change points,carbon_kg_change carbon_kg,factor_kg_per_km,created_at
+      FROM carbon_transactions WHERE entry_type='AWARD';
+  END IF;
+  INSERT INTO system_settings(name,value) VALUES('pdf_expansion',JSON_OBJECT('version',9,'applied_at',UTC_TIMESTAMP(3))) ON DUPLICATE KEY UPDATE value=VALUES(value);
   SELECT 1 AS migrated;
 END

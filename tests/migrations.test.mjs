@@ -149,6 +149,31 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
     );
     assert.equal(inventory_columns, 3);
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
+    // A version 8 ledger keeps historical values without inventing a rate.
+    await pool.query(
+      "ALTER TABLE carbon_transactions DROP COLUMN points_per_km, MODIFY factor_kg_per_km DECIMAL(5,3) NOT NULL DEFAULT 0.210",
+    );
+    await pool.query(
+      "CREATE VIEW carbon_ledger AS SELECT id,order_id,distance_m,points_change points,carbon_kg_change carbon_kg,factor_kg_per_km,created_at FROM carbon_transactions WHERE entry_type='AWARD'",
+    );
+    await pool.query(
+      "UPDATE system_settings SET value=JSON_OBJECT('version',8) WHERE name='pdf_expansion'",
+    );
+    assert.ok((await applyFeatureMigrations(pool)).applied.length > 0);
+    const [[ledger]] = await pool.query(
+      "SELECT points_change,carbon_kg_change,factor_kg_per_km,points_per_km FROM carbon_transactions WHERE id=1",
+    );
+    assert.deepEqual(ledger, {
+      points_change: 5,
+      carbon_kg_change: 0.105,
+      factor_kg_per_km: 0.21,
+      points_per_km: null,
+    });
+    const [[column]] = await pool.query(
+      "SELECT numeric_precision AS numeric_precision,numeric_scale AS numeric_scale FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='carbon_ledger' AND column_name='factor_kg_per_km'",
+    );
+    assert.deepEqual(column, { numeric_precision: 20, numeric_scale: 8 });
+    assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
   } finally {
     await pool.end();
     await admin.query(`DROP DATABASE IF EXISTS \`${dbName}\``);

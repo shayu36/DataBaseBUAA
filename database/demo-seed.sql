@@ -65,8 +65,8 @@ seed: BEGIN
           SET order_id=LAST_INSERT_ID();
           INSERT INTO payments(order_id,idempotency_key,amount_cents,paid_at) VALUES(order_id,CONCAT('seed-',order_id),100,ended);
           UPDATE ride_orders SET status='PAID' WHERE id=order_id;
-          INSERT INTO carbon_transactions(order_id,entry_type,idempotency_key,distance_m,points_change,carbon_kg_change,factor_kg_per_km,rule_version,reason,created_at)
-            VALUES(order_id,'AWARD',CONCAT('seed-award-',order_id),metres,FLOOR(metres/100),ROUND(metres*0.00021,4),0.210,'carbon-v1','有效已支付行程积分发放',ended);
+          INSERT INTO carbon_transactions(order_id,entry_type,idempotency_key,distance_m,points_change,carbon_kg_change,factor_kg_per_km,points_per_km,rule_version,reason,created_at)
+            VALUES(order_id,'AWARD',CONCAT('seed-award-',order_id),metres,FLOOR(metres/100),ROUND(metres*0.00021,4),0.210,10,'carbon-v1','有效已支付行程积分发放',ended);
         END IF;
         SET trip_no=trip_no+1;
       END WHILE;

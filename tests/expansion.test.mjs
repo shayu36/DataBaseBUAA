@@ -332,6 +332,90 @@ test("reviewed rides award versioned carbon and adjustments append signed rows",
   assert.equal(Number(totals.carbon), 0.2);
 });
 
+test("carbon awards retain precise historical factors and validate their own rule", async () => {
+  await pool.query(
+    "UPDATE system_settings SET value=JSON_OBJECT('kg_per_km',0.21019,'points_per_km',12.345678,'rule_version','precise-v1') WHERE name='carbon'",
+  );
+  const [order] = await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
+  );
+  await business.payRide(pool, student, order.insertId, {
+    idempotency_key: "precise-payment",
+  });
+  const [[award]] = await pool.query(
+    "SELECT points_change,carbon_kg_change,factor_kg_per_km,points_per_km FROM carbon_transactions WHERE order_id=?",
+    [order.insertId],
+  );
+  assert.deepEqual(award, {
+    points_change: 12,
+    carbon_kg_change: 0.2102,
+    factor_kg_per_km: 0.21019,
+    points_per_km: 12.345678,
+  });
+  await pool.query(
+    "UPDATE system_settings SET value=JSON_OBJECT('kg_per_km',0.3,'points_per_km',20,'rule_version','next-v1') WHERE name='carbon'",
+  );
+  const checks = await readFile(
+    new URL("../database/invariant-checks.sql", import.meta.url),
+    "utf8",
+  );
+  const teaching = await readFile(
+    new URL("../database/queries.sql", import.meta.url),
+    "utf8",
+  );
+  const q18 = teaching
+    .split("-- Q18:")[1]
+    .split("-- Q19:")[0]
+    .replace(/^[^\n]*\n/, "");
+  assert.equal(
+    (await pool.query(checks))[0].find(
+      (row) => row.name === "有效已支付订单恰有一条版本化积分发放",
+    ).errors,
+    0,
+  );
+  assert.deepEqual((await pool.query(q18))[0], []);
+  await pool.query(
+    "UPDATE carbon_transactions SET points_change=13 WHERE order_id=?",
+    [order.insertId],
+  );
+  assert.equal(
+    (await pool.query(checks))[0].find(
+      (row) => row.name === "有效已支付订单恰有一条版本化积分发放",
+    ).errors,
+    1,
+  );
+  assert.equal((await pool.query(q18))[0].length, 1);
+});
+
+test("teaching hotspot query filters borrowing and return times independently", async () => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.query(
+      "SET timestamp=UNIX_TIMESTAMP('2026-10-07 04:00:00')",
+    );
+    await connection.query(`INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,status) VALUES
+      (2,1,1,2,'2026-10-05 22:59:00','2026-10-05 23:01:00','UNPAID'),
+      (2,1,1,2,'2026-10-06 01:59:00','2026-10-06 02:01:00','UNPAID'),
+      (2,1,1,2,'2026-10-07 23:00:00','2026-10-07 23:10:00','UNPAID')`);
+    const teaching = await readFile(
+      new URL("../database/queries.sql", import.meta.url),
+      "utf8",
+    );
+    const q26 = teaching
+      .split("-- Q26:")[1]
+      .split("-- Q27:")[0]
+      .replace(/^[^\n]*\n/, "");
+    const [rows] = await connection.query(q26);
+    assert.deepEqual(rows, [
+      { name: "富余站", borrow_count: 1, return_count: 0 },
+      { name: "缺车站", borrow_count: 0, return_count: 1 },
+    ]);
+  } finally {
+    await connection.query("SET timestamp=0");
+    connection.release();
+  }
+});
+
 test("excluded historical award is reversed without failing invariant checks", async () => {
   const [order] = await pool.query(
     "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
@@ -357,6 +441,15 @@ test("excluded historical award is reversed without failing invariant checks", a
     (row) => row.name === "有效已支付订单恰有一条版本化积分发放",
   );
   assert.equal(Number(awardCheck.errors), 0);
+  const teaching = await readFile(
+    new URL("../database/queries.sql", import.meta.url),
+    "utf8",
+  );
+  const q18 = teaching
+    .split("-- Q18:")[1]
+    .split("-- Q19:")[0]
+    .replace(/^[^\n]*\n/, "");
+  assert.deepEqual((await pool.query(q18))[0], []);
   const [[net]] = await pool.query(
     "SELECT SUM(points_change) points,SUM(carbon_kg_change) carbon FROM carbon_transactions WHERE order_id=?",
     [order.insertId],

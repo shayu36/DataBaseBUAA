@@ -34,8 +34,17 @@ SELECT id,name,capacity,occupied,reserved FROM v_zone_inventory WHERE occupied+r
 SELECT r.id,r.bike_id,b.status,b.current_zone_id FROM ride_orders r JOIN bikes b ON b.id=r.bike_id WHERE r.status='RUNNING' AND (b.status<>'RIDING' OR b.current_zone_id IS NOT NULL);
 -- Q17: duplicate activity invariant, expected no rows.
 SELECT 'USER' kind,user_id entity_id,COUNT(*) active_count FROM ride_orders WHERE status='RUNNING' GROUP BY user_id HAVING COUNT(*)>1 UNION ALL SELECT 'BIKE',bike_id,COUNT(*) FROM ride_orders WHERE status='RUNNING' GROUP BY bike_id HAVING COUNT(*)>1;
--- Q18: payment/qualified-carbon invariant, expected no rows; reviewed or excluded paid rides may have no award.
-SELECT r.id,r.status,r.qualification_status,p.id payment_id,c.id award_id FROM ride_orders r LEFT JOIN payments p ON p.order_id=r.id LEFT JOIN carbon_transactions c ON c.order_id=r.id AND c.entry_type='AWARD' WHERE (r.status='PAID')<>(p.id IS NOT NULL) OR (r.status='PAID' AND r.qualification_status='VALID')<>(c.id IS NOT NULL) OR (p.id IS NOT NULL AND p.amount_cents<>r.amount_cents) OR (c.id IS NOT NULL AND (c.distance_m<>r.distance_m OR c.points_change<>FLOOR(r.distance_m/1000*10) OR c.carbon_kg_change<>ROUND(r.distance_m/1000*c.factor_kg_per_km,4)));
+-- Q18: payment and qualified-carbon invariant, expected no rows. Historical rates may be unknown.
+SELECT r.id,r.status,r.qualification_status,p.id payment_id,c.id award_id FROM ride_orders r
+LEFT JOIN payments p ON p.order_id=r.id LEFT JOIN carbon_transactions c ON c.order_id=r.id AND c.entry_type='AWARD'
+WHERE (r.status='PAID')<>(p.id IS NOT NULL) OR (p.id IS NOT NULL AND p.amount_cents<>r.amount_cents)
+ OR (r.status='PAID' AND r.qualification_status='VALID' AND c.id IS NULL)
+ OR (r.qualification_status='UNDER_REVIEW' AND c.id IS NOT NULL)
+ OR (r.qualification_status='EXCLUDED' AND c.id IS NOT NULL AND NOT EXISTS(
+   SELECT 1 FROM carbon_transactions reversal WHERE reversal.order_id=r.id AND reversal.entry_type='ADJUSTMENT'
+   AND reversal.idempotency_key=CONCAT('exclude-',r.id) AND reversal.points_change=-c.points_change AND reversal.carbon_kg_change=-c.carbon_kg_change))
+ OR (c.id IS NOT NULL AND (c.distance_m<>r.distance_m OR c.carbon_kg_change<>ROUND(r.distance_m/1000*c.factor_kg_per_km,4)
+   OR (c.points_per_km IS NOT NULL AND c.points_change<>FLOOR(r.distance_m/1000*c.points_per_km))));
 -- Q19: database object inventory.
 SELECT TABLE_NAME,TABLE_TYPE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_TYPE,TABLE_NAME;
 SELECT TRIGGER_NAME,ACTION_TIMING,EVENT_MANIPULATION FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE();
@@ -54,6 +63,17 @@ SELECT a.id,a.order_id,a.x,a.y,a.reason,a.location_captured_at,a.location_source
 -- Q25: append-only carbon transactions and net value by order.
 SELECT order_id,SUM(points_change) net_points,SUM(carbon_kg_change) net_carbon,COUNT(*) entries,GROUP_CONCAT(CONCAT(entry_type,':',rule_version) ORDER BY id) lineage FROM carbon_transactions GROUP BY order_id ORDER BY order_id;
 -- Q26: filtered Beijing-time hotspot sample: workdays 07:00–10:00 over the last 7 days.
-SELECT z.name,COUNT(CASE WHEN r.start_zone_id=z.id THEN 1 END) borrow_count,COUNT(CASE WHEN r.end_zone_id=z.id THEN 1 END) return_count FROM parking_zones z LEFT JOIN ride_orders r ON (r.start_zone_id=z.id OR r.end_zone_id=z.id) AND COALESCE(r.ended_at,r.started_at)>=UTC_TIMESTAMP()-INTERVAL 7 DAY AND WEEKDAY(COALESCE(r.ended_at,r.started_at)+INTERVAL 8 HOUR)<5 AND HOUR(COALESCE(r.ended_at,r.started_at)+INTERVAL 8 HOUR) BETWEEN 7 AND 9 GROUP BY z.id,z.name;
+WITH events AS (
+ SELECT start_zone_id AS zone_id,started_at AS event_at,1 AS borrowed,0 AS returned FROM ride_orders
+ WHERE started_at>=UTC_TIMESTAMP()-INTERVAL 7 DAY AND started_at<=UTC_TIMESTAMP()
+ UNION ALL
+ SELECT end_zone_id,ended_at,0,1 FROM ride_orders
+ WHERE ended_at>=UTC_TIMESTAMP()-INTERVAL 7 DAY AND ended_at<=UTC_TIMESTAMP()
+), filtered AS (
+ SELECT * FROM events WHERE WEEKDAY(event_at+INTERVAL 8 HOUR)<5
+ AND HOUR(event_at+INTERVAL 8 HOUR)>=7 AND HOUR(event_at+INTERVAL 8 HOUR)<10
+)
+SELECT z.name,COALESCE(SUM(e.borrowed),0) borrow_count,COALESCE(SUM(e.returned),0) return_count
+FROM parking_zones z LEFT JOIN filtered e ON e.zone_id=z.id GROUP BY z.id,z.name ORDER BY z.id;
 -- Q27: current road, review, suggestion, risk, and carbon object counts.
 SELECT (SELECT COUNT(*) FROM road_edges) roads,(SELECT COUNT(*) FROM return_attempts WHERE review_status='PENDING') pending_returns,(SELECT COUNT(*) FROM dispatch_suggestions WHERE status='OPEN') open_suggestions,(SELECT COUNT(*) FROM risk_alerts WHERE status IN('OPEN','ACKNOWLEDGED')) open_risks,(SELECT COUNT(*) FROM carbon_transactions) carbon_entries;

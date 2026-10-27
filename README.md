@@ -103,7 +103,7 @@ node scripts/restore.mjs backups/备份文件.sql campus_bike_restore_demo
 node scripts/check.mjs campus_bike_restore_demo
 ```
 
-恢复目标必须是尚不存在的 `campus_bike_restore_` 前缀数据库。MySQL 结构变更会隐式提交；迁移失败时应检查错误并从备份恢复，不能依赖事务回滚已完成的结构变更。
+恢复目标必须是尚不存在的 `campus_bike_restore_` 前缀数据库。MySQL 结构变更会隐式提交；迁移失败时应检查错误并从备份恢复，不能依赖事务回滚已完成的结构变更。新版积分发放会保存当时的精确碳系数和积分比例；旧流水中未记录的比例保留为空，旧版已舍入的系数无法还原。若历史系数与已发放减排量不一致，不变量检查会提示人工核对。
 
 ## 目录与文档
 

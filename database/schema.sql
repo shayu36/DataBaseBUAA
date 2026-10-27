@@ -136,7 +136,8 @@ CREATE TABLE IF NOT EXISTS carbon_transactions (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, order_id BIGINT UNSIGNED NOT NULL,
  entry_type ENUM('AWARD','ADJUSTMENT') NOT NULL, award_order_id BIGINT UNSIGNED GENERATED ALWAYS AS (CASE WHEN entry_type='AWARD' THEN order_id END) STORED UNIQUE,
  idempotency_key VARCHAR(100) NOT NULL UNIQUE, distance_m INT NOT NULL DEFAULT 0,
- points_change INT NOT NULL, carbon_kg_change DECIMAL(12,4) NOT NULL, factor_kg_per_km DECIMAL(5,3) NOT NULL DEFAULT 0.210,
+ points_change INT NOT NULL, carbon_kg_change DECIMAL(12,4) NOT NULL, factor_kg_per_km DECIMAL(20,8) NOT NULL DEFAULT 0.21,
+ points_per_km DECIMAL(20,8) NULL,
  rule_version VARCHAR(30) NOT NULL, reason VARCHAR(300) NOT NULL, actor_id BIGINT UNSIGNED NULL,
  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), FOREIGN KEY(order_id) REFERENCES ride_orders(id), FOREIGN KEY(actor_id) REFERENCES users(id), INDEX idx_carbon_created_order(created_at,order_id), CHECK(distance_m>=0)
 ) ENGINE=InnoDB;

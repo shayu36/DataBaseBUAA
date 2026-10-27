@@ -62,8 +62,8 @@ award: BEGIN
  INTO v_factor,v_rate,v_version FROM system_settings WHERE name='carbon';
  SET p_points=FLOOR(v_distance*v_rate/1000),p_carbon=ROUND(v_distance*v_factor/1000,4),p_reason=NULL;
  IF EXISTS(SELECT 1 FROM carbon_transactions WHERE award_order_id=p_order_id) THEN LEAVE award; END IF;
- INSERT INTO carbon_transactions(order_id,entry_type,idempotency_key,distance_m,points_change,carbon_kg_change,factor_kg_per_km,rule_version,reason,actor_id)
- VALUES(p_order_id,'AWARD',CONCAT('award-',p_order_id),v_distance,p_points,p_carbon,v_factor,v_version,'有效已支付行程积分发放',p_actor_id);
+ INSERT INTO carbon_transactions(order_id,entry_type,idempotency_key,distance_m,points_change,carbon_kg_change,factor_kg_per_km,points_per_km,rule_version,reason,actor_id)
+ VALUES(p_order_id,'AWARD',CONCAT('award-',p_order_id),v_distance,p_points,p_carbon,v_factor,v_rate,v_version,'有效已支付行程积分发放',p_actor_id);
  SET p_awarded=TRUE;
 END$$
 DELIMITER ;
