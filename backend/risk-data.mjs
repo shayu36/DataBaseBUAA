@@ -1,21 +1,12 @@
 // MySQL aggregates recent tickets and last service dates; this formats rule explanations.
-export async function riskData(connection, now, includeTicketIds = false) {
-  const [result] = await connection.query("CALL sp_risk_inputs(?,?)", [
-    now,
-    includeTicketIds,
-  ]);
-  const [bikes, faults, tickets] = result;
+export async function riskData(connection, now) {
+  const [result] = await connection.query("CALL sp_risk_inputs(?)", [now]);
+  const [bikes, faults] = result;
   const faultTypes = new Map();
   for (const fault of faults) {
     const group = faultTypes.get(fault.bike_id) || [];
     group.push(fault);
     faultTypes.set(fault.bike_id, group);
-  }
-  const ticketIds = new Map();
-  for (const ticket of tickets) {
-    const group = ticketIds.get(ticket.bike_id) || [];
-    group.push(ticket.id);
-    ticketIds.set(ticket.bike_id, group);
   }
   const risks = bikes.map((bike) => {
     const details = [];
@@ -38,5 +29,5 @@ export async function riskData(connection, now, includeTicketIds = false) {
       reason_details: details,
     };
   });
-  return { risks, evaluated: bikes.length, ticketIds };
+  return { risks, evaluated: bikes.length };
 }

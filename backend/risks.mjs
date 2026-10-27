@@ -9,7 +9,7 @@ export function refreshRiskAlerts(pool, actor, now = new Date()) {
   if (actor.role !== "ADMIN")
     throw new AppError("仅管理员可运行风险规则", "FORBIDDEN", 403);
   return actorTransaction(pool, actor, async (c) => {
-    const { risks, evaluated, ticketIds } = await riskData(c, now, true);
+    const { risks, evaluated } = await riskData(c, now);
     const candidates = risks
       .filter((risk) => risk.score >= 30)
       .map((risk) => ({
@@ -17,7 +17,6 @@ export function refreshRiskAlerts(pool, actor, now = new Date()) {
         score: risk.score,
         level: risk.level,
         reasons: risk.reason_details,
-        ticket_ids: ticketIds.get(risk.bike_id) || [],
         fingerprint: createHash("sha256")
           .update(
             JSON.stringify({
@@ -28,11 +27,35 @@ export function refreshRiskAlerts(pool, actor, now = new Date()) {
           )
           .digest("hex"),
       }));
+    const newCandidates = new Map();
+    if (candidates.length) {
+      const byFingerprint = new Map(
+        candidates.map((risk) => [risk.fingerprint, risk]),
+      );
+      const [tickets] = await c.query(sql("new_risk_tickets"), [
+        JSON.stringify(
+          candidates.map(({ bike_id, fingerprint }) => ({
+            bike_id,
+            fingerprint,
+          })),
+        ),
+        now,
+      ]);
+      for (const ticket of tickets) {
+        if (!newCandidates.has(ticket.fingerprint))
+          newCandidates.set(ticket.fingerprint, {
+            ...byFingerprint.get(ticket.fingerprint),
+            ticket_ids: [],
+          });
+        if (ticket.id != null)
+          newCandidates.get(ticket.fingerprint).ticket_ids.push(ticket.id);
+      }
+    }
     const [result] = await c.query("CALL sp_refresh_risk_alerts(?,?,?,?)", [
       actor.id,
       evaluated,
       RULE_VERSION,
-      JSON.stringify(candidates),
+      JSON.stringify([...newCandidates.values()]),
     ]);
     return {
       created: result[0].map((row) => row.id),

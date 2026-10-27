@@ -138,7 +138,7 @@ DELIMITER ;
 
 DROP PROCEDURE IF EXISTS sp_risk_inputs;
 DELIMITER $$
-CREATE PROCEDURE sp_risk_inputs(IN p_now DATETIME(3), IN p_include_ticket_ids BOOLEAN)
+CREATE PROCEDURE sp_risk_inputs(IN p_now DATETIME(3))
 SQL SECURITY INVOKER
 BEGIN
  WITH recent_groups AS (
@@ -171,11 +171,5 @@ BEGIN
  FROM scored ORDER BY score DESC,bike_id;
  SELECT bike_id,CONCAT(fault_type,' 同类型故障复发 ',COUNT(*),' 次（+20）') AS message,MIN(id) AS first_id FROM maintenance_tickets
  WHERE created_at>=p_now-INTERVAL 30 DAY AND created_at<=p_now GROUP BY bike_id,fault_type HAVING COUNT(*)>=2 ORDER BY bike_id,first_id;
- IF p_include_ticket_ids THEN
-  SELECT t.bike_id,t.id FROM maintenance_tickets t JOIN bikes b ON b.id=t.bike_id
-  WHERE t.created_at<=p_now AND b.status<>'RETIRED' ORDER BY t.bike_id,t.id;
- ELSE
-  SELECT bike_id,id FROM maintenance_tickets WHERE FALSE;
- END IF;
 END$$
 DELIMITER ;

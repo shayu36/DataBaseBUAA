@@ -18,6 +18,7 @@ import { leaderboard } from "../backend/read-model.mjs";
 import { buildLeaderboard } from "./leaderboard-reference.mjs";
 import { bikeRisks } from "./risk-reference.mjs";
 import { riskData } from "../backend/risk-data.mjs";
+import { sql } from "../backend/sql-statements.mjs";
 
 const pool = createPool({
   database: "campus_bike_test",
@@ -162,6 +163,31 @@ test("risk rule produces a versioned alert and operator can link a ticket", asyn
   assert.ok(handled.maintenance_ticket_id);
 });
 
+test("risk refresh retains candidates with no historical tickets", async () => {
+  await pool.query(
+    "UPDATE bikes SET last_service_at=DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 100 DAY) WHERE id=3",
+  );
+  const result = await refreshRiskAlerts(pool, admin);
+  assert.ok(result.created.length > 0);
+  const [[row]] = await pool.query(
+    "SELECT ticket_ids FROM risk_alerts WHERE bike_id=3",
+  );
+  assert.deepEqual(
+    typeof row.ticket_ids === "string"
+      ? JSON.parse(row.ticket_ids)
+      : row.ticket_ids,
+    [],
+  );
+  assert.deepEqual((await refreshRiskAlerts(pool, admin)).created, []);
+});
+
+test("risk refresh handles an entirely low-risk fleet", async () => {
+  await pool.query("UPDATE bikes SET last_service_at=UTC_TIMESTAMP(3)");
+  const result = await refreshRiskAlerts(pool, admin);
+  assert.deepEqual(result.created, []);
+  assert.equal(result.evaluated, 9);
+});
+
 test("SQL risk aggregation matches rule results and ordered ticket references", async () => {
   const now = new Date("2026-10-27T12:00:00Z");
   await pool.query(
@@ -183,16 +209,41 @@ test("SQL risk aggregation matches rule results and ordered ticket references", 
   const [tickets] = await pool.query(
     "SELECT * FROM maintenance_tickets ORDER BY id",
   );
-  const actual = await riskData(pool, now, true);
+  const actual = await riskData(pool, now);
   assert.deepEqual(actual.risks, bikeRisks(bikes, tickets, now));
+  const expectedIds = tickets
+    .filter((ticket) => ticket.bike_id === 1 && ticket.created_at <= now)
+    .map((ticket) => ticket.id);
+  const transferred = [];
+  const observedPool = {
+    async getConnection() {
+      const connection = await pool.getConnection();
+      return new Proxy(connection, {
+        get(target, property) {
+          if (property === "query")
+            return async (...args) => {
+              const result = await target.query(...args);
+              if (args[0] === sql("new_risk_tickets"))
+                transferred.push(result[0]);
+              return result;
+            };
+          const value = target[property];
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+    },
+  };
+  const first = await refreshRiskAlerts(observedPool, admin, now);
+  assert.equal(first.created.length, 1);
   assert.deepEqual(
-    actual.ticketIds.get(1),
-    tickets
-      .filter((ticket) => ticket.bike_id === 1 && ticket.created_at <= now)
-      .map((ticket) => ticket.id),
+    transferred[0].map((row) => row.id),
+    expectedIds,
   );
-  assert.equal(actual.ticketIds.has(2), false);
-  await refreshRiskAlerts(pool, admin, now);
+  assert.deepEqual(
+    (await refreshRiskAlerts(observedPool, admin, now)).created,
+    [],
+  );
+  assert.deepEqual(transferred[1], []);
   const [[saved]] = await pool.query(
     "SELECT ticket_ids FROM risk_alerts WHERE bike_id=1",
   );
@@ -200,7 +251,7 @@ test("SQL risk aggregation matches rule results and ordered ticket references", 
     typeof saved.ticket_ids === "string"
       ? JSON.parse(saved.ticket_ids)
       : saved.ticket_ids;
-  assert.deepEqual(savedIds, actual.ticketIds.get(1));
+  assert.deepEqual(savedIds, expectedIds);
 });
 
 test("short abnormal rides appear as risk clues without changing the score", async () => {
