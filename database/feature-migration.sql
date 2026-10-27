@@ -156,8 +156,7 @@ migration: BEGIN
       FOREIGN KEY(bike_id) REFERENCES bikes(id), FOREIGN KEY(handler_id) REFERENCES users(id), FOREIGN KEY(maintenance_ticket_id) REFERENCES maintenance_tickets(id), CHECK(score BETWEEN 0 AND 100)
     ) ENGINE=InnoDB;
     END IF;
-    INSERT INTO system_settings(name,value) VALUES('carbon',JSON_OBJECT('kg_per_km',0.21,'points_per_km',10,'source','ROUTE_ESTIMATE','rule_version','carbon-v1')) ON DUPLICATE KEY UPDATE value=JSON_SET(value,'$.rule_version','carbon-v1');
-    INSERT INTO system_settings(name,value) VALUES('risk',JSON_OBJECT('rule_version','risk-v1','window_days',30)) ON DUPLICATE KEY UPDATE value=VALUES(value);
+    INSERT INTO system_settings(name,value) VALUES('carbon',JSON_OBJECT('kg_per_km',0.21,'points_per_km',10,'rule_version','carbon-v1')) ON DUPLICATE KEY UPDATE value=JSON_SET(value,'$.rule_version','carbon-v1');
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.key_column_usage WHERE table_schema=DATABASE() AND table_name='ride_orders' AND column_name='reviewed_by' AND referenced_table_name IS NOT NULL) THEN
     ALTER TABLE `ride_orders` ADD CONSTRAINT `fk_ride_reviewer` FOREIGN KEY(`reviewed_by`) REFERENCES users(id);

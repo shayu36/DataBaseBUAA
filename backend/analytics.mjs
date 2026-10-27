@@ -197,26 +197,20 @@ export function parseReportingDay(value) {
 }
 export function reportFilter(input, now) {
   const endNow = clock(now);
-  if (typeof input === "number" || input == null) {
-    const days = Number(input ?? 7);
-    if (![7, 30].includes(days)) throw new Error("Invalid reporting days");
-    return {
-      start: endNow - days * DAY,
-      end: endNow,
-      dayType: "ALL",
-      startHour: 0,
-      endHour: 24,
-      zoneId: null,
-      preset: String(days),
-      timezone: "Asia/Shanghai",
-    };
-  }
-  const start = parseReportingDay(input.start),
-    end = Math.min(parseReportingDay(input.end) + DAY, endNow),
-    startHour = Number(input.startHour ?? 0),
-    endHour = Number(input.endHour ?? 24),
-    dayType = input.dayType || "ALL",
-    zoneId = input.zoneId == null ? null : Number(input.zoneId);
+  const options =
+    typeof input === "number" || input == null ? { days: input ?? 7 } : input;
+  const custom = options.start != null || options.end != null;
+  const days = Number(options.days ?? 7);
+  if ((!custom && ![7, 30].includes(days)) || (custom && options.days != null))
+    throw new Error("Invalid reporting days");
+  const start = custom ? parseReportingDay(options.start) : endNow - days * DAY,
+    end = custom
+      ? Math.min(parseReportingDay(options.end) + DAY, endNow)
+      : endNow,
+    startHour = Number(options.startHour ?? 0),
+    endHour = Number(options.endHour ?? 24),
+    dayType = options.dayType || "ALL",
+    zoneId = options.zoneId == null ? null : Number(options.zoneId);
   if (
     end <= start ||
     end - start > 31 * DAY ||
@@ -236,7 +230,7 @@ export function reportFilter(input, now) {
     startHour,
     endHour,
     zoneId,
-    preset: "custom",
+    preset: custom ? "custom" : String(days),
     timezone: "Asia/Shanghai",
   };
 }

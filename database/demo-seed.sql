@@ -93,6 +93,6 @@ seed: BEGIN
       FROM JSON_TABLE(campus,'$.zones[*]' COLUMNS(id INT PATH '$.id',capacity INT PATH '$.capacity')) z CROSS JOIN days CROSS JOIN intervals
     ) samples WHERE captured_at<=now_utc;
   INSERT INTO system_settings(name,value) VALUES('seed_version',JSON_OBJECT('version',1,'history','synthetic'));
-  INSERT IGNORE INTO system_settings(name,value) VALUES('pricing',JSON_OBJECT('per_30_minutes_cents',100)),('carbon',JSON_OBJECT('kg_per_km',0.21,'points_per_km',10,'source','ROUTE_ESTIMATE','rule_version','carbon-v1')),('risk',JSON_OBJECT('rule_version','risk-v1','window_days',30));
+  INSERT IGNORE INTO system_settings(name,value) VALUES('carbon',JSON_OBJECT('kg_per_km',0.21,'points_per_km',10,'rule_version','carbon-v1'));
   SELECT 1 AS seeded;
 END

@@ -162,6 +162,7 @@ test("analytics rejects invalid and future date ranges as client errors", async 
   for (const query of [
     "start=2026-02-30&end=2026-03-01",
     "start=2999-01-01&end=2999-01-02",
+    "days=7&start=2026-01-01&end=2026-01-02",
   ]) {
     const response = await request(
       `/api/analytics?${query}`,
@@ -170,6 +171,36 @@ test("analytics rejects invalid and future date ranges as client errors", async 
     );
     assert.equal(response.status, 400);
   }
+});
+test("preset analytics respects weekday, hour, and zone filters", async () => {
+  const query = "days=7&dayType=WEEKDAY&startHour=8&endHour=12&zoneId=1";
+  const response = await request(
+    `/api/analytics?${query}`,
+    undefined,
+    adminCookie,
+  );
+  assert.equal(response.status, 200);
+  assert.equal(response.data.hotspots.length, 1);
+  assert.equal(response.data.hotspots[0].zone_id, 1);
+  assert.equal(response.data.filter.preset, "7");
+  assert.equal(response.data.filter.dayType, "WEEKDAY");
+  assert.equal(response.data.filter.startHour, 8);
+  assert.equal(response.data.filter.endHour, 12);
+  assert.equal(response.data.filter.zoneId, 1);
+  const saved = await request(
+    "/api/analytics/suggestions",
+    {
+      days: 7,
+      dayType: "WEEKDAY",
+      startHour: 8,
+      endHour: 12,
+      zoneId: 1,
+    },
+    adminCookie,
+  );
+  assert.equal(saved.status, 201);
+  assert.equal(saved.data.filter.zoneId, 1);
+  assert.equal(saved.data.filter.dayType, "WEEKDAY");
 });
 test("cross origin writes rejected before mutation", async () => {
   const r = await request("/api/rides/start", { bike_id: 1 }, studentCookie, {

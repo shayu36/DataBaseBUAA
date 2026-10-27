@@ -33,6 +33,11 @@ export const reportFilterSchema = z
   .superRefine((v, ctx) => {
     if ((v.start && !v.end) || (!v.start && v.end))
       ctx.addIssue({ code: "custom", message: "起止日期必须同时提供" });
+    if ((v.start || v.end) && v.days != null)
+      ctx.addIssue({
+        code: "custom",
+        message: "预设周期不能与自定义日期同时使用",
+      });
     if (v.startHour >= v.endHour)
       ctx.addIssue({ code: "custom", message: "结束小时必须晚于开始小时" });
     if (v.start && v.end) {
@@ -60,7 +65,18 @@ export const reportFilterSchema = z
           endHour: v.endHour,
           zoneId: v.zoneId,
         }
-      : (v.days ?? 7),
+      : v.dayType === "ALL" &&
+          v.startHour === 0 &&
+          v.endHour === 24 &&
+          v.zoneId == null
+        ? (v.days ?? 7)
+        : {
+            days: v.days ?? 7,
+            dayType: v.dayType,
+            startHour: v.startHour,
+            endHour: v.endHour,
+            zoneId: v.zoneId,
+          },
   );
 
 export async function createDispatchSuggestions(pool, actor, rawFilter) {

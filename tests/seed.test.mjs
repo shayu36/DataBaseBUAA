@@ -106,6 +106,7 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
     for (const filter of [
       7,
       30,
+      { days: 7, dayType: "WEEKDAY", startHour: 0, endHour: 12, zoneId: 1 },
       {
         start: beijingDay(new Date(now.getTime() - 4 * 86400000)),
         end: beijingDay(now),

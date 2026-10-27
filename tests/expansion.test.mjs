@@ -69,8 +69,7 @@ beforeEach(async () => {
   );
   await pool.query(
     `INSERT INTO system_settings(name,value) VALUES
-     ('carbon',JSON_OBJECT('kg_per_km',0.21,'points_per_km',10,'rule_version','carbon-v1')),
-     ('risk',JSON_OBJECT('rule_version','risk-v1'))`,
+     ('carbon',JSON_OBJECT('kg_per_km',0.21,'points_per_km',10,'rule_version','carbon-v1'))`,
   );
 });
 after(() => pool.end());
