@@ -508,9 +508,29 @@ test("excluded historical award is reversed without failing invariant checks", a
   );
   assert.equal(Number(net.points), 0);
   assert.equal(Number(net.carbon), 0);
+  // Historical reversals retain their original keys after upgrading.
+  await pool.query(
+    "UPDATE carbon_transactions SET idempotency_key=CONCAT('exclude-',order_id) WHERE order_id=? AND entry_type='ADJUSTMENT'",
+    [order.insertId],
+  );
+  const [legacyChecks] = await pool.query(
+    await readFile(
+      new URL("../database/invariant-checks.sql", import.meta.url),
+      "utf8",
+    ),
+  );
+  assert.equal(
+    Number(
+      legacyChecks.find(
+        (row) => row.name === "有效已支付订单恰有一条版本化积分发放",
+      ).errors,
+    ),
+    0,
+  );
+  assert.deepEqual((await pool.query(q18))[0], []);
 });
 
-test("SQL payment keeps qualification, idempotency and rollback consistent", async () => {
+test("SQL payment keeps qualification and idempotency consistent despite manual keys", async () => {
   const [first] = await pool.query(
     "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status,qualification_status,qualification_reason) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID','UNDER_REVIEW','待复核')",
   );
@@ -523,7 +543,7 @@ test("SQL payment keeps qualification, idempotency and rollback consistent", asy
     reason: "已核对行程",
   });
   const [second] = await pool.query(
-    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
+    "INSERT INTO ride_orders(id,user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(1001,2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
   );
   await assert.rejects(
     business.payRide(pool, student, second.insertId, {
@@ -531,38 +551,97 @@ test("SQL payment keeps qualification, idempotency and rollback consistent", asy
     }),
     { code: "IDEMPOTENCY_CONFLICT" },
   );
-  await adjustCarbon(pool, admin, {
+  const input = {
     order_id: first.insertId,
     points_change: 1,
     carbon_kg_change: -0.00005,
     reason: "测试重复键",
-    idempotency_key: `award-${second.insertId}`.padEnd(8, "0"),
+    idempotency_key: `award-${second.insertId}`,
+  };
+  await adjustCarbon(pool, admin, input);
+  const payment = await business.payRide(pool, student, second.insertId, {
+    idempotency_key: "review-payment-2",
   });
-  // Use an order id whose reserved award key meets the adjustment key's minimum length.
-  const reservedKey = `award-${second.insertId}`;
-  if (reservedKey.length < 8) {
-    await pool.query(
-      "UPDATE carbon_transactions SET idempotency_key=? WHERE entry_type='ADJUSTMENT'",
-      [reservedKey],
-    );
-  }
-  await assert.rejects(
-    business.payRide(pool, student, second.insertId, {
-      idempotency_key: "review-payment-2",
-    }),
-    { code: "ER_DUP_ENTRY" },
+  assert.equal(payment.credit.awarded, true);
+  assert.equal((await adjustCarbon(pool, admin, input)).duplicate, true);
+  assert.equal(
+    (
+      await business.payRide(pool, student, second.insertId, {
+        idempotency_key: "review-payment-2",
+      })
+    ).duplicate,
+    true,
   );
   const [[state]] = await pool.query(
     "SELECT status,(SELECT COUNT(*) FROM payments WHERE order_id=?) payments FROM ride_orders WHERE id=?",
     [second.insertId, second.insertId],
   );
-  assert.equal(state.status, "UNPAID");
-  assert.equal(state.payments, 0);
+  assert.equal(state.status, "PAID");
+  assert.equal(state.payments, 1);
+  const [[award]] = await pool.query(
+    "SELECT idempotency_key FROM carbon_transactions WHERE order_id=? AND entry_type='AWARD'",
+    [second.insertId],
+  );
+  assert.equal(award.idempotency_key, `auto:award-${second.insertId}`);
   const [[adjustment]] = await pool.query(
     "SELECT carbon_kg_change FROM carbon_transactions WHERE order_id=? AND entry_type='ADJUSTMENT'",
     [first.insertId],
   );
   assert.equal(adjustment.carbon_kg_change, -0.0001);
+});
+
+test("automatic exclusion reversal does not collide with manual adjustment keys", async () => {
+  await pool.query(
+    "INSERT INTO ride_orders(id,user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(1001,2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
+  );
+  await business.payRide(pool, student, 1001, {
+    idempotency_key: "collision-payment",
+  });
+  const input = {
+    order_id: 1001,
+    points_change: 1,
+    carbon_kg_change: 0,
+    reason: "人工调整",
+    idempotency_key: "exclude-1001",
+  };
+  await adjustCarbon(pool, admin, input);
+  await pool.query(
+    "UPDATE ride_orders SET qualification_status='UNDER_REVIEW',qualification_reason='重新复核' WHERE id=1001",
+  );
+  await reviewOrderQualification(pool, admin, 1001, {
+    decision: "EXCLUDED",
+    reason: "人工复核排除",
+  });
+  assert.equal((await adjustCarbon(pool, admin, input)).duplicate, true);
+  const [rows] = await pool.query(
+    "SELECT idempotency_key,points_change FROM carbon_transactions WHERE order_id=1001 AND entry_type='ADJUSTMENT' ORDER BY id",
+  );
+  assert.deepEqual(
+    rows.map((row) => [row.idempotency_key, row.points_change]),
+    [
+      ["exclude-1001", 1],
+      ["auto:exclude-1001", -10],
+    ],
+  );
+  const [checks] = await pool.query(
+    await readFile(
+      new URL("../database/invariant-checks.sql", import.meta.url),
+      "utf8",
+    ),
+  );
+  assert.equal(
+    Number(
+      checks.find((row) => row.name === "有效已支付订单恰有一条版本化积分发放")
+        .errors,
+    ),
+    0,
+  );
+  await assert.rejects(
+    pool.query(
+      "CALL sp_adjust_carbon(1,1001,1,0,'非法编号','auto:exclude-1001',JSON_OBJECT())",
+    ),
+    { sqlMessage: "INVALID_ADJUSTMENT" },
+  );
 });
 
 test("carbon adjustments enforce account balances and exact idempotency", async () => {

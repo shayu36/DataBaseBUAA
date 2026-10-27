@@ -42,7 +42,7 @@ WHERE (r.status='PAID')<>(p.id IS NOT NULL) OR (p.id IS NOT NULL AND p.amount_ce
  OR (r.qualification_status='UNDER_REVIEW' AND c.id IS NOT NULL)
  OR (r.qualification_status='EXCLUDED' AND c.id IS NOT NULL AND NOT EXISTS(
    SELECT 1 FROM carbon_transactions reversal WHERE reversal.order_id=r.id AND reversal.entry_type='ADJUSTMENT'
-   AND reversal.idempotency_key=CONCAT('exclude-',r.id) AND reversal.points_change=-c.points_change AND reversal.carbon_kg_change=-c.carbon_kg_change))
+   AND reversal.idempotency_key IN (CONCAT('exclude-',r.id),CONCAT('auto:exclude-',r.id)) AND reversal.points_change=-c.points_change AND reversal.carbon_kg_change=-c.carbon_kg_change))
  OR (c.id IS NOT NULL AND (c.distance_m<>r.distance_m OR c.carbon_kg_change<>ROUND(r.distance_m/1000*c.factor_kg_per_km,4)
    OR (c.points_per_km IS NOT NULL AND c.points_change<>FLOOR(r.distance_m/1000*c.points_per_km))));
 -- Q19: database object inventory.

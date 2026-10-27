@@ -63,7 +63,7 @@ award: BEGIN
  SET p_points=FLOOR(v_distance*v_rate/1000),p_carbon=ROUND(v_distance*v_factor/1000,4),p_reason=NULL;
  IF EXISTS(SELECT 1 FROM carbon_transactions WHERE award_order_id=p_order_id) THEN LEAVE award; END IF;
  INSERT INTO carbon_transactions(order_id,entry_type,idempotency_key,distance_m,points_change,carbon_kg_change,factor_kg_per_km,points_per_km,rule_version,reason,actor_id)
- VALUES(p_order_id,'AWARD',CONCAT('award-',p_order_id),v_distance,p_points,p_carbon,v_factor,v_rate,v_version,'有效已支付行程积分发放',p_actor_id);
+ VALUES(p_order_id,'AWARD',CONCAT('auto:award-',p_order_id),v_distance,p_points,p_carbon,v_factor,v_rate,v_version,'有效已支付行程积分发放',p_actor_id);
  SET p_awarded=TRUE;
 END$$
 DELIMITER ;
@@ -127,7 +127,7 @@ BEGIN
   CALL sp_award_carbon(p_order_id,p_actor_id,v_awarded,v_points,v_carbon,v_reason);
  ELSE
   INSERT INTO carbon_transactions(order_id,entry_type,idempotency_key,distance_m,points_change,carbon_kg_change,factor_kg_per_km,rule_version,reason,actor_id)
-  SELECT p_order_id,'ADJUSTMENT',CONCAT('exclude-',p_order_id),0,-points_change,-carbon_kg_change,factor_kg_per_km,rule_version,LEFT(CONCAT('订单排除冲销：',p_reason),300),p_actor_id
+  SELECT p_order_id,'ADJUSTMENT',CONCAT('auto:exclude-',p_order_id),0,-points_change,-carbon_kg_change,factor_kg_per_km,rule_version,LEFT(CONCAT('订单排除冲销：',p_reason),300),p_actor_id
   FROM carbon_transactions WHERE order_id=p_order_id AND entry_type='AWARD';
  END IF;
  INSERT INTO audit_logs(actor_id,action,entity_type,entity_id,detail)
@@ -153,6 +153,9 @@ adjustment: BEGIN
  DECLARE v_id BIGINT UNSIGNED;
  DECLARE v_factor DECIMAL(20,8) DEFAULT 0.21;
  DECLARE v_version VARCHAR(30) DEFAULT 'carbon-v1';
+ IF p_key IS NULL OR NOT REGEXP_LIKE(p_key,'^[a-zA-Z0-9_-]{8,80}$','c') THEN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_ADJUSTMENT';
+ END IF;
  SELECT status,user_id INTO v_status,v_user_id FROM ride_orders WHERE id=p_order_id FOR UPDATE;
  IF v_status IS NULL OR v_status<>'PAID' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_ADJUSTMENT'; END IF;
  SELECT id,order_id,entry_type,points_change,carbon_kg_change,reason
