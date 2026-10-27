@@ -11,6 +11,76 @@ import { aggregateHotspots } from "./hotspot-reference.mjs";
 import { dispatchSuggestions as expectedSuggestions } from "./dispatch-reference.mjs";
 import { dispatchSuggestions } from "../backend/dispatch-suggestions.mjs";
 
+test("schema initialization holds its database lock through DDL", async () => {
+  const database = `campus_bike_schema_test_${randomBytes(4).toString("hex")}`;
+  const credentials = {
+    user: process.env.DB_ADMIN_USER,
+    password: process.env.DB_ADMIN_PASSWORD,
+  };
+  const admin = createPool({ ...credentials, database: undefined });
+  let pool,
+    observer,
+    created = false;
+  const checked = new Set();
+  try {
+    await admin.query(
+      `CREATE DATABASE \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci`,
+    );
+    created = true;
+    pool = createPool({ ...credentials, database });
+    observer = createPool({ ...credentials, database });
+    const inspect = async (statement, connectionId) => {
+      const marker = [
+        "CREATE TABLE IF NOT EXISTS users",
+        "CREATE TRIGGER trg_payment_guard",
+        "CREATE PROCEDURE sp_dashboard",
+      ].find((prefix) => statement.startsWith(prefix));
+      if (marker && !checked.has(marker)) {
+        const [[row]] = await observer.query(
+          "SELECT IS_USED_LOCK(CONCAT('campus-bike:', DATABASE())) AS owner",
+        );
+        assert.equal(row.owner, connectionId, `${marker} 必须由持锁连接执行`);
+        const [[contender]] = await observer.query(
+          "SELECT GET_LOCK(CONCAT('campus-bike:', DATABASE()),0) AS acquired",
+        );
+        assert.equal(contender.acquired, 0);
+        checked.add(marker);
+      }
+    };
+    const guardedPool = {
+      async getConnection() {
+        const connection = await pool.getConnection();
+        return new Proxy(connection, {
+          get(target, property) {
+            if (property === "query")
+              return async (statement, ...args) => {
+                await inspect(statement, target.threadId);
+                return target.query(statement, ...args);
+              };
+            const value = target[property];
+            return typeof value === "function" ? value.bind(target) : value;
+          },
+        });
+      },
+      async query(statement, ...args) {
+        await inspect(statement);
+        return pool.query(statement, ...args);
+      },
+    };
+    await applySchema(guardedPool);
+    assert.equal(checked.size, 3);
+    const [[after]] = await observer.query(
+      "SELECT IS_USED_LOCK(CONCAT('campus-bike:', DATABASE())) AS owner",
+    );
+    assert.equal(after.owner, null);
+  } finally {
+    if (observer) await observer.end();
+    if (pool) await pool.end();
+    if (created) await admin.query(`DROP DATABASE \`${database}\``);
+    await admin.end();
+  }
+});
+
 test("SQL seed is atomic, repeatable and retains the expected demo data", async () => {
   const database = `campus_bike_seed_test_${randomBytes(4).toString("hex")}`;
   const username = `seedtest_${randomBytes(4).toString("hex")}`;

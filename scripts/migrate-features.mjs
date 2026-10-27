@@ -1,5 +1,5 @@
-import { createPool, ledgerTransaction } from "../backend/db.mjs";
-import { applyFeatureMigrations } from "../backend/feature-migrations.mjs";
+import { createPool, withNamedLock } from "../backend/db.mjs";
+import { applyFeatureMigrationsLocked } from "../backend/feature-migrations.mjs";
 import { applyProcedures } from "./sql.mjs";
 import { assertMysqlVersion } from "./mysql-version.mjs";
 
@@ -11,8 +11,8 @@ try {
   if (process.env.DB_NAME !== "campus_bike")
     throw new Error("Feature migration is restricted to campus_bike.");
   await assertMysqlVersion(pool);
-  const result = await ledgerTransaction(pool, async (connection) => {
-    const migration = await applyFeatureMigrations(connection);
+  const result = await withNamedLock(pool, async (connection) => {
+    const migration = await applyFeatureMigrationsLocked(connection);
     await applyProcedures(connection);
     return migration;
   });

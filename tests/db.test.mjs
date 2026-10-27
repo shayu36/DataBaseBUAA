@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ledgerTransaction, readSnapshot } from "../backend/db.mjs";
+import {
+  ledgerTransaction,
+  readSnapshot,
+  withNamedLock,
+} from "../backend/db.mjs";
 import { applyFeatureMigrations } from "../backend/feature-migrations.mjs";
 
 function fixture(releaseResult, options = {}) {
@@ -87,10 +91,7 @@ test("migration discards connections when lock acquisition is uncertain", async 
 
 test("migration returns a pooled connection when its lock is busy", async () => {
   const { pool, events } = fixture(1, { acquired: 0 });
-  await assert.rejects(
-    applyFeatureMigrations(pool),
-    /Could not acquire migration lock/,
-  );
+  await assert.rejects(applyFeatureMigrations(pool), { code: "BUSY" });
   assert.deepEqual(events, ["release"]);
 });
 
@@ -100,6 +101,18 @@ test("migration drops its temporary procedure and releases a confirmed lock", as
     applied: ["pdf_expansion@10"],
   });
   assert.deepEqual(events, ["create", "migrate", "drop", "unlock", "release"]);
+});
+
+test("DDL failure releases its lock without pretending to roll back", async () => {
+  const failure = new Error("结构更新失败");
+  const { pool, events } = fixture(1);
+  await assert.rejects(
+    withNamedLock(pool, async () => {
+      throw failure;
+    }),
+    (error) => error === failure,
+  );
+  assert.deepEqual(events, ["unlock", "release"]);
 });
 
 test("uncertain lock acquisition discards the connection", async () => {

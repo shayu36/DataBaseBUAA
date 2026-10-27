@@ -27,48 +27,56 @@ export class AppError extends Error {
   }
 }
 
-// A course-scale single-writer transaction boundary, with locks on affected rows.
-// GET_LOCK is connection-scoped, so it must always be released before pool return.
-export async function ledgerTransaction(pool, work) {
-  const connection = await pool.getConnection();
+// GET_LOCK is connection-scoped, including across DDL implicit commits.
+export async function withNamedLock(db, work) {
+  const pooled = typeof db.getConnection === "function";
+  const connection = pooled ? await db.getConnection() : db;
   let locked = false,
     lockUncertain = true,
-    transactionStarted = false,
     destroyed = false;
+  const discard = () => {
+    destroyed = true;
+    connection.destroy();
+  };
   try {
     const [[{ acquired }]] = await connection.query(sql("acquire_lock"));
     lockUncertain = false;
     if (acquired !== 1)
       throw new AppError("业务服务繁忙，请稍后重试", "BUSY", 503);
     locked = true;
-    transactionStarted = true;
-    await connection.beginTransaction();
-    const result = await work(connection);
-    await connection.commit();
-    return result;
+    return await work(connection, discard);
   } catch (error) {
-    if (lockUncertain) {
-      destroyed = true;
-      connection.destroy();
-    } else if (transactionStarted) {
+    if (lockUncertain) discard();
+    throw error;
+  } finally {
+    if (!destroyed) {
+      if (locked) await releaseNamedLock(connection);
+      if (pooled) connection.release();
+    }
+  }
+}
+
+// A course-scale single-writer transaction boundary, with locks on affected rows.
+export function ledgerTransaction(pool, work) {
+  return withNamedLock(pool, async (connection, discard) => {
+    try {
+      await connection.beginTransaction();
+      const result = await work(connection);
+      await connection.commit();
+      return result;
+    } catch (error) {
       try {
         await connection.rollback();
       } catch (rollbackError) {
-        destroyed = true;
-        connection.destroy();
+        discard();
         throw new AggregateError(
           [error, rollbackError],
           "数据库回滚失败，连接已关闭",
         );
       }
+      throw error;
     }
-    throw error;
-  } finally {
-    if (!destroyed) {
-      if (locked) await releaseNamedLock(connection);
-      connection.release();
-    }
-  }
+  });
 }
 
 // A connection must not be reused if releasing its named lock cannot be confirmed.
