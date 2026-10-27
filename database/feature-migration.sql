@@ -23,7 +23,7 @@ migration: BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='users' AND column_name='leaderboard_visible') THEN
       ALTER TABLE `users` ADD COLUMN `leaderboard_visible` BOOLEAN NOT NULL DEFAULT FALSE;
     END IF;
-    UPDATE users SET leaderboard_alias=CONCAT('骑行者',LPAD(id,4,'0')) WHERE leaderboard_alias IS NULL OR TRIM(leaderboard_alias)='';
+    UPDATE users SET leaderboard_alias=CONCAT('骑行者',LPAD(id,GREATEST(4,CHAR_LENGTH(id)),'0')) WHERE leaderboard_alias IS NULL OR TRIM(leaderboard_alias)='';
     ALTER TABLE users MODIFY leaderboard_alias VARCHAR(40) NOT NULL DEFAULT '骑行者';
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='ride_orders' AND column_name='qualification_status') THEN
       ALTER TABLE `ride_orders` ADD COLUMN `qualification_status` ENUM('VALID','UNDER_REVIEW','EXCLUDED') NOT NULL DEFAULT 'VALID';

@@ -58,7 +58,7 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
       "CREATE TABLE system_settings(name VARCHAR(50) PRIMARY KEY,value JSON)",
     );
     await pool.query(
-      "INSERT INTO users VALUES(1,'学生','s@test','13800000000','hash','STUDENT','ACTIVE',UTC_TIMESTAMP(3))",
+      "INSERT INTO users VALUES(1,'学生','s@test','13800000000','hash','STUDENT','ACTIVE',UTC_TIMESTAMP(3)),(10000,'学生二','s2@test','13800000001','hash','STUDENT','ACTIVE',UTC_TIMESTAMP(3)),(10001,'学生三','s3@test','13800000002','hash','STUDENT','ACTIVE',UTC_TIMESTAMP(3))",
     );
     await pool.query(
       "INSERT INTO parking_zones VALUES(1,'起点','北',100,100,40,10,'ACTIVE')",
@@ -100,6 +100,13 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
     );
     assert.equal(user.leaderboard_alias, "骑行者0001");
     assert.equal(user.leaderboard_visible, 0);
+    const [largeIds] = await pool.query(
+      "SELECT leaderboard_alias FROM users WHERE id IN (10000,10001) ORDER BY id",
+    );
+    assert.deepEqual(
+      largeIds.map((row) => row.leaderboard_alias),
+      ["骑行者10000", "骑行者10001"],
+    );
     const [[order]] = await pool.query(
       "SELECT qualification_status FROM ride_orders WHERE id=1",
     );

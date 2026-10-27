@@ -178,7 +178,7 @@ BEGIN
  DECLARE v_id BIGINT UNSIGNED;
  INSERT INTO users(name,email,phone,password_hash) VALUES(p_name,p_email,p_phone,p_hash);
  SET v_id=LAST_INSERT_ID();
- UPDATE users SET leaderboard_alias=CONCAT('骑行者',LPAD(v_id,4,'0')) WHERE id=v_id;
+ UPDATE users SET leaderboard_alias=CONCAT('骑行者',LPAD(v_id,GREATEST(4,CHAR_LENGTH(v_id)),'0')) WHERE id=v_id;
  SELECT id,name,email,phone,role,status,leaderboard_alias,leaderboard_visible FROM users WHERE id=v_id;
 END$$
 DELIMITER ;

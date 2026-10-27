@@ -75,6 +75,21 @@ beforeEach(async () => {
 });
 after(() => pool.end());
 
+test("SQL registration preserves the full user id in default aliases", async () => {
+  await pool.query("ALTER TABLE users AUTO_INCREMENT=9999");
+  const aliases = [];
+  for (const index of [0, 1, 2]) {
+    const [result] = await pool.query("CALL sp_register_user(?,?,?,?)", [
+      "新学生",
+      `student${index}@alias.local`,
+      `1360000000${index}`,
+      "test-hash",
+    ]);
+    aliases.push(result[0][0].leaderboard_alias);
+  }
+  assert.deepEqual(aliases, ["骑行者9999", "骑行者10000", "骑行者10001"]);
+});
+
 test("saved dispatch suggestions keep their basis and create a revalidated task", async () => {
   const generated = await createDispatchSuggestions(pool, admin, { days: 7 });
   assert.ok(generated.suggestions.length > 0);

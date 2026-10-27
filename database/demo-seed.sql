@@ -22,7 +22,7 @@ seed: BEGIN
     (2,'欧阳晨','ouyang@qingxing.local','13800000002',password_hash,'STUDENT'),
     (3,'郑一凡','zheng@qingxing.local','13800000003',password_hash,'OPERATOR'),
     (4,'王奕','wang@qingxing.local','13800000004',password_hash,'STUDENT');
-  UPDATE users SET leaderboard_alias=CONCAT('骑行者',LPAD(id,4,'0')),leaderboard_visible=(id IN(2,4));
+  UPDATE users SET leaderboard_alias=CONCAT('骑行者',LPAD(id,GREATEST(4,CHAR_LENGTH(id)),'0')),leaderboard_visible=(id IN(2,4));
   INSERT INTO staff(id,user_id,name,phone,job) VALUES(1,3,'郑一凡','13800000003','BOTH');
 
   INSERT INTO parking_zones(id,name,location,x,y,radius,capacity)
