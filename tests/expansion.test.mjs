@@ -7,6 +7,7 @@ import { applySchema } from "../scripts/sql.mjs";
 import * as business from "../backend/business.mjs";
 import {
   createDispatchSuggestions,
+  listDispatchSuggestions,
   confirmDispatchSuggestion,
   dismissDispatchSuggestion,
 } from "../backend/operations.mjs";
@@ -126,6 +127,23 @@ test("large dispatch allocations are split into executable suggestions", async (
     "SELECT COUNT(DISTINCT task_id) tasks,COUNT(*) bikes FROM dispatch_bikes",
   );
   assert.deepEqual(totals, { tasks: 3, bikes: 250 });
+});
+
+test("saved dispatch suggestions remain reachable beyond the first page", async () => {
+  await pool.query(`INSERT INTO dispatch_suggestions(source_zone_id,target_zone_id,quantity,source_available,target_occupied,target_capacity,target_reserved,borrow_count,return_count,desired_inventory,window_start,window_end,reason,algorithm_version,created_by)
+    WITH RECURSIVE n AS (SELECT 1 AS value UNION ALL SELECT value+1 FROM n WHERE value<105)
+    SELECT 1,2,1,8,1,12,0,0,0,5,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3),'分页测试','demand-balance-v1',1 FROM n`);
+  const first = await listDispatchSuggestions(pool);
+  assert.equal(first.suggestions.length, 100);
+  assert.equal(first.next_before, first.suggestions.at(-1).id);
+  const second = await listDispatchSuggestions(pool, first.next_before);
+  assert.equal(second.suggestions.length, 5);
+  assert.equal(second.next_before, null);
+  const ids = [...first.suggestions, ...second.suggestions].map(
+    (row) => row.id,
+  );
+  assert.equal(new Set(ids).size, 105);
+  assert.ok(ids.every((id, i) => i === 0 || ids[i - 1] > id));
 });
 
 test("old oversized dispatch suggestions become stale with an actionable reason", async () => {

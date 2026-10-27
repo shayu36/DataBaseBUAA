@@ -721,6 +721,69 @@ test("maintenance operator can view and acknowledge risk alerts", async ({
   ).toBeVisible();
 });
 
+test("administrator can load older saved dispatch suggestions", async ({
+  page,
+}) => {
+  const suggestion = (id: number) => ({
+    id,
+    source_name: "源站",
+    target_name: "目标站",
+    quantity: 1,
+    borrow_count: 1,
+    return_count: 0,
+    desired_inventory: 4,
+    algorithm_version: "demand-balance-v1",
+    status: "OPEN",
+  });
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: 1,
+            name: "管理员",
+            email: "admin@test.local",
+            role: "ADMIN",
+            status: "ACTIVE",
+          },
+        },
+      });
+    if (url.pathname === "/api/dashboard")
+      return route.fulfill({ json: regressionDashboard });
+    if (url.pathname === "/api/analytics/suggestions") {
+      expect(url.searchParams.get("before")).toBe("101");
+      return route.fulfill({
+        json: { suggestions: [suggestion(100)], next_before: null },
+      });
+    }
+    if (url.pathname === "/api/analytics")
+      return route.fulfill({
+        json: {
+          hotspots: [],
+          hourly: [],
+          weekday: [],
+          risks: [],
+          risk_alerts: [],
+          inventory_series: [],
+          snapshot_count: 0,
+          suggestions: [],
+          saved_suggestions: [suggestion(101)],
+          saved_suggestions_next_before: 101,
+        },
+      });
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "运营分析", exact: true }).click();
+  await expect(page.getByLabel("建议 101 不执行原因")).toBeVisible();
+  await page.getByRole("button", { name: "加载更早建议" }).click();
+  await expect(page.getByLabel("建议 100 不执行原因")).toBeVisible();
+  await expect(page.getByRole("button", { name: "加载更早建议" })).toHaveCount(
+    0,
+  );
+});
+
 test("administrator records why a dispatch suggestion is dismissed", async ({
   page,
 }) => {

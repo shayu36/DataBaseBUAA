@@ -127,9 +127,14 @@ export async function createDispatchSuggestions(pool, actor, rawFilter) {
   });
 }
 
-export async function listDispatchSuggestions(pool) {
-  const [rows] = await pool.query(sql("dispatch_suggestions"));
-  return rows;
+export async function listDispatchSuggestions(pool, before = null) {
+  const [rows] = await pool.query(sql("dispatch_suggestions"), [
+    before,
+    before,
+  ]);
+  const hasMore = rows.length > 100;
+  if (hasMore) rows.pop();
+  return { suggestions: rows, next_before: hasMore ? rows.at(-1).id : null };
 }
 
 export async function confirmDispatchSuggestion(pool, actor, id, staffId) {

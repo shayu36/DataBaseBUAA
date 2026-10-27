@@ -64,7 +64,8 @@ export async function analytics(pool, filter) {
       suggestions,
       risks,
       risk_alerts: riskAlerts,
-      saved_suggestions: savedSuggestions,
+      saved_suggestions: savedSuggestions.suggestions,
+      saved_suggestions_next_before: savedSuggestions.next_before,
     };
   });
 }

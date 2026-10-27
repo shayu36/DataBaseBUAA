@@ -200,7 +200,10 @@ export function createApp(pool) {
   );
   app.get("/api/analytics/suggestions", async (req, res) => {
     requireAdmin(req.user);
-    res.json({ suggestions: await listDispatchSuggestions(pool) });
+    const { before } = z
+      .object({ before: idSchema.optional() })
+      .parse(req.query);
+    res.json(await listDispatchSuggestions(pool, before));
   });
   app.post("/api/risks/refresh", async (req, res) =>
     res.json(await refreshRiskAlerts(pool, req.user)),

@@ -23,7 +23,7 @@ WHERE r.id IS NULL ORDER BY j.position,t.id;
 -- name: dispatch_suggestions
 SELECT s.*,a.name source_name,b.name target_name
 FROM dispatch_suggestions s JOIN parking_zones a ON a.id=s.source_zone_id JOIN parking_zones b ON b.id=s.target_zone_id
-ORDER BY s.id DESC LIMIT 100;
+WHERE (? IS NULL OR s.id<?) ORDER BY s.id DESC LIMIT 101;
 -- name: return_attempts_all
 SELECT a.*,r.user_id,b.code bike_code,z.name zone_name,u.name reviewer_name
 FROM return_attempts a JOIN ride_orders r ON r.id=a.order_id JOIN bikes b ON b.id=r.bike_id

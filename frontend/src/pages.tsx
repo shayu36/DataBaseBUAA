@@ -857,6 +857,73 @@ function SuggestionActions({
     </div>
   );
 }
+function SavedSuggestions({
+  initialRows,
+  initialBefore,
+  run,
+}: {
+  initialRows: Row[];
+  initialBefore: number | null;
+  run: Props["run"];
+}) {
+  const [rows, setRows] = useState(initialRows),
+    [before, setBefore] = useState(initialBefore),
+    [loading, setLoading] = useState(false),
+    [error, setError] = useState("");
+  async function loadMore() {
+    setLoading(true);
+    setError("");
+    try {
+      const page = await api(`/analytics/suggestions?before=${before}`);
+      setRows((current) => [...current, ...page.suggestions]);
+      setBefore(page.next_before);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "读取建议失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+  return (
+    <>
+      <Table
+        rows={rows}
+        columns={[
+          {
+            label: "建议",
+            render: (r) =>
+              `${r.source_name} → ${r.target_name} · ${r.quantity} 辆`,
+          },
+          {
+            label: "依据",
+            render: (r) =>
+              `借 ${r.borrow_count} / 还 ${r.return_count} · 目标库存 ${r.desired_inventory}`,
+          },
+          { label: "版本", render: (r) => r.algorithm_version },
+          { label: "状态", render: (r) => <Badge value={r.status} /> },
+          {
+            label: "操作",
+            render: (r) =>
+              r.status === "OPEN" ? (
+                <SuggestionActions suggestion={r} run={run} />
+              ) : (
+                r.resolution_note || "已处理"
+              ),
+          },
+        ]}
+      />
+      {error && (
+        <div className="error" role="alert">
+          {error}
+        </div>
+      )}
+      {before != null && (
+        <button className="secondary" disabled={loading} onClick={loadMore}>
+          {loading ? "正在读取…" : "加载更早建议"}
+        </button>
+      )}
+    </>
+  );
+}
 function RiskActions({ risk, run }: { risk: Row; run: Props["run"] }) {
   const [note, setNote] = useState("已核对风险规则与历史工单");
   return (
@@ -1214,36 +1281,10 @@ export function Analytics({ d, run }: Props) {
                 </div>
               ))}
               <h3>已保存建议</h3>
-              <Table
-                rows={v.saved_suggestions || []}
-                columns={[
-                  {
-                    label: "建议",
-                    render: (r) =>
-                      r.source_name +
-                      " → " +
-                      r.target_name +
-                      " · " +
-                      r.quantity +
-                      " 辆",
-                  },
-                  {
-                    label: "依据",
-                    render: (r) =>
-                      `借 ${r.borrow_count} / 还 ${r.return_count} · 目标库存 ${r.desired_inventory}`,
-                  },
-                  { label: "版本", render: (r) => r.algorithm_version },
-                  { label: "状态", render: (r) => <Badge value={r.status} /> },
-                  {
-                    label: "操作",
-                    render: (r) =>
-                      r.status === "OPEN" ? (
-                        <SuggestionActions suggestion={r} run={run} />
-                      ) : (
-                        r.resolution_note || "已处理"
-                      ),
-                  },
-                ]}
+              <SavedSuggestions
+                initialRows={v.saved_suggestions || []}
+                initialBefore={v.saved_suggestions_next_before ?? null}
+                run={run}
               />
             </section>
             <section className="panel">
