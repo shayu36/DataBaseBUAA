@@ -1,12 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ledgerTransaction } from "../backend/db.mjs";
+import { ledgerTransaction, readSnapshot } from "../backend/db.mjs";
 
-function fixture(releaseResult) {
+function fixture(releaseResult, options = {}) {
   const events = [];
   const connection = {
     async query(statement) {
-      if (statement.includes("GET_LOCK")) return [[{ acquired: 1 }]];
+      if (statement.includes("GET_LOCK")) {
+        if (options.lockError) throw options.lockError;
+        return [[{ acquired: options.acquired ?? 1 }]];
+      }
+      if (statement.includes("REPEATABLE READ")) {
+        events.push("isolation");
+        return [];
+      }
+      if (statement.includes("CONSISTENT SNAPSHOT")) {
+        events.push("snapshot");
+        if (options.snapshotError) throw options.snapshotError;
+        return [];
+      }
       if (statement.includes("RELEASE_LOCK")) {
         events.push("unlock");
         if (releaseResult instanceof Error) throw releaseResult;
@@ -22,6 +34,7 @@ function fixture(releaseResult) {
     },
     async rollback() {
       events.push("rollback");
+      if (options.rollbackError) throw options.rollbackError;
     },
     release() {
       events.push("release");
@@ -44,6 +57,82 @@ test("a successful transaction unlocks before returning the connection", async (
   const { pool, events } = fixture(1);
   assert.equal(await ledgerTransaction(pool, async () => 42), 42);
   assert.deepEqual(events, ["begin", "commit", "unlock", "release"]);
+});
+
+test("uncertain lock acquisition discards the connection", async () => {
+  const failure = new Error("锁查询中断");
+  const { pool, events } = fixture(1, { lockError: failure });
+  await assert.rejects(
+    ledgerTransaction(pool, async () => {}),
+    (error) => error === failure,
+  );
+  assert.deepEqual(events, ["destroy"]);
+});
+
+test("a busy lock returns the connection without starting a transaction", async () => {
+  const { pool, events } = fixture(1, { acquired: 0 });
+  await assert.rejects(
+    ledgerTransaction(pool, async () => {}),
+    { code: "BUSY" },
+  );
+  assert.deepEqual(events, ["release"]);
+});
+
+test("successful rollback unlocks before returning the connection", async () => {
+  const original = new Error("写入失败");
+  const { pool, events } = fixture(1);
+  await assert.rejects(
+    ledgerTransaction(pool, async () => {
+      throw original;
+    }),
+    (error) => error === original,
+  );
+  assert.deepEqual(events, ["begin", "rollback", "unlock", "release"]);
+});
+
+test("transaction rollback failure destroys the connection and preserves both errors", async () => {
+  const original = new Error("写入失败"),
+    rollbackError = new Error("回滚中断");
+  const { pool, events } = fixture(1, { rollbackError });
+  await assert.rejects(
+    ledgerTransaction(pool, async () => {
+      throw original;
+    }),
+    (error) =>
+      error instanceof AggregateError &&
+      error.errors[0] === original &&
+      error.errors[1] === rollbackError,
+  );
+  assert.deepEqual(events, ["begin", "rollback", "destroy"]);
+});
+
+test("failed read snapshot setup or rollback cannot return a dirty connection", async () => {
+  const setupError = new Error("快照启动失败");
+  const setup = fixture(1, { snapshotError: setupError });
+  await assert.rejects(
+    readSnapshot(setup.pool, async () => {}),
+    (error) => error === setupError,
+  );
+  assert.deepEqual(setup.events, ["isolation", "snapshot", "destroy"]);
+
+  const original = new Error("查询失败"),
+    rollbackError = new Error("回滚中断");
+  const failed = fixture(1, { rollbackError });
+  await assert.rejects(
+    readSnapshot(failed.pool, async () => {
+      throw original;
+    }),
+    (error) =>
+      error instanceof AggregateError &&
+      error.errors[0] === original &&
+      error.errors[1] === rollbackError,
+  );
+  assert.deepEqual(failed.events, [
+    "isolation",
+    "snapshot",
+    "rollback",
+    "destroy",
+  ]);
 });
 
 test("a connection with an unconfirmed lock release is destroyed", async () => {

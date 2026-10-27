@@ -31,22 +31,43 @@ export class AppError extends Error {
 // GET_LOCK is connection-scoped, so it must always be released before pool return.
 export async function ledgerTransaction(pool, work) {
   const connection = await pool.getConnection();
-  let locked = false;
+  let locked = false,
+    lockUncertain = true,
+    transactionStarted = false,
+    destroyed = false;
   try {
     const [[{ acquired }]] = await connection.query(sql("acquire_lock"));
+    lockUncertain = false;
     if (acquired !== 1)
       throw new AppError("业务服务繁忙，请稍后重试", "BUSY", 503);
     locked = true;
+    transactionStarted = true;
     await connection.beginTransaction();
     const result = await work(connection);
     await connection.commit();
     return result;
   } catch (error) {
-    await connection.rollback();
+    if (lockUncertain) {
+      destroyed = true;
+      connection.destroy();
+    } else if (transactionStarted) {
+      try {
+        await connection.rollback();
+      } catch (rollbackError) {
+        destroyed = true;
+        connection.destroy();
+        throw new AggregateError(
+          [error, rollbackError],
+          "数据库回滚失败，连接已关闭",
+        );
+      }
+    }
     throw error;
   } finally {
-    if (locked) await releaseNamedLock(connection);
-    connection.release();
+    if (!destroyed) {
+      if (locked) await releaseNamedLock(connection);
+      connection.release();
+    }
   }
 }
 
@@ -64,17 +85,34 @@ export async function releaseNamedLock(connection) {
 // A single MVCC snapshot keeps multi-query read models internally consistent.
 export async function readSnapshot(pool, work) {
   const connection = await pool.getConnection();
+  let setup = true,
+    destroyed = false;
   try {
     await connection.query(sql("repeatable_read"));
     await connection.query(sql("consistent_snapshot"));
+    setup = false;
     const result = await work(connection);
     await connection.commit();
     return result;
   } catch (error) {
-    await connection.rollback();
+    if (setup) {
+      destroyed = true;
+      connection.destroy();
+    } else {
+      try {
+        await connection.rollback();
+      } catch (rollbackError) {
+        destroyed = true;
+        connection.destroy();
+        throw new AggregateError(
+          [error, rollbackError],
+          "数据库回滚失败，连接已关闭",
+        );
+      }
+    }
     throw error;
   } finally {
-    connection.release();
+    if (!destroyed) connection.release();
   }
 }
 
