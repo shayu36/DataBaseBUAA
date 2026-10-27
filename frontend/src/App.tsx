@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Bike,
   LayoutDashboard,
@@ -210,9 +210,8 @@ export default function App() {
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
     [initial, setInitial] = useState(true);
-  const refresh = async () => {
-    setBusy(true);
-    setNotice("");
+  const inFlight = useRef(false);
+  const fetchDashboard = async () => {
     try {
       setD(await api("/dashboard"));
       setError("");
@@ -220,7 +219,17 @@ export default function App() {
     } catch (e) {
       setError((e as Error).message);
       return false;
+    }
+  };
+  const refresh = async () => {
+    if (inFlight.current) return false;
+    inFlight.current = true;
+    setBusy(true);
+    setNotice("");
+    try {
+      return await fetchDashboard();
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   };
@@ -234,12 +243,14 @@ export default function App() {
     if (user) refresh();
   }, [user]);
   async function run(path: string, body: any) {
+    if (inFlight.current) return false;
+    inFlight.current = true;
     setBusy(true);
     setError("");
     setNotice("");
     try {
       await api(path, body);
-      const refreshed = await refresh();
+      const refreshed = await fetchDashboard();
       setNotice(
         refreshed
           ? "操作已保存，页面已刷新。"
@@ -247,11 +258,11 @@ export default function App() {
       );
       return true;
     } catch (e) {
-      setError((e as Error).message);
-      await refresh();
+      await fetchDashboard();
       setError((e as Error).message);
       return false;
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
@@ -275,7 +286,7 @@ export default function App() {
   )[page];
   return (
     <div className="app">
-      <aside className="sidebar">
+      <aside className="sidebar" inert={busy}>
         <a className="brand" href="/">
           <span>
             <Bike size={29} />
@@ -390,7 +401,7 @@ export default function App() {
             正在同步数据…
           </div>
         )}
-        <div className="page-content" aria-busy={busy}>
+        <div className="page-content" aria-busy={busy} inert={busy}>
           {page === "schema" ? (
             <Schema />
           ) : props && Page ? (

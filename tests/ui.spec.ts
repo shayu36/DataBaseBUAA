@@ -384,6 +384,76 @@ test("admin draft survives rejection; edited bike date and blank staff password 
     submissions.find((s) => s.path === "/api/admin/staff")?.body,
   ).not.toHaveProperty("password");
 });
+test("pending writes reject duplicate submissions and block conflicting controls", async ({
+  page,
+}) => {
+  let writes = 0;
+  let dashboardReads = 0;
+  let release: () => void = () => {};
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: 1,
+            name: "管理员",
+            email: "admin@test.local",
+            role: "ADMIN",
+            status: "ACTIVE",
+          },
+        },
+      });
+    if (path === "/api/dashboard") {
+      dashboardReads++;
+      return route.fulfill({ json: regressionDashboard });
+    }
+    if (path === "/api/admin/users")
+      return route.fulfill({ json: { users: [] } });
+    if (path === "/api/admin/bikes") {
+      writes++;
+      await pending;
+      return route.fulfill({ json: { id: 1 } });
+    }
+    return route.fulfill({ json: {} });
+  });
+  try {
+    await page.goto("/");
+    await page.getByRole("button", { name: "基础资料", exact: true }).click();
+    await page.getByRole("button", { name: "车辆管理", exact: true }).click();
+    await page
+      .getByRole("row")
+      .filter({ hasText: "QX-REGRESSION" })
+      .getByRole("button", { name: "编辑", exact: true })
+      .click();
+    const form = page
+      .locator("form")
+      .filter({ has: page.getByLabel("车辆编号") });
+    await page.getByRole("button", { name: "保存资料", exact: true }).click();
+    await expect.poll(() => writes).toBe(1);
+    await expect(page.locator(".sidebar")).toHaveAttribute("inert", "");
+    await expect(page.locator(".page-content")).toHaveAttribute("inert", "");
+    await expect(page.getByRole("button", { name: "刷新数据" })).toBeDisabled();
+    await form.dispatchEvent("submit");
+    await form.dispatchEvent("submit");
+    release();
+    await expect(
+      page.getByRole("status").filter({ hasText: "操作已保存" }),
+    ).toBeVisible();
+    expect(writes).toBe(1);
+    expect(dashboardReads).toBe(2);
+    await expect(page.locator(".page-content")).not.toHaveAttribute(
+      "inert",
+      "",
+    );
+  } finally {
+    release();
+  }
+});
+
 test("successful save reports a failed refresh and manual refresh recovers", async ({
   page,
 }) => {
