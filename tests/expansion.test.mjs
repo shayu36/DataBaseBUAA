@@ -195,7 +195,9 @@ test("SQL risk aggregation matches rule results and ordered ticket references", 
   );
   await pool.query(`INSERT INTO maintenance_tickets(bike_id,reporter_id,staff_id,fault_type,description,status,result,created_at,completed_at) VALUES
     (1,2,1,'BRAKE','完成工单一','COMPLETED','已修复','2026-10-01 12:00:00','2026-10-02 12:00:00'),
-    (1,2,1,'BRAKE','完成工单二','COMPLETED','已修复','2026-10-10 12:00:00','2026-10-11 12:00:00')`);
+    (1,2,1,'BRAKE','完成工单二','COMPLETED','已修复','2026-10-10 12:00:00','2026-10-11 12:00:00'),
+    (1,2,1,'TIRE','轮胎工单一','COMPLETED','已修复','2026-10-12 12:00:00','2026-10-13 12:00:00'),
+    (1,2,1,'TIRE','轮胎工单二','COMPLETED','已修复','2026-10-14 12:00:00','2026-10-15 12:00:00')`);
   await pool.query(
     "INSERT INTO maintenance_tickets(bike_id,reporter_id,fault_type,description,created_at) VALUES(1,2,'TIRE','近期工单','2026-10-20 12:00:00')",
   );

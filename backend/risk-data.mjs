@@ -1,19 +1,20 @@
 // MySQL aggregates recent tickets and last service dates; this formats rule explanations.
 export async function riskData(connection, now) {
   const [result] = await connection.query("CALL sp_risk_inputs(?)", [now]);
-  const [bikes, faults] = result;
-  const faultTypes = new Map();
-  for (const fault of faults) {
-    const group = faultTypes.get(fault.bike_id) || [];
-    group.push(fault);
-    faultTypes.set(fault.bike_id, group);
+  const [rows] = result;
+  const byBike = new Map();
+  for (const row of rows) {
+    if (!byBike.has(row.bike_id))
+      byBike.set(row.bike_id, { bike: row, repeats: [] });
+    if (row.repeat_reason)
+      byBike.get(row.bike_id).repeats.push(row.repeat_reason);
   }
-  const risks = bikes.map((bike) => {
+  const risks = [...byBike.values()].map(({ bike, repeats }) => {
     const details = [];
     if (bike.recent_reason)
       details.push({ rule: "RECENT_FAULTS", message: bike.recent_reason });
-    for (const fault of faultTypes.get(bike.bike_id) || [])
-      details.push({ rule: "REPEAT_FAULT", message: fault.message });
+    for (const message of repeats)
+      details.push({ rule: "REPEAT_FAULT", message });
     if (bike.service_reason)
       details.push({ rule: "SERVICE_GAP", message: bike.service_reason });
     if (bike.short_ride_reason)
@@ -29,5 +30,5 @@ export async function riskData(connection, now) {
       reason_details: details,
     };
   });
-  return { risks, evaluated: bikes.length };
+  return { risks, evaluated: risks.length };
 }

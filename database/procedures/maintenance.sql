@@ -142,7 +142,7 @@ CREATE PROCEDURE sp_risk_inputs(IN p_now DATETIME(3))
 SQL SECURITY INVOKER
 BEGIN
  WITH recent_groups AS (
-  SELECT bike_id,fault_type,COUNT(*) AS fault_count FROM maintenance_tickets
+  SELECT bike_id,fault_type,COUNT(*) AS fault_count,MIN(id) AS first_id FROM maintenance_tickets
   WHERE created_at>=p_now-INTERVAL 30 DAY AND created_at<=p_now GROUP BY bike_id,fault_type
  ), recent AS (
   SELECT bike_id,SUM(fault_count) AS total,SUM(fault_count>=2) AS repeated_types FROM recent_groups GROUP BY bike_id
@@ -163,13 +163,13 @@ BEGIN
   SELECT *,LEAST(100,LEAST(40,recent_count*10)+repeated_types*20+
    CASE WHEN service_days IS NULL THEN 20 WHEN service_days>=90 THEN 30 WHEN service_days>=30 THEN 10 ELSE 0 END) AS score FROM service
  )
- SELECT bike_id,code,score,CASE WHEN score>=60 THEN 'HIGH' WHEN score>=30 THEN 'MEDIUM' ELSE 'LOW' END AS level,
+ SELECT s.bike_id,s.code,s.score,CASE WHEN s.score>=60 THEN 'HIGH' WHEN s.score>=30 THEN 'MEDIUM' ELSE 'LOW' END AS level,
   IF(recent_count>0,CONCAT('近30天报修 ',recent_count,' 次（+',LEAST(40,recent_count*10),'）'),NULL) AS recent_reason,
+  IF(g.fault_type IS NULL,NULL,CONCAT(g.fault_type,' 同类型故障复发 ',g.fault_count,' 次（+20）')) AS repeat_reason,
   CASE WHEN service_days IS NULL THEN '无有效维修记录（+20）' WHEN service_days>=90 THEN CONCAT('距最近维修 ',service_days,' 天（+30）')
        WHEN service_days>=30 THEN CONCAT('距最近维修 ',service_days,' 天（+10）') ELSE NULL END AS service_reason,
   IF(short_count>0,CONCAT('近30天异常短行程 ',short_count,' 次（辅助线索，不计分）'),NULL) AS short_ride_reason
- FROM scored ORDER BY score DESC,bike_id;
- SELECT bike_id,CONCAT(fault_type,' 同类型故障复发 ',COUNT(*),' 次（+20）') AS message,MIN(id) AS first_id FROM maintenance_tickets
- WHERE created_at>=p_now-INTERVAL 30 DAY AND created_at<=p_now GROUP BY bike_id,fault_type HAVING COUNT(*)>=2 ORDER BY bike_id,first_id;
+ FROM scored s LEFT JOIN recent_groups g ON g.bike_id=s.bike_id AND g.fault_count>=2
+ ORDER BY s.score DESC,s.bike_id,g.first_id;
 END$$
 DELIMITER ;
