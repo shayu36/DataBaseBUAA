@@ -90,6 +90,7 @@ npm start
 | `npm run backup` | 备份当前业务数据库 |
 | `npm run report` | 单独生成课程报告和实体关系图 |
 | `uv run python scripts/package-project.py` | 生成不含本机凭据和临时数据的交付包；先运行 `npm run build` |
+| `uv run python -m unittest discover -s tests -p package_project_test.py` | 验证交付包筛选和失败保护 |
 
 开发服务将接口代理到 `127.0.0.1:5188`，使用 `npm run dev` 前需另开终端运行后端。浏览器测试同样需要后端已经启动。测试会重建 `campus_bike_test` 的测试数据；浏览器测试会在演示库中创建测试行程、工单和任务。
 
@@ -116,7 +117,7 @@ node scripts/check.mjs campus_bike_restore_demo
 | `tests/` | 自动化测试和浏览器测试 |
 | `docs/` | 需求、接口、课程设计、测试和答辩文档 |
 
-本机凭据、依赖、构建结果、数据库快照、备份、截图、测试日志和交付包均不提交到 Git；对应文件可通过上述命令重新生成。
+本机凭据、依赖、构建结果、数据库快照、备份、截图、测试日志和交付包均不提交到 Git；对应文件可通过上述命令重新生成。交付包按目录和文件类型筛选项目文件及必要的前端构建结果，排除隐藏文件、符号链接和常见缓存，并检查当前 `.env` 和环境变量中配置的数据库密码与会话密钥；新增其他类型的项目文件时应更新打包脚本的类型列表。校验失败不会覆盖已有交付包。
 
 ## 数据与性能边界
 

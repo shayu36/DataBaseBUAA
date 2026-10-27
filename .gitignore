@@ -1,13 +1,17 @@
 # 依赖与构建结果
-/node_modules/
+node_modules/
 /dist/
 *.tsbuildinfo
 __pycache__/
 *.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # 本机配置、数据库、备份和交付包
-/.env
-/.env.*
+.env
+.env.*
 !/.env.example
 /.runtime/
 /backups/
