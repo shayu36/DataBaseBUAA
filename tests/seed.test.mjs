@@ -310,6 +310,59 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
       delete expected.inventory_series;
       assert.deepEqual(actual, expected);
     }
+    await pool.query(`INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,amount_cents,distance_m,status) VALUES
+      (2,1,1,2,'2022-01-01 00:00:00','2022-01-01 00:10:00',100,400,'UNPAID'),
+      (2,1,1,2,'2022-01-01 00:05:00','2022-01-01 00:15:00',100,400,'UNPAID'),
+      (2,1,1,2,'2022-01-01 01:00:00','2022-01-01 01:10:00',100,400,'UNPAID'),
+      (2,1,1,2,'2022-01-01 01:05:00','2022-01-01 01:15:00',100,400,'UNPAID')`);
+    const tied = (
+      await hotspotReport(
+        pool,
+        { start: "2022-01-01", end: "2022-01-01" },
+        new Date("2022-01-02T00:00:00Z"),
+      )
+    ).report;
+    assert.deepEqual(
+      tied.hotspots
+        .slice(0, 2)
+        .map(({ borrow_count, return_count, net_flow, peak_hour }) => ({
+          borrow_count,
+          return_count,
+          net_flow,
+          peak_hour,
+        })),
+      [
+        { borrow_count: 4, return_count: 0, net_flow: -4, peak_hour: 8 },
+        { borrow_count: 0, return_count: 4, net_flow: 4, peak_hour: null },
+      ],
+    );
+    assert.deepEqual(tied.hourly.slice(8, 10), [
+      { hour: 8, borrow_count: 2, return_count: 2 },
+      { hour: 9, borrow_count: 2, return_count: 2 },
+    ]);
+    assert.deepEqual(tied.weekday[6], {
+      weekday: 6,
+      borrow_count: 4,
+      return_count: 4,
+    });
+    assert.equal(tied.snapshot_count, 0);
+    assert.equal(tied.coverage_ratio, 0);
+    await pool.query(`INSERT INTO zone_snapshots(zone_id,available,occupied,capacity,captured_at,source) VALUES
+      (1,10,10,24,'2021-12-31 16:00:00.000','DEMO'),
+      (1,10,10,24,'2021-12-31 16:00:17.400','DEMO')`);
+    const rounded = (
+      await hotspotReport(
+        pool,
+        { start: "2022-01-01", end: "2022-01-01", zoneId: 1 },
+        new Date("2021-12-31T16:02:00Z"),
+      )
+    ).report;
+    assert.equal(rounded.hotspots[0].coverage_minutes, 0.29);
+    assert.equal(rounded.hotspots[0].coverage_ratio, 0.15);
+    assert.equal(rounded.coverage_ratio, 0.15);
+    await pool.query(
+      "DELETE FROM ride_orders WHERE started_at>='2022-01-01' AND started_at<'2022-01-02'",
+    );
     await pool.query(
       "INSERT INTO zone_snapshots(zone_id,available,occupied,capacity,captured_at,source) VALUES(1,0,10,24,'2026-10-04 15:58:00','DEMO'),(1,0,10,24,'2026-10-04 16:02:00','DEMO'),(1,0,10,24,'2026-10-04 23:58:00','DEMO'),(1,0,10,24,'2026-10-05 00:02:00','DEMO'),(1,0,10,24,'2026-10-05 00:59:00','DEMO'),(1,0,10,24,'2026-10-05 01:03:00','DEMO')",
     );

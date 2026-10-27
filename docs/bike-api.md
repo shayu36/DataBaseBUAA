@@ -38,7 +38,7 @@
 export function findRoute(nodes,edges,fromId,toId,mode='shortest') -> {path,distance_m,duration_minutes,mode}，无路径抛 Error。
 运营筛选可选 `days=7|30`，或同时指定北京时间日期 `start=YYYY-MM-DD` 和 `end=YYYY-MM-DD`；两种周期不可混用。两种周期均可叠加 `dayType=ALL|WEEKDAY|WEEKEND`、`startHour`、`endHour` 和 `zoneId`。小时范围包含起点、不包含终点；自定义日期最多 31 天，当前日期以后的部分会裁剪到当前时刻。
 
-调度建议、风险评分与热点统计分别由 MySQL `sp_dispatch_suggestions`、`sp_risk_inputs` 和 `sp_hotspot_report` 计算。生成调度建议时仅查询库存和借还需求，不计算库存曲线与覆盖时长；使用的筛选范围与完整热点报表相同。快照区间仅计相邻且间隔不超过五分钟的采样，并裁剪到所选北京时间日期和小时。事件及曲线采样的时间范围包含起点、不包含终点；确定边界处的覆盖时长时，可使用截止查询时刻已经存在的相邻区间外快照；仅统计区间内的时长，不将这些快照计入曲线或数量。库存曲线返回的 `segment_id` 基于筛选后的完整采样计算；相邻采样间隔超过五分钟时分段，抽样后不得跨段连线。
+调度建议、风险评分与热点统计分别由 MySQL `sp_dispatch_suggestions`、`sp_risk_inputs` 和 `sp_hotspot_report` 计算。生成调度建议时仅查询库存和借还需求，不计算库存曲线与覆盖时长；使用的筛选范围与完整热点报表相同。快照区间仅计相邻且间隔不超过五分钟的采样，并裁剪到所选北京时间日期和小时。借还汇总、高峰小时与覆盖率均由 MySQL 计算，覆盖率以十进制四舍五入保留两位小数。事件及曲线采样的时间范围包含起点、不包含终点；确定边界处的覆盖时长时，可使用截止查询时刻已经存在的相邻区间外快照；仅统计区间内的时长，不将这些快照计入曲线或数量。库存曲线返回的 `segment_id` 基于筛选后的完整采样计算；相邻采样间隔超过五分钟时分段，抽样后不得跨段连线。
 排行榜由 MySQL `sp_leaderboard` 按北京时间自然周/月聚合和排名；有效订单按结束时间计数，积分流水按入账时间计入周期。
 
 演示账户 jia@qingxing.local（ADMIN）、ouyang@qingxing.local（STUDENT）、zheng@qingxing.local（OPERATOR BOTH）、wang@qingxing.local（STUDENT）；密码 Qingxing2026!。通过登录页选择演示身份；注册只能 STUDENT。注册、员工密码设置和登录均限制密码的 UTF-8 编码不超过 72 字节，以避免 bcrypt 截断多字节输入。

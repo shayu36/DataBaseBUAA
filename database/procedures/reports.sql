@@ -47,20 +47,42 @@ CREATE PROCEDURE sp_hotspot_report(IN p_start DATETIME(3), IN p_end DATETIME(3),
  IN p_hour_start INT, IN p_hour_end INT, IN p_zone BIGINT UNSIGNED, IN p_details BOOLEAN, IN p_as_of DATETIME(3))
 SQL SECURITY INVOKER
 report: BEGIN
+ DECLARE v_possible DECIMAL(30,8) DEFAULT 0;
  SELECT * FROM v_zone_inventory WHERE p_zone IS NULL OR id=p_zone ORDER BY id;
  WITH events AS (
   SELECT start_zone_id AS zone_id,started_at AS event_at,1 AS borrowed,0 AS returned FROM ride_orders WHERE started_at>=p_start AND started_at<p_end
   UNION ALL
   SELECT end_zone_id,ended_at,0,1 FROM ride_orders WHERE ended_at>=p_start AND ended_at<p_end
+ ), grouped AS (
+  SELECT e.zone_id,IF(p_details,HOUR(e.event_at+INTERVAL 8 HOUR),0) AS hour,
+   IF(p_details,DAYOFWEEK(e.event_at+INTERVAL 8 HOUR)-1,0) AS weekday,
+   SUM(e.borrowed) AS borrow_count,SUM(e.returned) AS return_count
+  FROM events e JOIN parking_zones z ON z.id=e.zone_id
+  WHERE (p_zone IS NULL OR e.zone_id=p_zone) AND HOUR(e.event_at+INTERVAL 8 HOUR)>=p_hour_start AND HOUR(e.event_at+INTERVAL 8 HOUR)<p_hour_end
+   AND (p_day_type='ALL' OR (p_day_type='WEEKDAY' AND WEEKDAY(e.event_at+INTERVAL 8 HOUR)<5) OR (p_day_type='WEEKEND' AND WEEKDAY(e.event_at+INTERVAL 8 HOUR)>=5))
+  GROUP BY e.zone_id,hour,weekday
+ ), zone_totals AS (
+  SELECT zone_id,SUM(borrow_count) AS borrow_count,SUM(return_count) AS return_count FROM grouped GROUP BY zone_id
+ ), zone_hours AS (
+  SELECT zone_id,hour,SUM(borrow_count) AS borrow_count FROM grouped WHERE p_details GROUP BY zone_id,hour
+ ), zone_peaks AS (
+  SELECT zone_id,hour,ROW_NUMBER() OVER (PARTITION BY zone_id ORDER BY borrow_count DESC,hour) AS position
+  FROM zone_hours WHERE borrow_count>0
  )
- SELECT e.zone_id,IF(p_details,HOUR(e.event_at+INTERVAL 8 HOUR),0) AS hour,
- IF(p_details,DAYOFWEEK(e.event_at+INTERVAL 8 HOUR)-1,0) AS weekday,
- SUM(e.borrowed) AS borrow_count,SUM(e.returned) AS return_count
- FROM events e JOIN parking_zones z ON z.id=e.zone_id
- WHERE (p_zone IS NULL OR e.zone_id=p_zone) AND HOUR(e.event_at+INTERVAL 8 HOUR)>=p_hour_start AND HOUR(e.event_at+INTERVAL 8 HOUR)<p_hour_end
- AND (p_day_type='ALL' OR (p_day_type='WEEKDAY' AND WEEKDAY(e.event_at+INTERVAL 8 HOUR)<5) OR (p_day_type='WEEKEND' AND WEEKDAY(e.event_at+INTERVAL 8 HOUR)>=5))
- GROUP BY e.zone_id,hour,weekday;
+ SELECT 'ZONE' AS kind,t.zone_id,NULL AS hour,NULL AS weekday,t.borrow_count,t.return_count,
+  t.return_count-t.borrow_count AS net_flow,p.hour AS peak_hour
+ FROM zone_totals t LEFT JOIN zone_peaks p ON p.zone_id=t.zone_id AND p.position=1
+ UNION ALL SELECT 'HOUR',NULL,hour,NULL,SUM(borrow_count),SUM(return_count),NULL,NULL FROM grouped WHERE p_details GROUP BY hour
+ UNION ALL SELECT 'WEEKDAY',NULL,NULL,weekday,SUM(borrow_count),SUM(return_count),NULL,NULL FROM grouped WHERE p_details GROUP BY weekday;
  IF NOT p_details THEN LEAVE report; END IF;
+ WITH RECURSIVE days AS (
+  SELECT DATE(p_start+INTERVAL 8 HOUR) AS local_day
+  UNION ALL SELECT local_day+INTERVAL 1 DAY FROM days WHERE local_day<DATE(p_end+INTERVAL 8 HOUR)
+ )
+ SELECT COALESCE(SUM(GREATEST(0,TIMESTAMPDIFF(MICROSECOND,
+  GREATEST(p_start,TIMESTAMP(local_day)+INTERVAL p_hour_start HOUR-INTERVAL 8 HOUR),
+  LEAST(p_end,TIMESTAMP(local_day)+INTERVAL p_hour_end HOUR-INTERVAL 8 HOUR)))),0)/60000000 INTO v_possible
+ FROM days WHERE p_day_type='ALL' OR (p_day_type='WEEKDAY' AND WEEKDAY(local_day)<5) OR (p_day_type='WEEKEND' AND WEEKDAY(local_day)>=5);
  WITH intervals AS (
   SELECT s.id,s.zone_id,s.captured_at,s.available,s.occupied,s.capacity,
    LEAD(captured_at) OVER (PARTITION BY zone_id ORDER BY captured_at,id) AS next_at
@@ -91,6 +113,9 @@ report: BEGIN
  )
  SELECT counts.zone_id,COALESCE(coverage.coverage_minutes,0) AS coverage_minutes,
   COALESCE(coverage.shortage_minutes,0) AS shortage_minutes,COALESCE(coverage.full_minutes,0) AS full_minutes,
+  COALESCE(ROUND(coverage.coverage_minutes/NULLIF(v_possible,0),2),0) AS coverage_ratio,
+  COALESCE(ROUND(SUM(COALESCE(coverage.coverage_minutes,0)) OVER ()/
+   NULLIF(v_possible*(SELECT COUNT(*) FROM parking_zones WHERE p_zone IS NULL OR id=p_zone),0),2),0) AS total_coverage_ratio,
   SUM(counts.sample_count) OVER () AS snapshot_count
  FROM sample_counts counts LEFT JOIN coverage ON coverage.zone_id=counts.zone_id;
  WITH filtered AS (
@@ -122,14 +147,7 @@ report: BEGIN
  SELECT s.zone_id,s.captured_at,s.available,s.occupied,s.capacity,segment.segment_id FROM selected chosen
  JOIN segmented segment ON segment.id=chosen.id JOIN zone_snapshots s ON s.id=chosen.id
  ORDER BY s.zone_id,s.captured_at,s.id;
- WITH RECURSIVE days AS (
-  SELECT DATE(p_start+INTERVAL 8 HOUR) AS local_day
-  UNION ALL SELECT local_day+INTERVAL 1 DAY FROM days WHERE local_day<DATE(p_end+INTERVAL 8 HOUR)
- )
- SELECT COALESCE(SUM(GREATEST(0,TIMESTAMPDIFF(MICROSECOND,
-  GREATEST(p_start,TIMESTAMP(local_day)+INTERVAL p_hour_start HOUR-INTERVAL 8 HOUR),
-  LEAST(p_end,TIMESTAMP(local_day)+INTERVAL p_hour_end HOUR-INTERVAL 8 HOUR)))),0)/60000000 AS possible_minutes
- FROM days WHERE p_day_type='ALL' OR (p_day_type='WEEKDAY' AND WEEKDAY(local_day)<5) OR (p_day_type='WEEKEND' AND WEEKDAY(local_day)>=5);
+
 END$$
 DELIMITER ;
 
