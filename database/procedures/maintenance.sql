@@ -111,7 +111,7 @@ BEGIN
 END$$
 DELIMITER ;
 
--- The backend evaluates the pure risk rule; persistence and deduplication are set-based.
+-- Persist and deduplicate risk candidates in MySQL.
 DROP PROCEDURE IF EXISTS sp_refresh_risk_alerts;
 DELIMITER $$
 CREATE PROCEDURE sp_refresh_risk_alerts(IN p_actor BIGINT UNSIGNED, IN p_evaluated INT, IN p_version VARCHAR(30), IN p_risks JSON)
@@ -172,7 +172,8 @@ BEGIN
  SELECT bike_id,CONCAT(fault_type,' 同类型故障复发 ',COUNT(*),' 次（+20）') AS message,MIN(id) AS first_id FROM maintenance_tickets
  WHERE created_at>=p_now-INTERVAL 30 DAY AND created_at<=p_now GROUP BY bike_id,fault_type HAVING COUNT(*)>=2 ORDER BY bike_id,first_id;
  IF p_include_ticket_ids THEN
-  SELECT bike_id,id FROM maintenance_tickets ORDER BY bike_id,id;
+  SELECT t.bike_id,t.id FROM maintenance_tickets t JOIN bikes b ON b.id=t.bike_id
+  WHERE t.created_at<=p_now AND b.status<>'RETIRED' ORDER BY t.bike_id,t.id;
  ELSE
   SELECT bike_id,id FROM maintenance_tickets WHERE FALSE;
  END IF;

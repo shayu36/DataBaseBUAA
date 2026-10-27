@@ -174,6 +174,10 @@ test("SQL risk aggregation matches rule results and ordered ticket references", 
   await pool.query(
     "INSERT INTO maintenance_tickets(bike_id,reporter_id,fault_type,description,created_at) VALUES(1,2,'TIRE','近期工单','2026-10-20 12:00:00')",
   );
+  await pool.query(`INSERT INTO maintenance_tickets(bike_id,reporter_id,staff_id,fault_type,description,status,result,created_at,completed_at) VALUES
+    (1,2,1,'BRAKE','未来工单','COMPLETED','已修复','2026-10-29 12:00:00','2026-10-30 12:00:00'),
+    (2,2,1,'BRAKE','退役车辆工单','COMPLETED','已修复','2026-10-01 12:00:00','2026-10-02 12:00:00')`);
+  await pool.query("UPDATE bikes SET status='RETIRED' WHERE id=2");
   const [bikes] = await pool.query(
     "SELECT * FROM bikes WHERE status<>'RETIRED'",
   );
@@ -184,8 +188,20 @@ test("SQL risk aggregation matches rule results and ordered ticket references", 
   assert.deepEqual(actual.risks, bikeRisks(bikes, tickets, now));
   assert.deepEqual(
     actual.ticketIds.get(1),
-    tickets.map((ticket) => ticket.id),
+    tickets
+      .filter((ticket) => ticket.bike_id === 1 && ticket.created_at <= now)
+      .map((ticket) => ticket.id),
   );
+  assert.equal(actual.ticketIds.has(2), false);
+  await refreshRiskAlerts(pool, admin, now);
+  const [[saved]] = await pool.query(
+    "SELECT ticket_ids FROM risk_alerts WHERE bike_id=1",
+  );
+  const savedIds =
+    typeof saved.ticket_ids === "string"
+      ? JSON.parse(saved.ticket_ids)
+      : saved.ticket_ids;
+  assert.deepEqual(savedIds, actual.ticketIds.get(1));
 });
 
 test("short abnormal rides appear as risk clues without changing the score", async () => {
