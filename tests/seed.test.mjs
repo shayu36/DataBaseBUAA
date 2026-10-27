@@ -199,6 +199,27 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
       "SELECT COUNT(*) rides FROM ride_orders",
     );
     assert.equal(unchanged.rides, counts.rides);
+    await pool.query(`INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,status)
+      VALUES(1,1,1,1,'2026-08-04 16:00:00','2026-08-04 16:01:00','UNPAID'),
+        (1,1,1,1,'2026-08-05 15:58:00','2026-08-05 16:00:00','UNPAID'),
+        (1,1,1,1,'2026-08-05 16:00:00','2026-08-05 16:01:00','UNPAID')`);
+    await pool.query(`INSERT INTO zone_snapshots(zone_id,available,occupied,capacity,captured_at,source)
+      VALUES(1,0,10,24,'2026-08-04 16:00:00','DEMO'),
+        (1,0,10,24,'2026-08-05 15:58:00','DEMO'),
+        (1,0,10,24,'2026-08-05 16:00:00','DEMO')`);
+    const day = (
+      await hotspotReport(
+        pool,
+        { start: "2026-08-05", end: "2026-08-05", zoneId: 1 },
+        new Date("2026-08-06T00:00:00Z"),
+      )
+    ).report;
+    assert.equal(day.hotspots[0].borrow_count, 2);
+    assert.equal(day.hotspots[0].return_count, 1);
+    assert.equal(day.snapshot_count, 2);
+    assert.equal(day.inventory_series.length, 2);
+    assert.equal(day.hotspots[0].coverage_minutes, 2);
+    assert.equal(day.hotspots[0].shortage_minutes, 2);
     await pool.query("DELETE FROM system_settings WHERE name='seed_version'");
     await assert.rejects(seedDemo(appPool, pool), /Nonempty unmarked database/);
     const [[afterFailure]] = await pool.query(

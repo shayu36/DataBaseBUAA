@@ -49,9 +49,9 @@ SQL SECURITY INVOKER
 BEGIN
  SELECT * FROM v_zone_inventory WHERE p_zone IS NULL OR id=p_zone ORDER BY id;
  WITH events AS (
-  SELECT start_zone_id AS zone_id,started_at AS event_at,1 AS borrowed,0 AS returned FROM ride_orders WHERE started_at BETWEEN p_start AND p_end
+  SELECT start_zone_id AS zone_id,started_at AS event_at,1 AS borrowed,0 AS returned FROM ride_orders WHERE started_at>=p_start AND started_at<p_end
   UNION ALL
-  SELECT end_zone_id,ended_at,0,1 FROM ride_orders WHERE ended_at BETWEEN p_start AND p_end
+  SELECT end_zone_id,ended_at,0,1 FROM ride_orders WHERE ended_at>=p_start AND ended_at<p_end
  )
  SELECT e.zone_id,HOUR(e.event_at+INTERVAL 8 HOUR) AS hour,DAYOFWEEK(e.event_at+INTERVAL 8 HOUR)-1 AS weekday,
  SUM(e.borrowed) AS borrow_count,SUM(e.returned) AS return_count
@@ -81,7 +81,7 @@ BEGIN
   ROUND(SUM(IF(occupied>=capacity,minutes,0)),2) AS full_minutes FROM eligible GROUP BY zone_id;
  WITH filtered AS (
   SELECT id,zone_id,captured_at,available,COUNT(*) OVER (PARTITION BY zone_id) AS zone_count FROM zone_snapshots
-  WHERE captured_at BETWEEN p_start AND p_end AND (p_zone IS NULL OR zone_id=p_zone)
+  WHERE captured_at>=p_start AND captured_at<p_end AND (p_zone IS NULL OR zone_id=p_zone)
   AND HOUR(captured_at+INTERVAL 8 HOUR)>=p_hour_start AND HOUR(captured_at+INTERVAL 8 HOUR)<p_hour_end
   AND (p_day_type='ALL' OR (p_day_type='WEEKDAY' AND WEEKDAY(captured_at+INTERVAL 8 HOUR)<5) OR (p_day_type='WEEKEND' AND WEEKDAY(captured_at+INTERVAL 8 HOUR)>=5))
  ), buckets AS (
@@ -109,7 +109,7 @@ BEGIN
  SELECT COALESCE(SUM(GREATEST(0,TIMESTAMPDIFF(MICROSECOND,
   GREATEST(p_start,TIMESTAMP(local_day)+INTERVAL p_hour_start HOUR-INTERVAL 8 HOUR),
   LEAST(p_end,TIMESTAMP(local_day)+INTERVAL p_hour_end HOUR-INTERVAL 8 HOUR)))),0)/60000000 AS possible_minutes,
-  (SELECT COUNT(*) FROM zone_snapshots WHERE captured_at BETWEEN p_start AND p_end AND (p_zone IS NULL OR zone_id=p_zone)
+  (SELECT COUNT(*) FROM zone_snapshots WHERE captured_at>=p_start AND captured_at<p_end AND (p_zone IS NULL OR zone_id=p_zone)
    AND HOUR(captured_at+INTERVAL 8 HOUR)>=p_hour_start AND HOUR(captured_at+INTERVAL 8 HOUR)<p_hour_end
    AND (p_day_type='ALL' OR (p_day_type='WEEKDAY' AND WEEKDAY(captured_at+INTERVAL 8 HOUR)<5) OR (p_day_type='WEEKEND' AND WEEKDAY(captured_at+INTERVAL 8 HOUR)>=5))) AS snapshot_count
  FROM days WHERE p_day_type='ALL' OR (p_day_type='WEEKDAY' AND WEEKDAY(local_day)<5) OR (p_day_type='WEEKEND' AND WEEKDAY(local_day)>=5);

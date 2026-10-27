@@ -17,7 +17,7 @@ export function aggregateHotspots(
     { start, end } = normalized,
     included = (time) => {
       const t = timestamp(time);
-      if (!Number.isFinite(t) || t < start || t > end) return false;
+      if (!Number.isFinite(t) || t < start || t >= end) return false;
       const local = new Date(t + OFFSET),
         weekday = local.getUTCDay(),
         hour = local.getUTCHours();
