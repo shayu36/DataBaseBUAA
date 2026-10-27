@@ -293,6 +293,7 @@ const regressionDashboard = {
     },
   ],
   rides: [],
+  actionable_rides: [],
   payments: [],
   dispatches: [],
   tickets: [],
@@ -719,6 +720,73 @@ test("maintenance operator can view and acknowledge risk alerts", async ({
   await expect(
     page.getByRole("status").filter({ hasText: "操作已保存" }),
   ).toBeVisible();
+});
+
+test("ride history pagination preserves actionable rides, filtering and export", async ({
+  page,
+}) => {
+  const ride = (id: number, status: string) => ({
+    id,
+    bike_code: `BIKE-${id}`,
+    start_zone_name: "源站",
+    end_zone_name: "目标站",
+    status,
+    distance_m: 400,
+    amount_cents: 100,
+    started_at: "2026-10-27T00:00:00Z",
+  });
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: 2,
+            name: "学生",
+            email: "student@test.local",
+            role: "STUDENT",
+            status: "ACTIVE",
+          },
+        },
+      });
+    if (url.pathname === "/api/dashboard")
+      return route.fulfill({
+        json: {
+          ...regressionDashboard,
+          rides: [ride(101, "PAID")],
+          rides_next_before: 101,
+          actionable_rides: [ride(2, "RUNNING"), ride(1, "UNPAID")],
+        },
+      });
+    if (url.pathname === "/api/rides") {
+      if (url.searchParams.get("status") === "PAID")
+        return route.fulfill({
+          json: { rides: [ride(101, "PAID")], next_before: null },
+        });
+      expect(url.searchParams.get("before")).toBe("101");
+      return route.fulfill({
+        json: { rides: [ride(100, "PAID")], next_before: null },
+      });
+    }
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "骑行与归还", exact: true }).click();
+  await expect(page.getByText(/正在骑行 BIKE-2/)).toBeVisible();
+  await expect(page.getByText(/订单 #1/)).toBeVisible();
+  await page.getByRole("button", { name: "骑行订单", exact: true }).click();
+  await page.getByRole("button", { name: "加载更早订单" }).click();
+  await expect(
+    page.getByText("#100 · BIKE-100", { exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("订单状态筛选").selectOption("PAID");
+  await expect(
+    page.getByText("#101 · BIKE-101", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "导出 CSV" })).toHaveAttribute(
+    "href",
+    "/api/rides/export.csv?status=PAID",
+  );
 });
 
 test("carbon history pagination keeps the qualifying ride count", async ({

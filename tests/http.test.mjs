@@ -353,6 +353,55 @@ test("HTTP lifecycle has private orders and one payment", async () => {
   assert.equal(d.staff.length, 0);
   assert.equal(d.attempts.length, 1);
 });
+test("ride CSV exports all filtered personal orders and protects spreadsheet cells", async () => {
+  const [[original]] = await pool.query("SELECT code FROM bikes WHERE id=1");
+  const [created] =
+    await pool.query(`INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,amount_cents,distance_m,status)
+    WITH RECURSIVE n AS (SELECT 1 AS value UNION ALL SELECT value+1 FROM n WHERE value<105)
+    SELECT 2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),100,400,'UNPAID' FROM n`);
+  const [other] = await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,amount_cents,distance_m,status) VALUES(3,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),100,400,'UNPAID')",
+  );
+  try {
+    await pool.query("UPDATE bikes SET code=? WHERE id=1", ["  =DANGEROUS"]);
+    const response = await fetch(base + "/api/rides/export.csv?status=UNPAID", {
+      headers: { Cookie: studentCookie },
+    });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-disposition"), /attachment/);
+    const lines = (await response.text()).trim().split(/\r?\n/);
+    assert.equal(lines.length, 106);
+    assert.ok(
+      lines.slice(1).every((line) => line.includes('"\'  =DANGEROUS"')),
+    );
+    assert.ok(
+      lines.slice(1).every((line) => !line.startsWith(`"${other.insertId}",`)),
+    );
+    const first = await request(
+      "/api/rides?status=UNPAID",
+      undefined,
+      studentCookie,
+    );
+    const second = await request(
+      `/api/rides?status=UNPAID&before=${first.data.next_before}`,
+      undefined,
+      studentCookie,
+    );
+    assert.equal(first.data.rides.length, 100);
+    assert.equal(second.data.rides.length, 5);
+    assert.equal(
+      (await request("/api/rides?status=INVALID", undefined, studentCookie))
+        .status,
+      400,
+    );
+  } finally {
+    await pool.query("UPDATE bikes SET code=? WHERE id=1", [original.code]);
+    await pool.query("DELETE FROM ride_orders WHERE id>=? AND id<=?", [
+      created.insertId,
+      other.insertId,
+    ]);
+  }
+});
 test("route API validates modes and schema endpoint reflects real objects", async () => {
   assert.equal(
     (

@@ -38,6 +38,7 @@ import {
   listCarbonEntries,
 } from "./carbon.mjs";
 import { updateLeaderboardProfile } from "./profile.mjs";
+import { rideHistory, paymentHistory, exportRides } from "./history.mjs";
 import { schemaInfo } from "./schema-info.mjs";
 const root = fileURLToPath(new URL("../", import.meta.url));
 export function createApp(pool) {
@@ -109,6 +110,25 @@ export function createApp(pool) {
   app.get("/api/dashboard", async (req, res) =>
     res.json(await dashboard(pool, req.user)),
   );
+  const rideFilter = z
+    .enum(["ALL", "RUNNING", "UNPAID", "PAID"])
+    .default("ALL");
+  app.get("/api/rides", async (req, res) => {
+    const { before, status } = z
+      .object({ before: idSchema.optional(), status: rideFilter })
+      .parse(req.query);
+    res.json(await rideHistory(pool, req.user, status, before));
+  });
+  app.get("/api/rides/export.csv", async (req, res) => {
+    const { status } = z.object({ status: rideFilter }).parse(req.query);
+    await exportRides(pool, req.user, status, res);
+  });
+  app.get("/api/payments", async (req, res) => {
+    const { before } = z
+      .object({ before: idSchema.optional() })
+      .parse(req.query);
+    res.json(await paymentHistory(pool, req.user, before));
+  });
   app.post("/api/rides/start", async (req, res) =>
     res.status(201).json(await startRide(pool, req.user, req.body)),
   );
@@ -306,7 +326,8 @@ export function createApp(pool) {
   app.get("/{*path}", (_req, res) =>
     res.sendFile(path.join(root, "dist", "index.html")),
   );
-  app.use((e, _req, res, _next) => {
+  app.use((e, _req, res, next) => {
+    if (res.headersSent) return next(e);
     if (e instanceof z.ZodError)
       return res.status(400).json({
         error:

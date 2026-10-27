@@ -140,8 +140,8 @@ SQL SECURITY INVOKER
 BEGIN
  SELECT * FROM v_zone_inventory ORDER BY id;
  SELECT b.*,z.name zone_name FROM bikes b LEFT JOIN parking_zones z ON z.id=b.current_zone_id ORDER BY b.id;
- SELECT * FROM v_ride_details WHERE user_id=p_user ORDER BY id DESC;
- SELECT p.* FROM payments p JOIN ride_orders r ON r.id=p.order_id WHERE r.user_id=p_user ORDER BY p.id DESC;
+ SELECT * FROM v_ride_details WHERE user_id=p_user ORDER BY id DESC LIMIT 101;
+ SELECT p.* FROM payments p JOIN ride_orders r ON r.id=p.order_id WHERE r.user_id=p_user ORDER BY p.id DESC LIMIT 101;
  IF p_role='STUDENT' THEN
   SELECT s.*,u.email FROM staff s JOIN users u ON u.id=s.user_id WHERE FALSE;
   SELECT t.*,s.name staff_name,a.name source_name,b.name target_name FROM dispatch_tasks t LEFT JOIN staff s ON s.id=t.staff_id JOIN parking_zones a ON a.id=t.source_zone_id JOIN parking_zones b ON b.id=t.target_zone_id WHERE FALSE;
@@ -165,6 +165,7 @@ BEGIN
    AND started_at<TIMESTAMP(DATE(UTC_TIMESTAMP()+INTERVAL 8 HOUR))+INTERVAL 16 HOUR) today_rides,
   (SELECT COALESCE(SUM(carbon_kg_change),0) FROM carbon_transactions) carbon_kg,
   (SELECT COUNT(*) FROM maintenance_tickets WHERE status<>'COMPLETED') open_tickets;
+ SELECT * FROM v_ride_details WHERE user_id=p_user AND status IN ('RUNNING','UNPAID') ORDER BY id DESC;
 END$$
 DELIMITER ;
 

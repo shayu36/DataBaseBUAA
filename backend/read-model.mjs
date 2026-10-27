@@ -24,6 +24,7 @@ export async function dashboard(pool, user) {
       entries,
       attempts,
       summaryRows,
+      actionableRides,
     ] = result;
     const bikesByTask = new Map();
     for (const item of items) {
@@ -35,12 +36,17 @@ export async function dashboard(pool, user) {
     const carbon = carbonRows[0],
       summary = summaryRows[0],
       attemptPage = pageById(attempts, "attempts"),
-      entryPage = pageById(entries, "entries");
+      entryPage = pageById(entries, "entries"),
+      ridePage = pageById(rides, "rides"),
+      paymentPage = pageById(payments, "payments");
     return {
       zones,
       bikes,
-      rides,
-      payments,
+      rides: ridePage.rides,
+      rides_next_before: ridePage.next_before,
+      actionable_rides: actionableRides,
+      payments: paymentPage.payments,
+      payments_next_before: paymentPage.next_before,
       staff,
       dispatches,
       tickets,

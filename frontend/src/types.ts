@@ -8,7 +8,10 @@ export type Dashboard = {
   zones: Row[];
   bikes: Row[];
   rides: Row[];
+  rides_next_before: number | null;
+  actionable_rides: Row[];
   payments: Row[];
+  payments_next_before: number | null;
   staff: Row[];
   dispatches: Row[];
   tickets: Row[];

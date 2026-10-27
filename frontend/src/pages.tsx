@@ -101,7 +101,7 @@ export function Rides({ d, run }: Props) {
     [x, setX] = useState(d.zones[0]?.x || 0),
     [y, setY] = useState(d.zones[0]?.y || 0),
     [mode, setMode] = useState("shortest");
-  const active = d.rides.find((r) => r.status === "RUNNING");
+  const active = d.actionable_rides.find((r) => r.status === "RUNNING");
   return (
     <>
       <div className="two-col">
@@ -218,7 +218,7 @@ export function Rides({ d, run }: Props) {
       />
       <section className="panel">
         <h2>待支付订单</h2>
-        {d.rides
+        {d.actionable_rides
           .filter((r) => r.status === "UNPAID")
           .map((r) => (
             <div className="list-row" key={r.id}>
@@ -236,7 +236,7 @@ export function Rides({ d, run }: Props) {
               </button>
             </div>
           ))}
-        {!d.rides.some((r) => r.status === "UNPAID") && (
+        {!d.actionable_rides.some((r) => r.status === "UNPAID") && (
           <Empty text="没有待支付订单" />
         )}
       </section>
@@ -254,7 +254,7 @@ function PaginatedRows({
   initialRows: Row[];
   initialBefore: number | null;
   path: string;
-  field: "attempts" | "suggestions" | "risks" | "entries";
+  field: "attempts" | "suggestions" | "risks" | "entries" | "rides";
   label: string;
   children: (rows: Row[]) => React.ReactNode;
 }) {
@@ -308,41 +308,57 @@ function PaginatedRows({
   );
 }
 
+function RideHistoryRows({
+  rows,
+  before,
+  filter,
+}: {
+  rows: Row[];
+  before: number | null;
+  filter: string;
+}) {
+  return (
+    <PaginatedRows
+      initialRows={rows}
+      initialBefore={before}
+      path={`/rides?status=${filter}`}
+      field="rides"
+      label="加载更早订单"
+    >
+      {(rides) => (
+        <Table
+          rows={rides}
+          columns={[
+            {
+              label: "订单 / 车辆",
+              render: (r) => (
+                <strong>
+                  #{r.id} · {r.bike_code}
+                </strong>
+              ),
+            },
+            {
+              label: "起点 → 终点",
+              render: (r) =>
+                r.start_zone_name + " → " + (r.end_zone_name || "骑行中"),
+            },
+            { label: "开始时间", render: (r) => date(r.started_at) },
+            {
+              label: "估算里程",
+              render: (r) =>
+                (Number(r.distance_m || 0) / 1000).toFixed(2) + " km",
+            },
+            { label: "金额", render: (r) => money(r.amount_cents) },
+            { label: "状态", render: (r) => <Badge value={r.status} /> },
+          ]}
+        />
+      )}
+    </PaginatedRows>
+  );
+}
+
 export function Orders({ d }: Props) {
   const [filter, setFilter] = useState("ALL");
-  const rows = d.rides.filter((r) => filter === "ALL" || r.status === filter);
-  function csv() {
-    const keys = [
-      "id",
-      "bike_code",
-      "start_zone_name",
-      "end_zone_name",
-      "status",
-      "distance_m",
-      "amount_cents",
-    ];
-    const safe = (v: any) => {
-      const s = String(v ?? "");
-      return (
-        '"' + (/^[=+\-@]/.test(s) ? "'" + s : s).replaceAll('"', '""') + '"'
-      );
-    };
-    const blob = new Blob(
-      [
-        "\ufeff" +
-          [
-            keys.join(","),
-            ...rows.map((r) => keys.map((k) => safe(r[k])).join(",")),
-          ].join("\r\n"),
-      ],
-      { type: "text/csv;charset=utf-8" },
-    );
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "青行骑行订单.csv";
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
   return (
     <section className="panel">
       <div className="section-head">
@@ -358,37 +374,32 @@ export function Orders({ d }: Props) {
               <option key={v}>{v}</option>
             ))}
           </select>
-          <button className="secondary" onClick={csv}>
+          <a
+            className="button secondary"
+            href={`/api/rides/export.csv?status=${filter}`}
+            download
+          >
             导出 CSV
-          </button>
+          </a>
         </div>
       </div>
-      <Table
-        rows={rows}
-        columns={[
-          {
-            label: "订单 / 车辆",
-            render: (r) => (
-              <strong>
-                #{r.id} · {r.bike_code}
-              </strong>
-            ),
-          },
-          {
-            label: "起点 → 终点",
-            render: (r) =>
-              r.start_zone_name + " → " + (r.end_zone_name || "骑行中"),
-          },
-          { label: "开始时间", render: (r) => date(r.started_at) },
-          {
-            label: "估算里程",
-            render: (r) =>
-              (Number(r.distance_m || 0) / 1000).toFixed(2) + " km",
-          },
-          { label: "金额", render: (r) => money(r.amount_cents) },
-          { label: "状态", render: (r) => <Badge value={r.status} /> },
-        ]}
-      />
+      {filter === "ALL" ? (
+        <RideHistoryRows
+          rows={d.rides}
+          before={d.rides_next_before ?? null}
+          filter={filter}
+        />
+      ) : (
+        <Remote path={`/rides?status=${filter}`} refreshKey={d}>
+          {(page) => (
+            <RideHistoryRows
+              rows={page.rides}
+              before={page.next_before ?? null}
+              filter={filter}
+            />
+          )}
+        </Remote>
+      )}
       <h3>电子围栏归还尝试</h3>
       <PaginatedRows
         initialRows={d.attempts}

@@ -27,6 +27,7 @@ import {
 } from "../backend/carbon.mjs";
 import { updateLeaderboardProfile } from "../backend/profile.mjs";
 import { leaderboard, dashboard } from "../backend/read-model.mjs";
+import { rideHistory, paymentHistory } from "../backend/history.mjs";
 import { buildLeaderboard } from "./leaderboard-reference.mjs";
 import { bikeRisks } from "./risk-reference.mjs";
 import { riskData } from "../backend/risk-data.mjs";
@@ -262,6 +263,65 @@ test("carbon summaries count qualifying rides and page only the rider's history"
   assert.equal(Number(excluded.carbon.distance_m), 0);
   assert.equal(Number(excluded.carbon.points), 105);
   assert.equal(Number(excluded.carbon.carbon_kg), 0);
+});
+
+test("ride and payment history stays paginated while old actionable rides remain visible", async () => {
+  await pool.query(
+    "INSERT INTO ride_orders(id,user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,amount_cents,distance_m,status) VALUES(1,2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 3 MINUTE),UTC_TIMESTAMP(3),100,1000,'UNPAID')",
+  );
+  await pool.query(
+    "INSERT INTO ride_orders(id,user_id,bike_id,start_zone_id,status) VALUES(2,2,2,1,'RUNNING')",
+  );
+  await pool.query(`INSERT INTO ride_orders(id,user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,amount_cents,distance_m,status)
+    WITH RECURSIVE n AS (SELECT 10 AS value UNION ALL SELECT value+1 FROM n WHERE value<114)
+    SELECT value,2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 3 MINUTE),UTC_TIMESTAMP(3),100,1000,'UNPAID' FROM n`);
+  await pool.query(
+    "INSERT INTO payments(order_id,idempotency_key,amount_cents) SELECT id,CONCAT('page-pay-',id),100 FROM ride_orders WHERE id BETWEEN 10 AND 114",
+  );
+  await pool.query(
+    "UPDATE ride_orders SET status='PAID' WHERE id BETWEEN 10 AND 114",
+  );
+  await pool.query(
+    "INSERT INTO carbon_transactions(order_id,entry_type,idempotency_key,distance_m,points_change,carbon_kg_change,factor_kg_per_km,points_per_km,rule_version,reason) SELECT id,'AWARD',CONCAT('page-award-',id),1000,10,0.21,0.21,10,'carbon-v1','测试发放' FROM ride_orders WHERE id BETWEEN 10 AND 114",
+  );
+  await pool.query(
+    "INSERT INTO ride_orders(id,user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(200,3,3,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
+  );
+  await business.payRide(pool, operator, 200, {
+    idempotency_key: "other-page-payment",
+  });
+  const data = await dashboard(pool, student);
+  assert.equal(data.rides.length, 100);
+  assert.equal(data.payments.length, 100);
+  assert.deepEqual(
+    data.actionable_rides.map((ride) => ride.id),
+    [2, 1],
+  );
+  const older = await rideHistory(pool, student, "ALL", data.rides_next_before);
+  assert.equal(older.rides.length, 7);
+  assert.equal(older.next_before, null);
+  assert.ok(
+    [...data.rides, ...older.rides].every(
+      (ride) => ride.user_id === student.id,
+    ),
+  );
+  const unpaid = await rideHistory(pool, student, "UNPAID");
+  assert.deepEqual(
+    unpaid.rides.map((ride) => ride.id),
+    [1],
+  );
+  const payments = await paymentHistory(
+    pool,
+    student,
+    data.payments_next_before,
+  );
+  assert.equal(payments.payments.length, 5);
+  assert.equal(payments.next_before, null);
+  assert.ok(
+    [...data.payments, ...payments.payments].every(
+      (payment) => payment.order_id !== 200,
+    ),
+  );
 });
 
 test("old oversized dispatch suggestions become stale with an actionable reason", async () => {

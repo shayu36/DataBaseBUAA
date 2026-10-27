@@ -43,7 +43,8 @@ button:disabled {
   cursor: not-allowed;
   transform: none;
 }
-button.secondary {
+button.secondary,
+.button.secondary {
   background: #eff2e9;
   color: #34513f;
   border: 1px solid #dde5d5;
@@ -1165,7 +1166,8 @@ button:hover,
 .button:hover {
   background: #1945a8;
 }
-button.secondary {
+button.secondary,
+.button.secondary {
   background: #f5f7fb;
   color: #40536d;
   border-color: #d8e0ea;
