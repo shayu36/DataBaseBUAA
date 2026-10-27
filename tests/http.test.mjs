@@ -163,6 +163,21 @@ test("new students receive an unranked private leaderboard summary", async () =>
 });
 test("students cannot list users or mutate administrator resources", async () => {
   assert.equal(
+    (await request("/api/return-attempts?scope=all", undefined, studentCookie))
+      .status,
+    403,
+  );
+  assert.equal(
+    (
+      await request(
+        "/api/return-attempts?before=invalid",
+        undefined,
+        studentCookie,
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
     (
       await request(
         "/api/analytics/suggestions?before=1",

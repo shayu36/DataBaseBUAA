@@ -155,7 +155,7 @@ BEGIN
  END IF;
  SELECT points,carbon_kg,distance_m FROM v_user_carbon WHERE user_id=p_user;
  SELECT c.*,c.points_change points,c.carbon_kg_change carbon_kg FROM carbon_transactions c JOIN ride_orders r ON r.id=c.order_id WHERE r.user_id=p_user ORDER BY c.id DESC;
- SELECT a.* FROM return_attempts a JOIN ride_orders r ON r.id=a.order_id WHERE r.user_id=p_user ORDER BY a.id DESC LIMIT 100;
+ SELECT a.* FROM return_attempts a JOIN ride_orders r ON r.id=a.order_id WHERE r.user_id=p_user ORDER BY a.id DESC LIMIT 101;
  SELECT (SELECT COUNT(*) FROM bikes WHERE status<>'RETIRED') total_bikes,(SELECT COUNT(*) FROM bikes WHERE status='AVAILABLE') available_bikes,
   (SELECT COUNT(*) FROM ride_orders WHERE status='RUNNING') active_rides,
   (SELECT COUNT(*) FROM ride_orders WHERE started_at>=TIMESTAMP(DATE(UTC_TIMESTAMP()+INTERVAL 8 HOUR))-INTERVAL 8 HOUR

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bike } from "lucide-react";
 import { api } from "./api";
 import {
@@ -243,6 +243,67 @@ export function Rides({ d, run }: Props) {
     </>
   );
 }
+function ReturnAttemptPages({
+  initialRows,
+  initialBefore,
+  scope,
+  children,
+}: {
+  initialRows: Row[];
+  initialBefore: number | null;
+  scope: "own" | "all";
+  children: (rows: Row[]) => React.ReactNode;
+}) {
+  const [rows, setRows] = useState(initialRows),
+    [before, setBefore] = useState(initialBefore),
+    [loading, setLoading] = useState(false),
+    [error, setError] = useState("");
+  const generation = useRef(0);
+  useEffect(() => {
+    generation.current++;
+    setRows(initialRows);
+    setBefore(initialBefore);
+    setLoading(false);
+    setError("");
+    return () => {
+      generation.current++;
+    };
+  }, [initialRows, initialBefore, scope]);
+  async function loadMore() {
+    const current = generation.current;
+    setLoading(true);
+    setError("");
+    try {
+      const page = await api(
+        `/return-attempts?scope=${scope}&before=${before}`,
+      );
+      if (current !== generation.current) return;
+      setRows((existing) => [...existing, ...page.attempts]);
+      setBefore(page.next_before);
+    } catch (e) {
+      if (current === generation.current)
+        setError(e instanceof Error ? e.message : "读取归还记录失败");
+    } finally {
+      if (current === generation.current) setLoading(false);
+    }
+  }
+  return (
+    <>
+      {children(rows)}
+      {error && (
+        <div className="error" role="alert">
+          {error}
+        </div>
+      )}
+      {before != null && (
+        <button className="secondary" disabled={loading} onClick={loadMore}>
+          {loading ? "正在读取…" : "加载更早归还记录"}
+        </button>
+      )}
+    </>
+  );
+}
+
 export function Orders({ d }: Props) {
   const [filter, setFilter] = useState("ALL");
   const rows = d.rides.filter((r) => filter === "ALL" || r.status === filter);
@@ -325,20 +386,31 @@ export function Orders({ d }: Props) {
         ]}
       />
       <h3>电子围栏归还尝试</h3>
-      <Table
-        rows={d.attempts}
-        columns={[
-          { label: "订单", render: (r) => "#" + r.order_id },
-          { label: "坐标（米）", render: (r) => r.x + ", " + r.y },
-          { label: "拒绝原因", render: (r) => r.reason },
-          { label: "定位来源", render: (r) => r.location_source || "历史数据" },
-          {
-            label: "复核状态",
-            render: (r) => <Badge value={r.review_status || "PENDING"} />,
-          },
-          { label: "时间", render: (r) => date(r.created_at) },
-        ]}
-      />
+      <ReturnAttemptPages
+        initialRows={d.attempts}
+        initialBefore={d.attempts_next_before ?? null}
+        scope="own"
+      >
+        {(attempts) => (
+          <Table
+            rows={attempts}
+            columns={[
+              { label: "订单", render: (r) => "#" + r.order_id },
+              { label: "坐标（米）", render: (r) => r.x + ", " + r.y },
+              { label: "拒绝原因", render: (r) => r.reason },
+              {
+                label: "定位来源",
+                render: (r) => r.location_source || "历史数据",
+              },
+              {
+                label: "复核状态",
+                render: (r) => <Badge value={r.review_status || "PENDING"} />,
+              },
+              { label: "时间", render: (r) => date(r.created_at) },
+            ]}
+          />
+        )}
+      </ReturnAttemptPages>
     </section>
   );
 }
@@ -1682,6 +1754,7 @@ export function Admin({ d, run }: Props) {
     [roads, setRoads] = useState<Row[]>([]),
     [road, setRoad] = useState<any>(),
     [attempts, setAttempts] = useState<Row[]>([]),
+    [attemptsBefore, setAttemptsBefore] = useState<number | null>(null),
     [reviews, setReviews] = useState<Row[]>([]),
     [adjustOrder, setAdjustOrder] = useState(""),
     [adjustPoints, setAdjustPoints] = useState(0),
@@ -1699,6 +1772,7 @@ export function Admin({ d, run }: Props) {
         setUsers(u.users);
         setRoads(r.roads || []);
         setAttempts(a.attempts || []);
+        setAttemptsBefore(a.next_before ?? null);
         setReviews(q.orders || []);
         setUserError("");
       })
@@ -2033,56 +2107,67 @@ export function Admin({ d, run }: Props) {
       </section>
       <section className="panel">
         <h2>电子围栏违规复核</h2>
-        <Table
-          rows={attempts}
-          columns={[
-            {
-              label: "订单 / 车辆",
-              render: (r) => `#${r.order_id} · ${r.bike_code}`,
-            },
-            {
-              label: "停车区 / 坐标",
-              render: (r) => `${r.zone_name} · ${r.x}, ${r.y}`,
-            },
-            {
-              label: "原因 / 来源",
-              render: (r) => `${r.reason} / ${r.location_source || "历史"}`,
-            },
-            { label: "状态", render: (r) => <Badge value={r.review_status} /> },
-            {
-              label: "操作",
-              render: (r) =>
-                r.review_status === "PENDING" ? (
-                  <div className="actions">
-                    <button
-                      className="tiny"
-                      onClick={() =>
-                        run("/returns/" + r.id + "/review", {
-                          action: "RESOLVE",
-                          note: "已核对定位时间、坐标与停车区范围",
-                        })
-                      }
-                    >
-                      标记已处理
-                    </button>
-                    <button
-                      className="tiny secondary"
-                      onClick={() =>
-                        run("/returns/" + r.id + "/review", {
-                          action: "DISMISS",
-                          note: "复核后确认该记录无需继续处理",
-                        })
-                      }
-                    >
-                      撤销记录
-                    </button>
-                  </div>
-                ) : (
-                  r.review_note
-                ),
-            },
-          ]}
-        />
+        <ReturnAttemptPages
+          initialRows={attempts}
+          initialBefore={attemptsBefore}
+          scope="all"
+        >
+          {(attempts) => (
+            <Table
+              rows={attempts}
+              columns={[
+                {
+                  label: "订单 / 车辆",
+                  render: (r) => `#${r.order_id} · ${r.bike_code}`,
+                },
+                {
+                  label: "停车区 / 坐标",
+                  render: (r) => `${r.zone_name} · ${r.x}, ${r.y}`,
+                },
+                {
+                  label: "原因 / 来源",
+                  render: (r) => `${r.reason} / ${r.location_source || "历史"}`,
+                },
+                {
+                  label: "状态",
+                  render: (r) => <Badge value={r.review_status} />,
+                },
+                {
+                  label: "操作",
+                  render: (r) =>
+                    r.review_status === "PENDING" ? (
+                      <div className="actions">
+                        <button
+                          className="tiny"
+                          onClick={() =>
+                            run("/returns/" + r.id + "/review", {
+                              action: "RESOLVE",
+                              note: "已核对定位时间、坐标与停车区范围",
+                            })
+                          }
+                        >
+                          标记已处理
+                        </button>
+                        <button
+                          className="tiny secondary"
+                          onClick={() =>
+                            run("/returns/" + r.id + "/review", {
+                              action: "DISMISS",
+                              note: "复核后确认该记录无需继续处理",
+                            })
+                          }
+                        >
+                          撤销记录
+                        </button>
+                      </div>
+                    ) : (
+                      r.review_note
+                    ),
+                },
+              ]}
+            />
+          )}
+        </ReturnAttemptPages>
       </section>
       <section className="panel">
         <h2>异常行程资格复核</h2>

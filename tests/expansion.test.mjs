@@ -12,10 +12,13 @@ import {
   dismissDispatchSuggestion,
 } from "../backend/operations.mjs";
 import { refreshRiskAlerts, actOnRisk } from "../backend/risks.mjs";
-import { reviewReturnAttempt } from "../backend/returns.mjs";
+import {
+  reviewReturnAttempt,
+  listReturnAttempts,
+} from "../backend/returns.mjs";
 import { reviewOrderQualification, adjustCarbon } from "../backend/carbon.mjs";
 import { updateLeaderboardProfile } from "../backend/profile.mjs";
-import { leaderboard } from "../backend/read-model.mjs";
+import { leaderboard, dashboard } from "../backend/read-model.mjs";
 import { buildLeaderboard } from "./leaderboard-reference.mjs";
 import { bikeRisks } from "./risk-reference.mjs";
 import { riskData } from "../backend/risk-data.mjs";
@@ -144,6 +147,49 @@ test("saved dispatch suggestions remain reachable beyond the first page", async 
   );
   assert.equal(new Set(ids).size, 105);
   assert.ok(ids.every((id, i) => i === 0 || ids[i - 1] > id));
+});
+
+test("return attempts paginate without exposing other users and older records remain reviewable", async () => {
+  await pool.query(
+    "INSERT INTO ride_orders(id,user_id,bike_id,start_zone_id) VALUES(1,2,1,1),(2,3,2,1)",
+  );
+  await pool.query(`INSERT INTO return_attempts(order_id,zone_id,x,y,reason,location_captured_at,location_source)
+    WITH RECURSIVE n AS (SELECT 1 AS value UNION ALL SELECT value+1 FROM n WHERE value<105)
+    SELECT 1,1,10,10,'OUTSIDE_FENCE',UTC_TIMESTAMP(3),'MAP_SIMULATION' FROM n`);
+  await pool.query(
+    "INSERT INTO return_attempts(order_id,zone_id,x,y,reason,location_captured_at,location_source) VALUES(2,1,10,10,'OUTSIDE_FENCE',UTC_TIMESTAMP(3),'MAP_SIMULATION'),(2,1,10,10,'OUTSIDE_FENCE',UTC_TIMESTAMP(3),'MAP_SIMULATION')",
+  );
+  const own = await listReturnAttempts(pool, student);
+  assert.equal(own.attempts.length, 100);
+  assert.ok(own.attempts.every((row) => row.user_id === student.id));
+  const older = await listReturnAttempts(pool, student, own.next_before);
+  assert.equal(older.attempts.length, 5);
+  assert.equal(older.next_before, null);
+  assert.ok(older.attempts.every((row) => row.user_id === student.id));
+  const summary = await dashboard(pool, student);
+  assert.equal(summary.attempts.length, 100);
+  assert.equal(summary.attempts_next_before, own.next_before);
+  const all = await listReturnAttempts(pool, admin);
+  const rest = await listReturnAttempts(pool, admin, all.next_before);
+  assert.equal(all.attempts.length, 100);
+  assert.equal(rest.attempts.length, 7);
+  assert.equal(
+    new Set([...all.attempts, ...rest.attempts].map((row) => row.id)).size,
+    107,
+  );
+  assert.deepEqual(
+    (await listReturnAttempts(pool, admin, null, "own")).attempts,
+    [],
+  );
+  await assert.rejects(listReturnAttempts(pool, student, null, "all"), {
+    code: "FORBIDDEN",
+  });
+  await reviewReturnAttempt(pool, admin, older.attempts.at(-1).id, {
+    action: "RESOLVE",
+    note: "已复核历史记录",
+  });
+  const reviewed = await listReturnAttempts(pool, student, own.next_before);
+  assert.equal(reviewed.attempts.at(-1).review_status, "RESOLVED");
 });
 
 test("old oversized dispatch suggestions become stale with an actionable reason", async () => {

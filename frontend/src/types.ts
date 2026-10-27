@@ -13,6 +13,7 @@ export type Dashboard = {
   dispatches: Row[];
   tickets: Row[];
   attempts: Row[];
+  attempts_next_before: number | null;
   carbon: {
     points: number;
     carbon_kg: number;

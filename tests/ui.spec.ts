@@ -721,6 +721,83 @@ test("maintenance operator can view and acknowledge risk alerts", async ({
   ).toBeVisible();
 });
 
+test("personal and administrator return histories load older records", async ({
+  page,
+}) => {
+  const attempt = (id: number, orderId: number) => ({
+    id,
+    order_id: orderId,
+    bike_code: "TEST",
+    zone_name: "源站",
+    x: 10,
+    y: 20,
+    reason: "OUTSIDE_FENCE",
+    location_source: "MAP_SIMULATION",
+    review_status: "PENDING",
+    created_at: "2026-10-27T00:00:00Z",
+  });
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: 1,
+            name: "管理员",
+            email: "admin@test.local",
+            role: "ADMIN",
+            status: "ACTIVE",
+          },
+        },
+      });
+    if (url.pathname === "/api/dashboard")
+      return route.fulfill({
+        json: {
+          ...regressionDashboard,
+          attempts: [attempt(101, 501)],
+          attempts_next_before: 101,
+        },
+      });
+    if (url.pathname === "/api/return-attempts") {
+      if (url.searchParams.get("scope") === "own") {
+        expect(url.searchParams.get("before")).toBe("101");
+        return route.fulfill({
+          json: { attempts: [attempt(100, 500)], next_before: null },
+        });
+      }
+      if (url.searchParams.has("before")) {
+        expect(url.searchParams.get("scope")).toBe("all");
+        expect(url.searchParams.get("before")).toBe("201");
+        return route.fulfill({
+          json: { attempts: [attempt(200, 800)], next_before: null },
+        });
+      }
+      return route.fulfill({
+        json: { attempts: [attempt(201, 801)], next_before: 201 },
+      });
+    }
+    if (url.pathname === "/api/admin/users")
+      return route.fulfill({ json: { users: [] } });
+    if (url.pathname === "/api/admin/roads")
+      return route.fulfill({ json: { roads: [] } });
+    if (url.pathname === "/api/admin/orders/review")
+      return route.fulfill({ json: { orders: [] } });
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "骑行订单", exact: true }).click();
+  await expect(page.getByText("#501", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "加载更早归还记录" }).click();
+  await expect(page.getByText("#500", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "基础资料", exact: true }).click();
+  await expect(page.getByText("#801 · TEST", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "加载更早归还记录" }).click();
+  await expect(page.getByText("#800 · TEST", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "加载更早归还记录" }),
+  ).toHaveCount(0);
+});
+
 test("administrator can load older saved dispatch suggestions", async ({
   page,
 }) => {

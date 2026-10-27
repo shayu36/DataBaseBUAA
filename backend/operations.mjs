@@ -9,6 +9,7 @@ import {
   idSchema,
 } from "./business.mjs";
 import { parseReportingDay } from "./analytics.mjs";
+import { pageById } from "./pagination.mjs";
 
 export const reportFilterSchema = z
   .object({
@@ -132,9 +133,7 @@ export async function listDispatchSuggestions(pool, before = null) {
     before,
     before,
   ]);
-  const hasMore = rows.length > 100;
-  if (hasMore) rows.pop();
-  return { suggestions: rows, next_before: hasMore ? rows.at(-1).id : null };
+  return pageById(rows, "suggestions");
 }
 
 export async function confirmDispatchSuggestion(pool, actor, id, staffId) {

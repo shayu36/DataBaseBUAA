@@ -224,9 +224,15 @@ export function createApp(pool) {
       ),
     ),
   );
-  app.get("/api/return-attempts", async (req, res) =>
-    res.json({ attempts: await listReturnAttempts(pool, req.user) }),
-  );
+  app.get("/api/return-attempts", async (req, res) => {
+    const { before, scope } = z
+      .object({
+        before: idSchema.optional(),
+        scope: z.enum(["own", "all"]).optional(),
+      })
+      .parse(req.query);
+    res.json(await listReturnAttempts(pool, req.user, before, scope));
+  });
   app.post("/api/returns/:id/review", async (req, res) =>
     res.json(
       await reviewReturnAttempt(pool, req.user, req.params.id, req.body),

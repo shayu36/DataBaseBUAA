@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { sql } from "./sql-statements.mjs";
 import { AppError, actorTransaction, callProcedure } from "./db.mjs";
+import { pageById } from "./pagination.mjs";
 
 export function reviewReturnAttempt(pool, actor, attemptId, input) {
   if (actor.role !== "ADMIN")
@@ -25,11 +26,13 @@ export function reviewReturnAttempt(pool, actor, attemptId, input) {
   );
 }
 
-export async function listReturnAttempts(pool, actor) {
-  const admin = actor.role === "ADMIN";
+export async function listReturnAttempts(pool, actor, before = null, scope) {
+  if (scope === "all" && actor.role !== "ADMIN")
+    throw new AppError("没有查看全部归还记录的权限", "FORBIDDEN", 403);
+  const admin = actor.role === "ADMIN" && scope !== "own";
   const [rows] = await pool.query(
     sql(admin ? "return_attempts_all" : "return_attempts_own"),
-    admin ? [] : [actor.id],
+    admin ? [before, before] : [actor.id, before, before],
   );
-  return rows;
+  return pageById(rows, "attempts");
 }

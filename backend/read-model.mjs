@@ -4,6 +4,7 @@ import { readSnapshot } from "./db.mjs";
 import { dispatchSuggestions } from "./dispatch-suggestions.mjs";
 import { listDispatchSuggestions } from "./operations.mjs";
 import { listRiskAlerts } from "./risks.mjs";
+import { pageById } from "./pagination.mjs";
 export async function dashboard(pool, user) {
   return readSnapshot(pool, async (c) => {
     const [result] = await c.query("CALL sp_dashboard(?,?)", [
@@ -32,7 +33,8 @@ export async function dashboard(pool, user) {
     for (const task of dispatches)
       task.bike_ids = bikesByTask.get(task.id) || [];
     const carbon = carbonRows[0],
-      summary = summaryRows[0];
+      summary = summaryRows[0],
+      attemptPage = pageById(attempts, "attempts");
     return {
       zones,
       bikes,
@@ -43,7 +45,8 @@ export async function dashboard(pool, user) {
       tickets,
       carbon: { ...carbon, entries },
       summary,
-      attempts,
+      attempts: attemptPage.attempts,
+      attempts_next_before: attemptPage.next_before,
     };
   });
 }
