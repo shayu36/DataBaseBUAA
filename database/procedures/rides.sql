@@ -39,6 +39,20 @@ BEGIN
 END$$
 DELIMITER ;
 
+-- Read the current carbon rule once with the same defaults for all callers.
+DROP PROCEDURE IF EXISTS sp_get_carbon_rule;
+DELIMITER $$
+CREATE PROCEDURE sp_get_carbon_rule(OUT p_factor DECIMAL(20,8), OUT p_rate DECIMAL(20,8), OUT p_version VARCHAR(30))
+SQL SECURITY INVOKER
+BEGIN
+ SET p_factor=0.21,p_rate=10,p_version='carbon-v1';
+ SELECT COALESCE(CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(value,'$.kg_per_km')),'null') AS DECIMAL(20,8)),0.21),
+        COALESCE(CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(value,'$.points_per_km')),'null') AS DECIMAL(20,8)),10),
+        COALESCE(NULLIF(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(value,'$.rule_version')),'null'),''),'carbon-v1')
+ INTO p_factor,p_rate,p_version FROM system_settings WHERE name='carbon';
+END$$
+DELIMITER ;
+
 -- Private helper: callers already hold the order lock and own the transaction.
 DROP PROCEDURE IF EXISTS sp_award_carbon;
 DELIMITER $$
@@ -56,10 +70,7 @@ award: BEGIN
  IF v_status IS NULL THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ORDER_NOT_FOUND'; END IF;
  SET p_awarded=FALSE,p_points=NULL,p_carbon=NULL,p_reason=v_qualification;
  IF v_status<>'PAID' OR v_qualification<>'VALID' THEN LEAVE award; END IF;
- SELECT COALESCE(CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(value,'$.kg_per_km')),'null') AS DECIMAL(20,8)),0.21),
-        COALESCE(CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(value,'$.points_per_km')),'null') AS DECIMAL(20,8)),10),
-        COALESCE(NULLIF(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(value,'$.rule_version')),'null'),''),'carbon-v1')
- INTO v_factor,v_rate,v_version FROM system_settings WHERE name='carbon';
+ CALL sp_get_carbon_rule(v_factor,v_rate,v_version);
  SET p_points=FLOOR(v_distance*v_rate/1000),p_carbon=ROUND(v_distance*v_factor/1000,4),p_reason=NULL;
  IF EXISTS(SELECT 1 FROM carbon_transactions WHERE award_order_id=p_order_id) THEN LEAVE award; END IF;
  INSERT INTO carbon_transactions(order_id,entry_type,idempotency_key,distance_m,points_change,carbon_kg_change,factor_kg_per_km,points_per_km,rule_version,reason,actor_id)
@@ -151,8 +162,9 @@ adjustment: BEGIN
  DECLARE v_balance_points BIGINT;
  DECLARE v_balance_carbon DECIMAL(20,4);
  DECLARE v_id BIGINT UNSIGNED;
- DECLARE v_factor DECIMAL(20,8) DEFAULT 0.21;
- DECLARE v_version VARCHAR(30) DEFAULT 'carbon-v1';
+ DECLARE v_factor DECIMAL(20,8);
+ DECLARE v_rate DECIMAL(20,8);
+ DECLARE v_version VARCHAR(30);
  IF p_key IS NULL OR NOT REGEXP_LIKE(p_key,'^[a-zA-Z0-9_-]{8,80}$','c') THEN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_ADJUSTMENT';
  END IF;
@@ -177,9 +189,7 @@ adjustment: BEGIN
    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INSUFFICIENT_CARBON_BALANCE';
   END IF;
  END IF;
- SELECT COALESCE(CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(value,'$.kg_per_km')),'null') AS DECIMAL(20,8)),0.21),
-        COALESCE(NULLIF(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(value,'$.rule_version')),'null'),''),'carbon-v1')
- INTO v_factor,v_version FROM system_settings WHERE name='carbon';
+ CALL sp_get_carbon_rule(v_factor,v_rate,v_version);
  INSERT INTO carbon_transactions(order_id,entry_type,idempotency_key,distance_m,points_change,carbon_kg_change,factor_kg_per_km,rule_version,reason,actor_id)
  VALUES(p_order_id,'ADJUSTMENT',p_key,0,p_points,p_carbon,v_factor,v_version,p_reason,p_actor_id);
  SET v_id=LAST_INSERT_ID();

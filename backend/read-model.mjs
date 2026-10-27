@@ -25,6 +25,7 @@ export async function dashboard(pool, user) {
       attempts,
       summaryRows,
       actionableRides,
+      carbonRuleRows,
     ] = result;
     normalizeDispatches(dispatches);
     const activeDispatches = dispatches.filter((row) =>
@@ -62,6 +63,7 @@ export async function dashboard(pool, user) {
       tickets_next_before: pastTickets.next_before,
       carbon: {
         ...carbon,
+        rule: carbonRuleRows[0],
         entries: entryPage.entries,
         entries_next_before: entryPage.next_before,
       },

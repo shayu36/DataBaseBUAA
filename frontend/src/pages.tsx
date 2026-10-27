@@ -1577,7 +1577,11 @@ export function Carbon({ d, user, run }: Props) {
             <br />
             留给更绿的校园。
           </h2>
-          <p>模拟减排系数 0.21 kg/km</p>
+          <p>
+            {d.carbon.rule
+              ? `当前模拟减排系数 ${d.carbon.rule.kg_per_km} kg/km · 每公里 ${d.carbon.rule.points_per_km} 分 · ${d.carbon.rule.rule_version}`
+              : "当前积分规则暂不可用"}
+          </p>
         </div>
         <strong>
           {d.carbon.points}

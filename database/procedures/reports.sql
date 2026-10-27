@@ -138,6 +138,9 @@ DELIMITER $$
 CREATE PROCEDURE sp_dashboard(IN p_user BIGINT UNSIGNED, IN p_role VARCHAR(20))
 SQL SECURITY INVOKER
 BEGIN
+ DECLARE v_factor DECIMAL(20,8);
+ DECLARE v_rate DECIMAL(20,8);
+ DECLARE v_version VARCHAR(30);
  SELECT * FROM v_zone_inventory ORDER BY id;
  SELECT b.*,z.name zone_name FROM bikes b LEFT JOIN parking_zones z ON z.id=b.current_zone_id ORDER BY b.id;
  SELECT * FROM v_ride_details WHERE user_id=p_user ORDER BY id DESC LIMIT 101;
@@ -176,6 +179,8 @@ BEGIN
   (SELECT COALESCE(SUM(carbon_kg_change),0) FROM carbon_transactions) carbon_kg,
   (SELECT COUNT(*) FROM maintenance_tickets WHERE status<>'COMPLETED') open_tickets;
  SELECT * FROM v_ride_details WHERE user_id=p_user AND status IN ('RUNNING','UNPAID') ORDER BY id DESC;
+ CALL sp_get_carbon_rule(v_factor,v_rate,v_version);
+ SELECT v_factor AS kg_per_km,v_rate AS points_per_km,v_version AS rule_version;
 END$$
 DELIMITER ;
 

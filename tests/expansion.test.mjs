@@ -707,6 +707,11 @@ test("carbon awards retain precise historical factors and validate their own rul
   await pool.query(
     "UPDATE system_settings SET value=JSON_OBJECT('kg_per_km',0.21019,'points_per_km',12.345678,'rule_version','precise-v1') WHERE name='carbon'",
   );
+  assert.deepEqual((await dashboard(pool, student)).carbon.rule, {
+    kg_per_km: 0.21019,
+    points_per_km: 12.345678,
+    rule_version: "precise-v1",
+  });
   const [order] = await pool.query(
     "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
   );
@@ -726,6 +731,17 @@ test("carbon awards retain precise historical factors and validate their own rul
   await pool.query(
     "UPDATE system_settings SET value=JSON_OBJECT('kg_per_km',0.3,'points_per_km',20,'rule_version','next-v1') WHERE name='carbon'",
   );
+  assert.deepEqual((await dashboard(pool, student)).carbon.rule, {
+    kg_per_km: 0.3,
+    points_per_km: 20,
+    rule_version: "next-v1",
+  });
+  await pool.query("DELETE FROM system_settings WHERE name='carbon'");
+  assert.deepEqual((await dashboard(pool, student)).carbon.rule, {
+    kg_per_km: 0.21,
+    points_per_km: 10,
+    rule_version: "carbon-v1",
+  });
   const checks = await readFile(
     new URL("../database/invariant-checks.sql", import.meta.url),
     "utf8",
