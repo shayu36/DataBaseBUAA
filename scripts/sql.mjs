@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { applyFeatureMigrationsLocked } from "../backend/feature-migrations.mjs";
-import { withNamedLock } from "../backend/db.mjs";
+import { withNamedLock, withSchemaLock } from "../backend/db.mjs";
 
 const procedureFiles = [
   "campus.sql",
@@ -42,14 +42,16 @@ export async function applyProcedures(connection) {
 }
 
 export function applySchema(pool) {
-  return withNamedLock(pool, async (connection) => {
-    await applyFeatureMigrationsLocked(connection);
-    for await (const sql of statements(
-      new URL("../database/schema.sql", import.meta.url),
-    )) {
-      await connection.query(sql);
-    }
-    await applyFeatureMigrationsLocked(connection);
-    await applyProcedures(connection);
-  });
+  return withSchemaLock(pool, (connection) =>
+    withNamedLock(connection, async () => {
+      await applyFeatureMigrationsLocked(connection);
+      for await (const sql of statements(
+        new URL("../database/schema.sql", import.meta.url),
+      )) {
+        await connection.query(sql);
+      }
+      await applyFeatureMigrationsLocked(connection);
+      await applyProcedures(connection);
+    }),
+  );
 }

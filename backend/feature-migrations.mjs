@@ -1,15 +1,17 @@
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { sql } from "./sql-statements.mjs";
-import { withNamedLock } from "./db.mjs";
+import { withNamedLock, withSchemaLock } from "./db.mjs";
 
 // DDL and migration decisions live in MySQL. Use a unique temporary routine so
 // concurrent invocations do not overwrite another session's migration routine.
 export function applyFeatureMigrations(db) {
-  return withNamedLock(db, applyFeatureMigrationsLocked);
+  return withSchemaLock(db, (connection) =>
+    withNamedLock(connection, applyFeatureMigrationsLocked),
+  );
 }
 
-// Caller holds the database named lock throughout the surrounding DDL.
+// Caller holds both schema and business locks throughout the surrounding DDL.
 export async function applyFeatureMigrationsLocked(connection) {
   const name = `qingxing_migration_${randomBytes(8).toString("hex")}`;
   const migrationSql = await readFile(

@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { open, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { runMysqlTool } from "./mysql-tools.mjs";
-import { withNamedLock } from "../backend/db.mjs";
+import { withSchemaLock } from "../backend/db.mjs";
 import { sql } from "../backend/sql-statements.mjs";
 
 function validateDatabase(database) {
@@ -37,7 +37,7 @@ export async function writeMysqlDump(target, database, run = runMysqlTool) {
   }
 }
 
-// The shared lock prevents project writes and schema changes during the dump.
+// The schema lock prevents project DDL while InnoDB writes continue.
 export async function writeLockedMysqlDump(
   pool,
   target,
@@ -50,7 +50,7 @@ export async function writeLockedMysqlDump(
     `.${basename(target)}-${randomBytes(8).toString("hex")}.stage`,
   );
   try {
-    const size = await withNamedLock(pool, async (connection) => {
+    const size = await withSchemaLock(pool, async (connection) => {
       const [[{ name }]] = await connection.query(sql("current_database"));
       if (name !== database) throw new Error("备份连接与目标数据库不一致");
       return writeMysqlDump(staged, database, run);

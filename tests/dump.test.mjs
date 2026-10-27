@@ -1,10 +1,11 @@
 import { test } from "node:test";
+import { randomBytes } from "node:crypto";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeMysqlDump, writeLockedMysqlDump } from "../scripts/dump.mjs";
-import { createPool } from "../backend/db.mjs";
+import { createPool, ledgerTransaction } from "../backend/db.mjs";
 
 test("failed database export preserves an existing snapshot and removes partial files", async () => {
   const directory = await mkdtemp(join(tmpdir(), "qingxing-dump-"));
@@ -75,7 +76,7 @@ test("empty database export is rejected without replacing an existing snapshot",
   }
 });
 
-test("database export holds the shared lock and releases it after success or failure", async () => {
+test("database export holds the schema lock while business writes continue", async () => {
   const directory = await mkdtemp(join(tmpdir(), "qingxing-locked-dump-"));
   const pool = createPool({
     database: "campus_bike_test",
@@ -83,13 +84,29 @@ test("database export holds the shared lock and releases it after success or fai
     password: process.env.DB_ADMIN_PASSWORD,
   });
   const observer = await pool.getConnection();
+  const table = `backup_lock_test_${randomBytes(4).toString("hex")}`;
+  let created = false,
+    writes = 0;
   try {
+    await observer.query(
+      `CREATE TABLE \`${table}\` (id INT PRIMARY KEY) ENGINE=InnoDB`,
+    );
+    created = true;
     const target = join(directory, "snapshot.sql");
     const checkLock = async (_tool, args) => {
       const [[{ available }]] = await observer.query(
-        "SELECT IS_FREE_LOCK(CONCAT('campus-bike:',DATABASE())) AS available",
+        "SELECT IS_FREE_LOCK(CONCAT('campus-bike:schema:',DATABASE())) AS available",
       );
       assert.equal(available, 0);
+      const [[schemaAttempt]] = await observer.query(
+        "SELECT GET_LOCK(CONCAT('campus-bike:schema:',DATABASE()),0) AS acquired",
+      );
+      assert.equal(schemaAttempt.acquired, 0);
+      await ledgerTransaction(pool, (connection) =>
+        connection.query(`INSERT INTO \`${table}\` (id) VALUES (?)`, [
+          ++writes,
+        ]),
+      );
       const temporary = args
         .find((arg) => arg.startsWith("--result-file="))
         .slice("--result-file=".length);
@@ -98,7 +115,7 @@ test("database export holds the shared lock and releases it after success or fai
     await writeLockedMysqlDump(pool, target, "campus_bike_test", checkLock);
     assert.equal(await readFile(target, "utf8"), "完整导出");
     const [[after]] = await observer.query(
-      "SELECT IS_FREE_LOCK(CONCAT('campus-bike:',DATABASE())) AS available",
+      "SELECT IS_FREE_LOCK(CONCAT('campus-bike:schema:',DATABASE())) AS available",
     );
     assert.equal(after.available, 1);
     await assert.rejects(
@@ -115,14 +132,19 @@ test("database export holds the shared lock and releases it after success or fai
     );
     assert.equal(await readFile(target, "utf8"), "完整导出");
     const [[afterError]] = await observer.query(
-      "SELECT IS_FREE_LOCK(CONCAT('campus-bike:',DATABASE())) AS available",
+      "SELECT IS_FREE_LOCK(CONCAT('campus-bike:schema:',DATABASE())) AS available",
     );
     assert.equal(afterError.available, 1);
+    const [[{ count }]] = await observer.query(
+      `SELECT COUNT(*) AS count FROM \`${table}\``,
+    );
+    assert.equal(count, 2);
     await assert.rejects(
       writeLockedMysqlDump(pool, target, "other_database", checkLock),
       /备份连接与目标数据库不一致/,
     );
   } finally {
+    if (created) await observer.query(`DROP TABLE \`${table}\``);
     observer.release();
     await pool.end();
     await rm(directory, { recursive: true, force: true });

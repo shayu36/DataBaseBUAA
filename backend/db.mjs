@@ -34,7 +34,13 @@ export function errorCodes(error) {
 }
 
 // GET_LOCK is connection-scoped, including across DDL implicit commits.
-export async function withNamedLock(db, work) {
+export function withNamedLock(db, work) {
+  return withLock(db, work, "acquire_lock", "release_lock");
+}
+export function withSchemaLock(db, work) {
+  return withLock(db, work, "acquire_schema_lock", "release_schema_lock");
+}
+async function withLock(db, work, acquire, release) {
   const pooled = typeof db.getConnection === "function";
   const connection = pooled ? await db.getConnection() : db;
   let locked = false,
@@ -47,7 +53,7 @@ export async function withNamedLock(db, work) {
     connection.destroy();
   };
   try {
-    const [[{ acquired }]] = await connection.query(sql("acquire_lock"));
+    const [[{ acquired }]] = await connection.query(sql(acquire));
     lockUncertain = false;
     if (acquired !== 1)
       throw new AppError("业务服务繁忙，请稍后重试", "BUSY", 503);
@@ -62,7 +68,7 @@ export async function withNamedLock(db, work) {
     if (!destroyed) {
       if (locked) {
         try {
-          await releaseNamedLock(connection);
+          await releaseLock(connection, release);
         } catch (releaseError) {
           if (failed)
             throw new AggregateError(
@@ -79,36 +85,31 @@ export async function withNamedLock(db, work) {
 
 // A course-scale single-writer transaction boundary, with locks on affected rows.
 export function ledgerTransaction(pool, work) {
-  return withNamedLock(pool, (connection, discard) =>
-    transactionLocked(connection, discard, work),
-  );
-}
-
-// The caller holds the database named lock for the entire transaction.
-export async function transactionLocked(connection, discard, work) {
-  try {
-    await connection.beginTransaction();
-    const result = await work(connection);
-    await connection.commit();
-    return result;
-  } catch (error) {
+  return withNamedLock(pool, async (connection, discard) => {
     try {
-      await connection.rollback();
-    } catch (rollbackError) {
-      discard();
-      throw new AggregateError(
-        [error, rollbackError],
-        "数据库回滚失败，连接已关闭",
-      );
+      await connection.beginTransaction();
+      const result = await work(connection);
+      await connection.commit();
+      return result;
+    } catch (error) {
+      try {
+        await connection.rollback();
+      } catch (rollbackError) {
+        discard();
+        throw new AggregateError(
+          [error, rollbackError],
+          "数据库回滚失败，连接已关闭",
+        );
+      }
+      throw error;
     }
-    throw error;
-  }
+  });
 }
 
 // A connection must not be reused if releasing its named lock cannot be confirmed.
-export async function releaseNamedLock(connection) {
+async function releaseLock(connection, statement) {
   try {
-    const [[{ released }]] = await connection.query(sql("release_lock"));
+    const [[{ released }]] = await connection.query(sql(statement));
     if (released !== 1) throw new Error("数据库事务锁未正确释放");
   } catch (error) {
     connection.destroy();

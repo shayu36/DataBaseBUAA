@@ -108,7 +108,14 @@ test("migration drops its temporary procedure and releases a confirmed lock", as
   assert.deepEqual(await applyFeatureMigrations(pool), {
     applied: ["pdf_expansion@11"],
   });
-  assert.deepEqual(events, ["create", "migrate", "drop", "unlock", "release"]);
+  assert.deepEqual(events, [
+    "create",
+    "migrate",
+    "drop",
+    "unlock",
+    "unlock",
+    "release",
+  ]);
 });
 
 test("DDL failure releases its lock without pretending to roll back", async () => {
@@ -248,7 +255,14 @@ test("migration and temporary procedure cleanup failures are both preserved", as
       error.errors[0] === migrationError &&
       error.errors[1] === dropError,
   );
-  assert.deepEqual(events, ["create", "migrate", "drop", "unlock", "release"]);
+  assert.deepEqual(events, [
+    "create",
+    "migrate",
+    "drop",
+    "unlock",
+    "unlock",
+    "release",
+  ]);
 });
 
 test("seed and temporary procedure cleanup failures are both preserved", async () => {
@@ -260,6 +274,14 @@ test("seed and temporary procedure cleanup failures are both preserved", async (
     async getConnection() {
       return {
         async query(sql) {
+          if (sql.includes("GET_LOCK")) {
+            adminEvents.push("lock");
+            return [[{ acquired: 1 }]];
+          }
+          if (sql.includes("RELEASE_LOCK")) {
+            adminEvents.push("unlock");
+            return [[{ released: 1 }]];
+          }
           if (sql.includes("CREATE PROCEDURE")) {
             adminEvents.push("create");
             return [];
@@ -284,5 +306,59 @@ test("seed and temporary procedure cleanup failures are both preserved", async (
       error.errors[1] === dropError,
   );
   assert.deepEqual(events, ["begin", "seed", "rollback", "unlock", "release"]);
-  assert.deepEqual(adminEvents, ["create", "drop", "release"]);
+  assert.deepEqual(adminEvents, [
+    "lock",
+    "create",
+    "drop",
+    "unlock",
+    "release",
+  ]);
+});
+
+test("seed retains the schema lock while cleaning up after a broken transaction", async () => {
+  const seedError = new Error("演示数据写入失败");
+  const rollbackError = new Error("回滚失败");
+  const { pool, events } = fixture(1, { seedError, rollbackError });
+  let locked = false,
+    dropped = false;
+  const adminPool = {
+    async getConnection() {
+      return {
+        async query(statement) {
+          if (statement.includes("GET_LOCK")) {
+            locked = true;
+            return [[{ acquired: 1 }]];
+          }
+          if (statement.includes("RELEASE_LOCK")) {
+            locked = false;
+            return [[{ released: 1 }]];
+          }
+          if (statement.includes("CREATE PROCEDURE")) {
+            assert.equal(locked, true);
+            return [];
+          }
+          if (statement.startsWith("DROP PROCEDURE")) {
+            assert.equal(locked, true);
+            assert.deepEqual(events, ["begin", "seed", "rollback", "destroy"]);
+            dropped = true;
+            return [];
+          }
+          throw new Error("意外的数据库操作");
+        },
+        release() {},
+        destroy() {
+          throw new Error("不应销毁正常的管理连接");
+        },
+      };
+    },
+  };
+  await assert.rejects(
+    seedDemo(pool, adminPool),
+    (error) =>
+      error instanceof AggregateError &&
+      error.errors[0] === seedError &&
+      error.errors[1] === rollbackError,
+  );
+  assert.equal(dropped, true);
+  assert.equal(locked, false);
 });

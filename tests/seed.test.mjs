@@ -40,6 +40,10 @@ test("schema initialization holds its database lock through DDL", async () => {
           "SELECT IS_USED_LOCK(CONCAT('campus-bike:', DATABASE())) AS owner",
         );
         assert.equal(row.owner, connectionId, `${marker} 必须由持锁连接执行`);
+        const [[schema]] = await observer.query(
+          "SELECT IS_USED_LOCK(CONCAT('campus-bike:schema:',DATABASE())) AS owner",
+        );
+        assert.equal(schema.owner, connectionId, `${marker} 必须持有结构锁`);
         const [[contender]] = await observer.query(
           "SELECT GET_LOCK(CONCAT('campus-bike:', DATABASE()),0) AS acquired",
         );
@@ -122,7 +126,7 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
                 : null;
             if (action) {
               const [[{ available }]] = await pool.query(
-                "SELECT IS_FREE_LOCK(CONCAT('campus-bike:',DATABASE())) AS available",
+                "SELECT IS_FREE_LOCK(CONCAT('campus-bike:schema:',DATABASE())) AS available",
               );
               assert.equal(available, 0, `演示过程${action}时必须持有数据库锁`);
               guardedActions.push(action);

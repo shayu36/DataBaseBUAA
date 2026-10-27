@@ -1,4 +1,4 @@
-import { createPool, withNamedLock } from "../backend/db.mjs";
+import { createPool, withNamedLock, withSchemaLock } from "../backend/db.mjs";
 import { applyFeatureMigrationsLocked } from "../backend/feature-migrations.mjs";
 import { applyProcedures } from "./sql.mjs";
 import { assertMysqlVersion } from "./mysql-version.mjs";
@@ -11,11 +11,13 @@ try {
   if (process.env.DB_NAME !== "campus_bike")
     throw new Error("Feature migration is restricted to campus_bike.");
   await assertMysqlVersion(pool);
-  const result = await withNamedLock(pool, async (connection) => {
-    const migration = await applyFeatureMigrationsLocked(connection);
-    await applyProcedures(connection);
-    return migration;
-  });
+  const result = await withSchemaLock(pool, (connection) =>
+    withNamedLock(connection, async () => {
+      const migration = await applyFeatureMigrationsLocked(connection);
+      await applyProcedures(connection);
+      return migration;
+    }),
+  );
   console.log(
     result.applied.length
       ? `Feature migration applied: ${result.applied.join(", ")}`
