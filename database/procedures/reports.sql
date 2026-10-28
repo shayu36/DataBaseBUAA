@@ -204,14 +204,23 @@ DELIMITER ;
 
 DROP PROCEDURE IF EXISTS sp_dashboard;
 DELIMITER $$
-CREATE PROCEDURE sp_dashboard(IN p_user BIGINT UNSIGNED, IN p_role VARCHAR(20))
+CREATE PROCEDURE sp_dashboard(IN p_user BIGINT UNSIGNED, IN p_role VARCHAR(20), IN p_campus JSON)
 SQL SECURITY INVOKER
 BEGIN
  DECLARE v_now DATETIME(3) DEFAULT UTC_TIMESTAMP(3);
  DECLARE v_factor DECIMAL(20,8);
  DECLARE v_rate DECIMAL(20,8);
  DECLARE v_version VARCHAR(30);
- SELECT * FROM v_zone_inventory ORDER BY id;
+ DECLARE v_areas GEOMETRY DEFAULT NULL;
+ DECLARE v_borrowable BIGINT DEFAULT 0;
+ CALL sp_campus_restrictions(p_campus,v_areas);
+ SELECT z.*,IF(v_areas IS NULL,FALSE,ST_Intersects(POINT(z.x,z.y),v_areas)) AS restricted,
+  IF(z.status='ACTIVE' AND (v_areas IS NULL OR NOT ST_Intersects(POINT(z.x,z.y),v_areas)),z.available,0) AS borrowable
+ FROM v_zone_inventory z ORDER BY z.id;
+ SELECT COALESCE(SUM(b.available),0) INTO v_borrowable
+ FROM (SELECT current_zone_id,COUNT(*) AS available FROM bikes WHERE status='AVAILABLE' AND current_zone_id IS NOT NULL GROUP BY current_zone_id) b
+ JOIN parking_zones z ON z.id=b.current_zone_id
+ WHERE z.status='ACTIVE' AND (v_areas IS NULL OR NOT ST_Intersects(POINT(z.x,z.y),v_areas));
  SELECT b.*,z.name zone_name FROM bikes b LEFT JOIN parking_zones z ON z.id=b.current_zone_id ORDER BY b.id;
  SELECT * FROM v_ride_details WHERE user_id=p_user ORDER BY id DESC LIMIT 101;
  SELECT p.* FROM payments p JOIN ride_orders r ON r.id=p.order_id WHERE r.user_id=p_user ORDER BY p.id DESC LIMIT 101;
@@ -248,7 +257,7 @@ BEGIN
   c.rule_version,c.reason,c.actor_id,c.created_at,c.points_change points,c.carbon_kg_change carbon_kg
  FROM carbon_transactions c JOIN ride_orders r ON r.id=c.order_id WHERE r.user_id=p_user ORDER BY c.id DESC LIMIT 101;
  SELECT a.* FROM return_attempts a JOIN ride_orders r ON r.id=a.order_id WHERE r.user_id=p_user ORDER BY a.id DESC LIMIT 101;
- SELECT (SELECT COUNT(*) FROM bikes WHERE status<>'RETIRED') total_bikes,(SELECT COUNT(*) FROM bikes WHERE status='AVAILABLE') available_bikes,
+ SELECT (SELECT COUNT(*) FROM bikes WHERE status<>'RETIRED') total_bikes,v_borrowable AS available_bikes,
   (SELECT COUNT(*) FROM ride_orders WHERE status='RUNNING') active_rides,
   (SELECT COUNT(*) FROM ride_orders WHERE started_at>=TIMESTAMP(DATE(v_now+INTERVAL 8 HOUR))-INTERVAL 8 HOUR
    AND started_at<=v_now) today_rides,

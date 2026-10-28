@@ -20,6 +20,7 @@ import {
 } from "../backend/business.mjs";
 import { saveBike, saveZone } from "../backend/admin.mjs";
 import { dispatchSuggestions } from "../backend/dispatch-suggestions.mjs";
+import { dashboard } from "../backend/read-model.mjs";
 
 const pool = createPool({
   database: "campus_bike_test",
@@ -308,6 +309,33 @@ test("legacy station inside a restricted area cannot start a ride", async () => 
   assert.deepEqual(bike, { status: "AVAILABLE", current_zone_id: 1 });
   const [[orders]] = await pool.query("SELECT COUNT(*) n FROM ride_orders");
   assert.equal(orders.n, 0);
+});
+test("dashboard separates physical inventory from bikes that can be borrowed", async () => {
+  await loadVersionedCampus(campus);
+  await pool.query("UPDATE parking_zones SET x=700,y=200 WHERE id=1");
+  await pool.query("UPDATE parking_zones SET status='CLOSED' WHERE id=2");
+  await pool.query(
+    "INSERT INTO bikes(id,code,deployed_at,current_zone_id) VALUES(2,'QX-CLOSED',UTC_DATE(),2),(3,'QX-SAFE',UTC_DATE(),3)",
+  );
+  const data = await dashboard(pool, {
+    id: 1,
+    role: "STUDENT",
+    status: "ACTIVE",
+  });
+  const restricted = data.zones.find((zone) => zone.id === 1);
+  const closed = data.zones.find((zone) => zone.id === 2);
+  const safe = data.zones.find((zone) => zone.id === 3);
+  assert.equal(Number(restricted.available), 1);
+  assert.equal(Number(restricted.restricted), 1);
+  assert.equal(Number(restricted.borrowable), 0);
+  assert.equal(Number(closed.available), 1);
+  assert.equal(Number(closed.borrowable), 0);
+  assert.equal(Number(safe.borrowable), 1);
+  assert.equal(Number(data.summary.available_bikes), 1);
+  assert.equal(
+    data.bikes.filter((bike) => bike.status === "AVAILABLE").length,
+    3,
+  );
 });
 test("restricted legacy station accepts no new vehicles but allows evacuation", async () => {
   await loadVersionedCampus(campus);

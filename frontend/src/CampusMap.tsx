@@ -90,10 +90,10 @@ export function CampusMap({
     OPERATOR: "现场任务分布",
   }[role];
   const stationState = (zone: Row) => {
-    if (zone.status === "CLOSED") return "closed";
+    if (zone.status === "CLOSED" || Number(zone.restricted)) return "closed";
     if (Number(zone.occupied) + Number(zone.reserved) >= Number(zone.capacity))
       return "full";
-    if (Number(zone.available) <= 2) return "low";
+    if (Number(zone.borrowable) <= 2) return "low";
     return "available";
   };
   const points = (route?.path || [])
@@ -373,7 +373,7 @@ export function CampusMap({
                 tabIndex={0}
                 role="button"
                 aria-pressed={selected === z.id}
-                aria-label={`${z.name}，可借 ${z.available} 辆，剩余车位 ${remaining} 个${taskCount ? `，关联任务 ${taskCount} 项` : ""}`}
+                aria-label={`${z.name}，可借 ${z.borrowable} 辆，剩余车位 ${remaining} 个${Number(z.restricted) ? "，禁行区内" : ""}${taskCount ? `，关联任务 ${taskCount} 项` : ""}`}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
@@ -386,7 +386,7 @@ export function CampusMap({
                 }}
               >
                 <title>
-                  {z.name} · {z.location} · 可借 {z.available} 辆 · 剩余车位{" "}
+                  {z.name} · {z.location} · 可借 {z.borrowable} 辆 · 剩余车位{" "}
                   {remaining} 个
                 </title>
                 {layers.tasks && taskCount > 0 && (
@@ -421,7 +421,7 @@ export function CampusMap({
                   fontWeight="700"
                   fill="#fff"
                 >
-                  {z.available}
+                  {z.borrowable}
                 </text>
                 <rect
                   className="station-label"
@@ -511,7 +511,7 @@ export function CampusMap({
             <dl>
               <div>
                 <dt>可借</dt>
-                <dd>{selectedZone.available} 辆</dd>
+                <dd>{selectedZone.borrowable} 辆</dd>
               </div>
               <div>
                 <dt>剩余车位</dt>
@@ -543,17 +543,20 @@ export function CampusMap({
               )}
             </dl>
             <p>
-              {role === "STUDENT"
-                ? "借车前核对车源，归还前核对剩余车位。"
-                : role === "ADMIN"
-                  ? "可结合容量、故障与调度状态安排运营处理。"
-                  : "到站前核对工单与调度任务，完成后及时回填。"}
+              {Number(selectedZone.restricted)
+                ? "该停车点位于禁行区内，暂停借车，请联系管理员处理。"
+                : role === "STUDENT"
+                  ? "借车前核对车源，归还前核对剩余车位。"
+                  : role === "ADMIN"
+                    ? "可结合容量、故障与调度状态安排运营处理。"
+                    : "到站前核对工单与调度任务，完成后及时回填。"}
             </p>
           </div>
         ) : (
           <span>
             全校 {zones.length} 个停车点 ·{" "}
-            {bikes.filter((b) => b.status === "AVAILABLE").length} 辆可借
+            {zones.reduce((sum, zone) => sum + Number(zone.borrowable), 0)}{" "}
+            辆可借
           </span>
         )}
         <span className="map-scroll-hint">可缩放 · 窄屏可横向滑动</span>

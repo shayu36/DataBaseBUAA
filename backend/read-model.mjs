@@ -5,11 +5,13 @@ import { dispatchSuggestions } from "./dispatch-suggestions.mjs";
 import { listDispatchSuggestions } from "./operations.mjs";
 import { listRiskAlerts } from "./risks.mjs";
 import { pageById } from "./pagination.mjs";
+import { campusDefinition } from "./campus-data.mjs";
 export async function dashboard(pool, user) {
   return readSnapshot(pool, async (c) => {
-    const [result] = await c.query("CALL sp_dashboard(?,?)", [
+    const [result] = await c.query("CALL sp_dashboard(?,?,?)", [
       user.id,
       user.role,
+      campusDefinition,
     ]);
     const [
       zones,

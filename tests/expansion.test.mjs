@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import bcrypt from "bcryptjs";
 import { createPool } from "../backend/db.mjs";
+import { campusDefinition } from "../backend/campus-data.mjs";
 import { applySchema } from "../scripts/sql.mjs";
 import * as business from "../backend/business.mjs";
 import {
@@ -151,9 +152,10 @@ test("dashboard counts Beijing today only through the current instant", async ()
         ["2026-10-28T04:00:00Z", 3],
       ]) {
         await connection.query("SET timestamp=?", [Date.parse(now) / 1000]);
-        const [result] = await connection.query("CALL sp_dashboard(?,?)", [
+        const [result] = await connection.query("CALL sp_dashboard(?,?,?)", [
           student.id,
           student.role,
+          campusDefinition,
         ]);
         assert.equal(result[10][0].today_rides, expected, `${timeZone} ${now}`);
       }

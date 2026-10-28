@@ -143,7 +143,7 @@ export function Overview({ d, user }: Props) {
                 <small>{z.location}</small>
               </div>
               <b>
-                {z.available}
+                {z.borrowable}
                 <small>辆可借</small>
               </b>
               <div className="capacity">
@@ -165,10 +165,7 @@ export function Overview({ d, user }: Props) {
 }
 export function Rides({ d, run }: Props) {
   const [borrowZone, setBorrowZone] = useState(
-      d.zones.find((z) => z.status === "ACTIVE" && Number(z.available) > 0)
-        ?.id ||
-        d.zones[0]?.id ||
-        0,
+      d.zones.find((z) => Number(z.borrowable) > 0)?.id || d.zones[0]?.id || 0,
     ),
     [returnZone, setReturnZone] = useState(
       d.zones.find(
@@ -183,6 +180,18 @@ export function Rides({ d, run }: Props) {
     [capturedAt, setCapturedAt] = useState(() => new Date().toISOString());
   const capture = () => setCapturedAt(new Date().toISOString());
   const active = d.actionable_rides.find((r) => r.status === "RUNNING");
+  const selectedBorrowZone = d.zones.find(
+    (z) => Number(z.id) === Number(borrowZone),
+  );
+  const borrowableBikes =
+    selectedBorrowZone?.status === "ACTIVE" &&
+    !Number(selectedBorrowZone.restricted)
+      ? d.bikes.filter(
+          (bike) =>
+            bike.status === "AVAILABLE" &&
+            Number(bike.current_zone_id) === Number(borrowZone),
+        )
+      : [];
   return (
     <>
       <div className="two-col">
@@ -200,43 +209,39 @@ export function Rides({ d, run }: Props) {
                 <option
                   key={z.id}
                   value={z.id}
-                  disabled={z.status !== "ACTIVE"}
+                  disabled={
+                    z.status !== "ACTIVE" || Boolean(Number(z.restricted))
+                  }
                 >
-                  {z.name}（可借 {z.available} 辆）
+                  {z.name}（可借 {z.borrowable} 辆
+                  {Number(z.restricted) ? "，禁行区内" : ""}）
                 </option>
               ))}
             </select>
           </Field>
           <div className="bike-grid">
-            {d.bikes
-              .filter(
-                (b) =>
-                  b.status === "AVAILABLE" &&
-                  Number(b.current_zone_id) === Number(borrowZone),
-              )
-              .map((b) => (
-                <article className="bike-card" key={b.id}>
-                  <span className="bike-symbol">🚲</span>
-                  <strong>{b.code}</strong>
-                  <small>{b.zone_name}</small>
-                  <button
-                    disabled={!!active}
-                    onClick={async () => {
-                      if (await run("/rides/start", { bike_id: b.id }))
-                        capture();
-                    }}
-                  >
-                    借用自行车 ↗
-                  </button>
-                </article>
-              ))}
+            {borrowableBikes.map((b) => (
+              <article className="bike-card" key={b.id}>
+                <span className="bike-symbol">🚲</span>
+                <strong>{b.code}</strong>
+                <small>{b.zone_name}</small>
+                <button
+                  disabled={!!active}
+                  onClick={async () => {
+                    if (await run("/rides/start", { bike_id: b.id })) capture();
+                  }}
+                >
+                  借用自行车 ↗
+                </button>
+              </article>
+            ))}
           </div>
-          {!d.bikes.some(
-            (b) =>
-              b.status === "AVAILABLE" &&
-              Number(b.current_zone_id) === Number(borrowZone),
-          ) && (
-            <p className="muted">该停车点暂无可借车辆，请选择其他停车点。</p>
+          {!borrowableBikes.length && (
+            <p className="muted">
+              {Number(selectedBorrowZone?.restricted)
+                ? "该停车点位于禁行区内，暂停借车，请联系管理员处理。"
+                : "该停车点暂无可借车辆，请选择其他停车点。"}
+            </p>
           )}
         </section>
         <section className="panel">
@@ -764,8 +769,8 @@ function DispatchInventory({ task }: { task: Row }) {
             <strong>{stage}</strong>
             {[value!.source, value!.target].map((zone) => (
               <div key={zone.name}>
-                {zone.name}：可借 {zone.available} / 占位 {zone.occupied} / 预留{" "}
-                {zone.reserved} / 容量 {zone.capacity}
+                {zone.name}：可用状态 {zone.available} / 占位 {zone.occupied} /
+                预留 {zone.reserved} / 容量 {zone.capacity}
               </div>
             ))}
           </div>

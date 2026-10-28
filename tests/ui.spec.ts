@@ -106,6 +106,47 @@ test("Beihang official map names landmarks and selects parking zones after zoom"
   await expect(page.getByLabel("借车停车点")).toHaveValue("1");
   await expect(page.getByLabel("归还横坐标（米）")).toHaveCount(0);
 });
+
+test("禁行站点显示实际可借数量并阻止选择车辆", async ({ page }) => {
+  let stationName = "";
+  let bikeCode = "";
+  await page.route("**/api/dashboard", async (route) => {
+    const response = await route.fetch();
+    const data = await response.json();
+    const zone = data.zones.find((item: any) => Number(item.borrowable) > 0);
+    const bike = data.bikes.find(
+      (item: any) =>
+        item.status === "AVAILABLE" && item.current_zone_id === zone.id,
+    );
+    stationName = zone.name;
+    bikeCode = bike.code;
+    data.summary.available_bikes -= Number(zone.borrowable);
+    zone.restricted = 1;
+    zone.borrowable = 0;
+    await route.fulfill({ response, json: data });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  await page.getByRole("button", { name: "借车与归还", exact: true }).click();
+  const option = page.getByLabel("借车停车点").getByRole("option", {
+    name: `${stationName}（可借 0 辆，禁行区内）`,
+  });
+  await expect(option).toHaveAttribute("disabled", "");
+  await page
+    .getByRole("button", {
+      name: new RegExp(`${stationName}，可借 0 辆.*禁行区内`),
+    })
+    .click();
+  await expect(
+    page
+      .getByText("该停车点位于禁行区内，暂停借车，请联系管理员处理。")
+      .first(),
+  ).toBeVisible();
+  await expect(
+    page.locator(".bike-card").filter({ hasText: bikeCode }),
+  ).toHaveCount(0);
+});
 test("生产服务的校园底图重复加载使用浏览器缓存", async ({ page }) => {
   test.skip(!process.env.QINGXING_E2E_URL, "开发服务的缓存策略由 Vite 控制");
   await page.goto("/");
@@ -758,6 +799,8 @@ const regressionDashboard = {
       capacity: 20,
       status: "ACTIVE",
       available: 2,
+      borrowable: 2,
+      restricted: 0,
       occupied: 2,
       reserved: 0,
     },
@@ -771,6 +814,8 @@ const regressionDashboard = {
       capacity: 20,
       status: "ACTIVE",
       available: 0,
+      borrowable: 0,
+      restricted: 0,
       occupied: 0,
       reserved: 0,
     },
