@@ -34,7 +34,9 @@ FROM return_attempts a JOIN ride_orders r ON r.id=a.order_id JOIN bikes b ON b.i
 JOIN parking_zones z ON z.id=a.zone_id LEFT JOIN users u ON u.id=a.reviewer_id
 WHERE r.user_id=? AND (? IS NULL OR a.id<?) ORDER BY a.id DESC LIMIT 101;
 -- name: carbon_entries_own
-SELECT c.*,c.points_change points,c.carbon_kg_change carbon_kg FROM carbon_transactions c
+SELECT c.id,c.order_id,c.entry_type,c.award_order_id,c.idempotency_key,c.distance_m,c.points_change,c.carbon_kg_change,
+ CAST(c.factor_kg_per_km AS CHAR) AS factor_kg_per_km,CAST(c.points_per_km AS CHAR) AS points_per_km,
+ c.rule_version,c.reason,c.actor_id,c.created_at,c.points_change points,c.carbon_kg_change carbon_kg FROM carbon_transactions c
 JOIN ride_orders r ON r.id=c.order_id WHERE r.user_id=? AND (? IS NULL OR c.id<?) ORDER BY c.id DESC LIMIT 101;
 -- name: ride_history_own
 SELECT * FROM v_ride_details WHERE user_id=? AND (?='ALL' OR status=?) AND (? IS NULL OR id<?) ORDER BY id DESC LIMIT 101;

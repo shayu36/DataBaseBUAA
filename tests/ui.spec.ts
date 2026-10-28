@@ -1152,8 +1152,8 @@ test("carbon history pagination keeps the qualifying ride count", async ({
             distance_m: 1000,
             ride_count: 1,
             rule: {
-              kg_per_km: 0.12345678,
-              points_per_km: 12.5,
+              kg_per_km: "999999999999.99999999",
+              points_per_km: "0.00000001",
               rule_version: "测试版",
             },
             entries: [entry(101, "ADJUSTMENT"), entry(100, "AWARD")],
@@ -1175,7 +1175,7 @@ test("carbon history pagination keeps the qualifying ride count", async ({
   await page.getByRole("button", { name: "碳积分", exact: true }).click();
   await expect(
     page.getByText(
-      "当前模拟减排系数 0.12345678 kg/km · 每公里 12.5 分 · 测试版",
+      "当前模拟减排系数 999999999999.99999999 kg/km · 每公里 0.00000001 分 · 测试版",
     ),
   ).toBeVisible();
   const count = page.locator(".stat").filter({ hasText: "绿色行程" });

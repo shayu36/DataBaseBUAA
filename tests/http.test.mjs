@@ -128,6 +128,57 @@ test("invalid carbon configuration reports a clear service error", async () => {
   }
 });
 
+test("carbon rule and ledger preserve precise decimals over HTTP", async () => {
+  const [original] = await pool.query(
+    "SELECT value FROM system_settings WHERE name='carbon'",
+  );
+  const [order] = await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),0,100,'UNPAID')",
+  );
+  try {
+    await pool.query(
+      "INSERT INTO system_settings(name,value) VALUES('carbon',JSON_OBJECT('kg_per_km','999999999999.99999999','points_per_km','0.00000001')) ON DUPLICATE KEY UPDATE value=VALUES(value)",
+    );
+    const paid = await request(
+      `/api/rides/${order.insertId}/pay`,
+      { idempotency_key: "http-precise-rule" },
+      studentCookie,
+    );
+    assert.equal(paid.status, 200);
+    const home = await request("/api/dashboard", undefined, studentCookie);
+    const history = await request(
+      "/api/carbon/entries",
+      undefined,
+      studentCookie,
+    );
+    assert.equal(home.data.carbon.rule.kg_per_km, "999999999999.99999999");
+    assert.equal(home.data.carbon.rule.points_per_km, "0.00000001");
+    for (const entry of [
+      home.data.carbon.entries[0],
+      history.data.entries[0],
+    ]) {
+      assert.equal(entry.factor_kg_per_km, "999999999999.99999999");
+      assert.equal(entry.points_per_km, "0.00000001");
+    }
+  } finally {
+    await pool.query(
+      "DELETE FROM audit_logs WHERE entity_type='ride_orders' AND entity_id=?",
+      [order.insertId],
+    );
+    await pool.query("DELETE FROM carbon_transactions WHERE order_id=?", [
+      order.insertId,
+    ]);
+    await pool.query("DELETE FROM payments WHERE order_id=?", [order.insertId]);
+    await pool.query("DELETE FROM ride_orders WHERE id=?", [order.insertId]);
+    if (original.length)
+      await pool.query(
+        "UPDATE system_settings SET value=? WHERE name='carbon'",
+        [JSON.stringify(original[0].value)],
+      );
+    else await pool.query("DELETE FROM system_settings WHERE name='carbon'");
+  }
+});
+
 test("carbon award overflow returns a useful payment error", async () => {
   const [original] = await pool.query(
     "SELECT value FROM system_settings WHERE name='carbon'",

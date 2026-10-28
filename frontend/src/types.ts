@@ -24,7 +24,7 @@ export type Dashboard = {
     carbon_kg: number;
     distance_m: number;
     ride_count: number;
-    rule: { kg_per_km: number; points_per_km: number; rule_version: string };
+    rule: { kg_per_km: string; points_per_km: string; rule_version: string };
     entries: Row[];
     entries_next_before: number | null;
   };

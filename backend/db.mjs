@@ -12,8 +12,8 @@ export function createPool(overrides = {}) {
     database: process.env.DB_NAME || "campus_bike",
     connectionLimit: 12,
     timezone: "Z",
-    // Coordinates, bounded aggregate counts and simulated carbon values fit
-    // safely in JS numbers. Currency itself is stored as integer cents.
+    // Wide carbon rule decimals are returned as strings by the SQL queries.
+    // Currency itself is stored as integer cents.
     decimalNumbers: true,
     charset: "utf8mb4",
     ...overrides,

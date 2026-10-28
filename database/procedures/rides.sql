@@ -255,7 +255,9 @@ adjustment: BEGIN
    OR v_existing_carbon<>p_carbon OR BINARY v_existing_reason<>BINARY p_reason THEN
    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ADJUSTMENT_IDEMPOTENCY_CONFLICT';
   END IF;
-  SELECT c.*,TRUE AS duplicate FROM carbon_transactions c WHERE c.id=v_existing_id;
+  SELECT c.id,c.order_id,c.entry_type,c.award_order_id,c.idempotency_key,c.distance_m,c.points_change,c.carbon_kg_change,
+   CAST(c.factor_kg_per_km AS CHAR) AS factor_kg_per_km,CAST(c.points_per_km AS CHAR) AS points_per_km,
+   c.rule_version,c.reason,c.actor_id,c.created_at,TRUE AS duplicate FROM carbon_transactions c WHERE c.id=v_existing_id;
   LEAVE adjustment;
  END IF;
  IF p_points=0 AND p_carbon=0 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ADJUSTMENT_ZERO'; END IF;

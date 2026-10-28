@@ -243,7 +243,10 @@ BEGIN
   COALESCE(SUM(CASE WHEN c.entry_type='AWARD' AND r.status='PAID' AND r.qualification_status='VALID' THEN c.distance_m ELSE 0 END),0) AS distance_m,
   COUNT(CASE WHEN c.entry_type='AWARD' AND r.status='PAID' AND r.qualification_status='VALID' THEN c.id END) AS ride_count
  FROM ride_orders r JOIN carbon_transactions c ON c.order_id=r.id WHERE r.user_id=p_user;
- SELECT c.*,c.points_change points,c.carbon_kg_change carbon_kg FROM carbon_transactions c JOIN ride_orders r ON r.id=c.order_id WHERE r.user_id=p_user ORDER BY c.id DESC LIMIT 101;
+ SELECT c.id,c.order_id,c.entry_type,c.award_order_id,c.idempotency_key,c.distance_m,c.points_change,c.carbon_kg_change,
+  CAST(c.factor_kg_per_km AS CHAR) AS factor_kg_per_km,CAST(c.points_per_km AS CHAR) AS points_per_km,
+  c.rule_version,c.reason,c.actor_id,c.created_at,c.points_change points,c.carbon_kg_change carbon_kg
+ FROM carbon_transactions c JOIN ride_orders r ON r.id=c.order_id WHERE r.user_id=p_user ORDER BY c.id DESC LIMIT 101;
  SELECT a.* FROM return_attempts a JOIN ride_orders r ON r.id=a.order_id WHERE r.user_id=p_user ORDER BY a.id DESC LIMIT 101;
  SELECT (SELECT COUNT(*) FROM bikes WHERE status<>'RETIRED') total_bikes,(SELECT COUNT(*) FROM bikes WHERE status='AVAILABLE') available_bikes,
   (SELECT COUNT(*) FROM ride_orders WHERE status='RUNNING') active_rides,
@@ -253,7 +256,8 @@ BEGIN
   (SELECT COUNT(*) FROM maintenance_tickets WHERE status<>'COMPLETED') open_tickets;
  SELECT * FROM v_ride_details WHERE user_id=p_user AND status IN ('RUNNING','UNPAID') ORDER BY id DESC;
  CALL sp_get_carbon_rule(v_factor,v_rate,v_version);
- SELECT v_factor AS kg_per_km,v_rate AS points_per_km,v_version AS rule_version;
+ SELECT TRIM(TRAILING '.' FROM TRIM(TRAILING '0' FROM CAST(v_factor AS CHAR))) AS kg_per_km,
+  TRIM(TRAILING '.' FROM TRIM(TRAILING '0' FROM CAST(v_rate AS CHAR))) AS points_per_km,v_version AS rule_version;
 END$$
 DELIMITER ;
 

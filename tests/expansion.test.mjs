@@ -1046,8 +1046,8 @@ test("invalid carbon rules reject payment without writing and valid defaults rem
     "UPDATE system_settings SET value=JSON_OBJECT('kg_per_km','0.21000000','points_per_km','1e1','rule_version','null') WHERE name='carbon'",
   );
   assert.deepEqual((await dashboard(pool, student)).carbon.rule, {
-    kg_per_km: 0.21,
-    points_per_km: 10,
+    kg_per_km: "0.21",
+    points_per_km: "10",
     rule_version: "null",
   });
   await pool.query(
@@ -1070,8 +1070,8 @@ test("invalid carbon rules reject payment without writing and valid defaults rem
     "UPDATE system_settings SET value=JSON_OBJECT('kg_per_km',0.00000001,'points_per_km',0,'rule_version','small-v1') WHERE name='carbon'",
   );
   assert.deepEqual((await dashboard(pool, student)).carbon.rule, {
-    kg_per_km: 0.00000001,
-    points_per_km: 0,
+    kg_per_km: "0.00000001",
+    points_per_km: "0",
     rule_version: "small-v1",
   });
   await pool.query(
@@ -1163,13 +1163,49 @@ test("carbon award overflow rolls back payment and qualification review", async 
   assert.deepEqual(zeroPaid.credit, { awarded: true, points: 0, carbon_kg: 0 });
 });
 
+test("carbon rule and ledger return exact decimal strings at supported limits", async () => {
+  await pool.query(
+    "UPDATE system_settings SET value=JSON_OBJECT('kg_per_km','999999999999.99999999','points_per_km','0.00000001','rule_version','exact-v1') WHERE name='carbon'",
+  );
+  const [order] = await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),0,100,'UNPAID')",
+  );
+  await business.payRide(pool, student, order.insertId, {
+    idempotency_key: "exact-rule-payment",
+  });
+  const initial = await dashboard(pool, student);
+  assert.deepEqual(initial.carbon.rule, {
+    kg_per_km: "999999999999.99999999",
+    points_per_km: "0.00000001",
+    rule_version: "exact-v1",
+  });
+  for (const entry of [
+    initial.carbon.entries[0],
+    (await listCarbonEntries(pool, student)).entries[0],
+  ]) {
+    assert.equal(entry.factor_kg_per_km, "999999999999.99999999");
+    assert.equal(entry.points_per_km, "0.00000001");
+  }
+  const input = {
+    order_id: order.insertId,
+    points_change: 1,
+    carbon_kg_change: 0,
+    reason: "精度验证",
+    idempotency_key: "exact-rule-adjustment",
+  };
+  await adjustCarbon(pool, admin, input);
+  const repeated = await adjustCarbon(pool, admin, input);
+  assert.equal(repeated.factor_kg_per_km, "999999999999.99999999");
+  assert.equal(repeated.points_per_km, null);
+});
+
 test("carbon awards retain precise historical factors and validate their own rule", async () => {
   await pool.query(
     "UPDATE system_settings SET value=JSON_OBJECT('kg_per_km',0.21019,'points_per_km',12.345678,'rule_version','precise-v1') WHERE name='carbon'",
   );
   assert.deepEqual((await dashboard(pool, student)).carbon.rule, {
-    kg_per_km: 0.21019,
-    points_per_km: 12.345678,
+    kg_per_km: "0.21019",
+    points_per_km: "12.345678",
     rule_version: "precise-v1",
   });
   const [order] = await pool.query(
@@ -1192,22 +1228,22 @@ test("carbon awards retain precise historical factors and validate their own rul
     "UPDATE system_settings SET value=JSON_OBJECT('kg_per_km',0.3,'points_per_km',20,'rule_version','next-v1') WHERE name='carbon'",
   );
   assert.deepEqual((await dashboard(pool, student)).carbon.rule, {
-    kg_per_km: 0.3,
-    points_per_km: 20,
+    kg_per_km: "0.3",
+    points_per_km: "20",
     rule_version: "next-v1",
   });
   await pool.query(
     "UPDATE system_settings SET value=JSON_OBJECT('kg_per_km',0.3,'points_per_km',20,'rule_version',NULL) WHERE name='carbon'",
   );
   assert.deepEqual((await dashboard(pool, student)).carbon.rule, {
-    kg_per_km: 0.3,
-    points_per_km: 20,
+    kg_per_km: "0.3",
+    points_per_km: "20",
     rule_version: "carbon-v1",
   });
   await pool.query("DELETE FROM system_settings WHERE name='carbon'");
   assert.deepEqual((await dashboard(pool, student)).carbon.rule, {
-    kg_per_km: 0.21,
-    points_per_km: 10,
+    kg_per_km: "0.21",
+    points_per_km: "10",
     rule_version: "carbon-v1",
   });
   const checks = await readFile(
