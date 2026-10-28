@@ -115,6 +115,8 @@ git pull --ff-only origin zyf
 
 对已有数据执行初始化或迁移前，先停止应用并运行 `npm run backup`；迁移会重建数据库过程，完成后再启动应用。备份和恢复需要 `mysql`、`mysqldump` 在系统路径中，也可以把 `MYSQL_BASE` 设置为 MySQL 安装目录。
 
+备份与恢复客户端使用与应用相同的主机和端口默认值；管理员账号和密码中的特殊字符会按 MySQL 选项文件规则转义。客户端执行期间会在 `.runtime` 创建临时配置，正常结束或出错后尝试删除；清理失败会报错。
+
 ```text
 npm run backup
 node scripts/restore.mjs backups/备份文件.sql campus_bike_restore_demo
