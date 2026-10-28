@@ -114,15 +114,17 @@ DELIMITER ;
 -- Persist and deduplicate risk candidates in MySQL.
 DROP PROCEDURE IF EXISTS sp_refresh_risk_alerts;
 DELIMITER $$
-CREATE PROCEDURE sp_refresh_risk_alerts(IN p_actor BIGINT UNSIGNED, IN p_evaluated INT, IN p_version VARCHAR(30), IN p_risks JSON)
+CREATE PROCEDURE sp_refresh_risk_alerts(IN p_actor BIGINT UNSIGNED, IN p_evaluated INT, IN p_version VARCHAR(30), IN p_now DATETIME(3), IN p_risks JSON)
 SQL SECURITY INVOKER
 BEGIN
  DECLARE v_new JSON;
  SELECT COALESCE(JSON_ARRAYAGG(JSON_OBJECT('bike_id',j.bike_id,'score',j.score,'level',j.level,'reasons',j.reasons,
-  'ticket_ids',j.ticket_ids,'fingerprint',j.fingerprint)),JSON_ARRAY()) INTO v_new
+  'ticket_ids',COALESCE((SELECT JSON_ARRAYAGG(t.id) OVER (ORDER BY t.id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+   FROM maintenance_tickets t WHERE t.bike_id=j.bike_id AND t.created_at<=p_now ORDER BY t.id LIMIT 1),JSON_ARRAY()),
+  'fingerprint',j.fingerprint)),JSON_ARRAY()) INTO v_new
  FROM JSON_TABLE(p_risks,'$[*]' COLUMNS(
   bike_id BIGINT UNSIGNED PATH '$.bike_id',score INT PATH '$.score',level VARCHAR(10) PATH '$.level',
-  reasons JSON PATH '$.reasons',ticket_ids JSON PATH '$.ticket_ids',fingerprint CHAR(64) PATH '$.fingerprint')) j
+  reasons JSON PATH '$.reasons',fingerprint CHAR(64) PATH '$.fingerprint')) j
  LEFT JOIN risk_alerts r ON r.open_fingerprint=j.fingerprint COLLATE utf8mb4_0900_ai_ci WHERE r.id IS NULL;
  INSERT INTO risk_alerts(bike_id,score,level,reasons,ticket_ids,fingerprint,rule_version,recommendation)
  SELECT bike_id,score,level,reasons,ticket_ids,fingerprint,p_version,'请检查相关部件并结合工单历史确认车辆状态'

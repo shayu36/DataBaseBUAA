@@ -28,35 +28,12 @@ export function refreshRiskAlerts(pool, actor, now = new Date()) {
           )
           .digest("hex"),
       }));
-    const newCandidates = new Map();
-    if (candidates.length) {
-      const byFingerprint = new Map(
-        candidates.map((risk) => [risk.fingerprint, risk]),
-      );
-      const [tickets] = await c.query(sql("new_risk_tickets"), [
-        JSON.stringify(
-          candidates.map(({ bike_id, fingerprint }) => ({
-            bike_id,
-            fingerprint,
-          })),
-        ),
-        now,
-      ]);
-      for (const ticket of tickets) {
-        if (!newCandidates.has(ticket.fingerprint))
-          newCandidates.set(ticket.fingerprint, {
-            ...byFingerprint.get(ticket.fingerprint),
-            ticket_ids: [],
-          });
-        if (ticket.id != null)
-          newCandidates.get(ticket.fingerprint).ticket_ids.push(ticket.id);
-      }
-    }
-    const [result] = await c.query("CALL sp_refresh_risk_alerts(?,?,?,?)", [
+    const [result] = await c.query("CALL sp_refresh_risk_alerts(?,?,?,?,?)", [
       actor.id,
       evaluated,
       RULE_VERSION,
-      JSON.stringify([...newCandidates.values()]),
+      now,
+      JSON.stringify(candidates),
     ]);
     return {
       created: result[0].map((row) => row.id),

@@ -19,12 +19,6 @@ SELECT r.*,b.code bike_code,u.name handler_name,t.status ticket_status
 FROM risk_alerts r JOIN bikes b ON b.id=r.bike_id LEFT JOIN users u ON u.id=r.handler_id
 LEFT JOIN maintenance_tickets t ON t.id=r.maintenance_ticket_id
 WHERE (? IS NULL OR r.id<?) ORDER BY r.id DESC LIMIT 101;
--- name: new_risk_tickets
-SELECT j.fingerprint,t.id FROM JSON_TABLE(?, '$[*]' COLUMNS(
- position FOR ORDINALITY, bike_id BIGINT UNSIGNED PATH '$.bike_id', fingerprint CHAR(64) PATH '$.fingerprint')) j
-LEFT JOIN risk_alerts r ON r.open_fingerprint=j.fingerprint COLLATE utf8mb4_0900_ai_ci
-LEFT JOIN maintenance_tickets t ON t.bike_id=j.bike_id AND t.created_at<=?
-WHERE r.id IS NULL ORDER BY j.position,t.id;
 -- name: dispatch_suggestions
 SELECT s.*,a.name source_name,b.name target_name
 FROM dispatch_suggestions s JOIN parking_zones a ON a.id=s.source_zone_id JOIN parking_zones b ON b.id=s.target_zone_id

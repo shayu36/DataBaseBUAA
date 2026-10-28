@@ -36,7 +36,6 @@ import {
 import { buildLeaderboard } from "./leaderboard-reference.mjs";
 import { bikeRisks } from "./risk-reference.mjs";
 import { riskData } from "../backend/risk-data.mjs";
-import { sql } from "../backend/sql-statements.mjs";
 
 const pool = createPool({
   database: "campus_bike_test",
@@ -549,7 +548,8 @@ test("SQL risk aggregation matches rule results and ordered ticket references", 
     (1,2,1,'BRAKE','完成工单一','COMPLETED','已修复','2026-10-01 12:00:00','2026-10-02 12:00:00'),
     (1,2,1,'BRAKE','完成工单二','COMPLETED','已修复','2026-10-10 12:00:00','2026-10-11 12:00:00'),
     (1,2,1,'TIRE','轮胎工单一','COMPLETED','已修复','2026-10-12 12:00:00','2026-10-13 12:00:00'),
-    (1,2,1,'TIRE','轮胎工单二','COMPLETED','已修复','2026-10-14 12:00:00','2026-10-15 12:00:00')`);
+    (1,2,1,'TIRE','轮胎工单二','COMPLETED','已修复','2026-10-14 12:00:00','2026-10-15 12:00:00'),
+    (1,2,1,'BRAKE','评估时刻工单','COMPLETED','已修复','2026-10-27 12:00:00','2026-10-27 12:00:00')`);
   await pool.query(
     "INSERT INTO maintenance_tickets(bike_id,reporter_id,fault_type,description,created_at) VALUES(1,2,'TIRE','近期工单','2026-10-20 12:00:00')",
   );
@@ -568,36 +568,9 @@ test("SQL risk aggregation matches rule results and ordered ticket references", 
   const expectedIds = tickets
     .filter((ticket) => ticket.bike_id === 1 && ticket.created_at <= now)
     .map((ticket) => ticket.id);
-  const transferred = [];
-  const observedPool = {
-    async getConnection() {
-      const connection = await pool.getConnection();
-      return new Proxy(connection, {
-        get(target, property) {
-          if (property === "query")
-            return async (...args) => {
-              const result = await target.query(...args);
-              if (args[0] === sql("new_risk_tickets"))
-                transferred.push(result[0]);
-              return result;
-            };
-          const value = target[property];
-          return typeof value === "function" ? value.bind(target) : value;
-        },
-      });
-    },
-  };
-  const first = await refreshRiskAlerts(observedPool, admin, now);
+  const first = await refreshRiskAlerts(pool, admin, now);
   assert.equal(first.created.length, 1);
-  assert.deepEqual(
-    transferred[0].map((row) => row.id),
-    expectedIds,
-  );
-  assert.deepEqual(
-    (await refreshRiskAlerts(observedPool, admin, now)).created,
-    [],
-  );
-  assert.deepEqual(transferred[1], []);
+  assert.deepEqual((await refreshRiskAlerts(pool, admin, now)).created, []);
   const [[saved]] = await pool.query(
     "SELECT ticket_ids FROM risk_alerts WHERE bike_id=1",
   );
