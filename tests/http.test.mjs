@@ -851,6 +851,53 @@ test("route API validates modes and schema endpoint reflects real objects", asyn
   assert.equal(s.objects.views.length, 4);
   assert.ok(Object.values(s.objects).every(Array.isArray));
 });
+
+test("route API returns travel-oriented segments for reverse roads", async () => {
+  const [[original]] = await pool.query(
+    "SELECT slope_percent,direction FROM road_edges WHERE id=1",
+  );
+  try {
+    await pool.query(
+      "UPDATE road_edges SET slope_percent=2.25,direction='REVERSE' WHERE id=1",
+    );
+    const response = await request(
+      "/api/routes?from=2&to=1&mode=comfortable",
+      undefined,
+      studentCookie,
+    );
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.data.path, [2, 1]);
+    const [segment] = response.data.segments;
+    assert.deepEqual(
+      {
+        from: segment.from_node_id,
+        to: segment.to_node_id,
+        roadFrom: segment.road_from_node_id,
+        roadTo: segment.road_to_node_id,
+        direction: segment.direction,
+        slope: segment.slope_percent,
+      },
+      {
+        from: 2,
+        to: 1,
+        roadFrom: 1,
+        roadTo: 2,
+        direction: "REVERSE",
+        slope: -2.25,
+      },
+    );
+    assert.equal(
+      (await request("/api/routes?from=1&to=2", undefined, studentCookie))
+        .status,
+      409,
+    );
+  } finally {
+    await pool.query(
+      "UPDATE road_edges SET slope_percent=?,direction=? WHERE id=1",
+      [original.slope_percent, original.direction],
+    );
+  }
+});
 test("SQL constraints enforce foreign keys, active ride uniqueness and payment amount", async () => {
   await assert.rejects(
     pool.query(

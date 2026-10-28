@@ -138,9 +138,16 @@ export function findRoute(nodes, edges, fromId, toId, mode = "shortest") {
     if (!p) throw new Error("No route between selected zones");
     distance += p.distance;
     segments.push({
+      ...p.detail,
+      road_from_node_id: p.detail.from_node_id,
+      road_to_node_id: p.detail.to_node_id,
       from_node_id: p.id,
       to_node_id: id,
-      ...p.detail,
+      slope_percent:
+        p.detail.slope_percent == null
+          ? p.detail.slope_percent
+          : Number(p.detail.slope_percent) *
+            (p.id === p.detail.from_node_id ? 1 : -1),
       distance_m: p.distance,
     });
     id = p.id;

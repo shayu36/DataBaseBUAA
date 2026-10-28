@@ -1597,7 +1597,8 @@ export function Routes({ d }: Props) {
                   },
                   {
                     label: "方向 / 状态",
-                    render: (r) => `${r.direction} / ${r.status}`,
+                    render: (r) =>
+                      `${r.direction === "BOTH" ? "双向" : "单向"} / ${r.status === "OPEN" ? "开放" : r.status}`,
                   },
                   {
                     label: "长度 / 坡度",
@@ -2107,7 +2108,7 @@ export function Admin({ d, run }: Props) {
           <div>
             <h2>校园路网属性维护</h2>
             <p className="muted">
-              方向、禁骑状态、坡度、路面、遮阴、照明和混行属性会直接影响三种路线方案。修改坡度等属性后将标为课程模拟数据；仅修改方向或状态时保留原属性来源。
+              方向、禁骑状态、坡度、路面、遮阴、照明和混行属性会直接影响三种路线方案。坡度以表中起点至终点为正向；修改坡度等属性后将标为课程模拟数据，仅修改方向或状态时保留原属性来源。
             </p>
           </div>
         </div>

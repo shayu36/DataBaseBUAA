@@ -388,6 +388,81 @@ test("route direction and road closures are enforced", () => {
   assert.throws(() => findRoute(nodes, edges, 1, 3), /No route/);
 });
 
+test("route segments follow travel direction and reverse the signed slope", () => {
+  const nodes = [{ id: 1 }, { id: 2 }, { id: 3 }];
+  const edges = [
+    {
+      id: 11,
+      from_node_id: 1,
+      to_node_id: 2,
+      distance_m: 10,
+      safety_cost: 1,
+      comfort_cost: 1,
+      direction: "BOTH",
+      status: "OPEN",
+      slope_percent: 3,
+    },
+    {
+      id: 12,
+      from_node_id: 2,
+      to_node_id: 3,
+      distance_m: 20,
+      safety_cost: 1,
+      comfort_cost: 1,
+      direction: "REVERSE",
+      status: "OPEN",
+      slope_percent: -4,
+    },
+  ];
+  const reverse = findRoute(nodes, edges, 3, 1, "comfortable");
+  assert.deepEqual(reverse.path, [3, 2, 1]);
+  assert.deepEqual(
+    reverse.segments.map(
+      ({
+        id,
+        from_node_id,
+        to_node_id,
+        road_from_node_id,
+        road_to_node_id,
+        direction,
+        slope_percent,
+      }) => ({
+        id,
+        from_node_id,
+        to_node_id,
+        road_from_node_id,
+        road_to_node_id,
+        direction,
+        slope_percent,
+      }),
+    ),
+    [
+      {
+        id: 12,
+        from_node_id: 3,
+        to_node_id: 2,
+        road_from_node_id: 2,
+        road_to_node_id: 3,
+        direction: "REVERSE",
+        slope_percent: 4,
+      },
+      {
+        id: 11,
+        from_node_id: 2,
+        to_node_id: 1,
+        road_from_node_id: 1,
+        road_to_node_id: 2,
+        direction: "BOTH",
+        slope_percent: -3,
+      },
+    ],
+  );
+  const forward = findRoute(nodes, edges, 1, 2);
+  assert.equal(forward.segments[0].slope_percent, 3);
+  assert.throws(() => findRoute(nodes, edges, 1, 3), /No route/);
+  assert.deepEqual(findRoute(nodes, edges, 1, 1).segments, []);
+});
+
 test("reporting rejects impossible calendar dates and permits leap days", () => {
   const now = new Date("2026-03-01T12:00:00Z");
   assert.throws(

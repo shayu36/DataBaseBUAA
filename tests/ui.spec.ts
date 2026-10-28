@@ -1137,6 +1137,86 @@ test("PDF expansion controls expose traceable workflows", async ({ page }) => {
   await expect(page.getByText("距离与时长组合异常")).toBeVisible();
 });
 
+test("路线详情按实际行驶方向展示路段、通行规则和坡度", async ({ page }) => {
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: 1,
+            name: "测试学生",
+            email: "student@test.local",
+            role: "STUDENT",
+            status: "ACTIVE",
+          },
+        },
+      });
+    if (url.pathname === "/api/dashboard")
+      return route.fulfill({ json: regressionDashboard });
+    if (url.pathname === "/api/routes") {
+      const from = Number(url.searchParams.get("from"));
+      const to = Number(url.searchParams.get("to"));
+      const reverse = from === 2 && to === 1;
+      return route.fulfill({
+        json: {
+          mode: url.searchParams.get("mode"),
+          distance_m: 400,
+          duration_minutes: 2,
+          nodes: [
+            { id: 1, name: "测试源站", x: 100, y: 100 },
+            { id: 2, name: "测试目标站", x: 200, y: 200 },
+          ],
+          edges: [
+            {
+              id: 1,
+              from_node_id: 1,
+              to_node_id: 2,
+              direction: "REVERSE",
+              status: "OPEN",
+            },
+          ],
+          path: [from, to],
+          segments: [
+            {
+              id: 1,
+              from_node_id: from,
+              to_node_id: to,
+              road_from_node_id: 1,
+              road_to_node_id: 2,
+              direction: "REVERSE",
+              status: "OPEN",
+              distance_m: 400,
+              slope_percent: reverse ? -2.25 : 2.25,
+              surface: "SMOOTH",
+              traffic_mix: "MIXED",
+              shade_level: 3,
+              lighting_level: 3,
+            },
+          ],
+          attribute_totals: {
+            intersection_risk: 0,
+            motor_heavy_edges: 0,
+            rough_edges: 0,
+            shaded_edges: 0,
+          },
+          explanation: "演示路线",
+        },
+      });
+    }
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "路线规划", exact: true }).click();
+  await page.getByLabel("出发停车区").selectOption("2");
+  await page.getByLabel("目的停车区").selectOption("1");
+  const row = page
+    .getByRole("row")
+    .filter({ hasText: "测试目标站 → 测试源站" });
+  await expect(row).toContainText("单向 / 开放");
+  await expect(row).toContainText("400 m / -2.25%");
+});
+
 test("maintenance operator can view and acknowledge risk alerts", async ({
   page,
 }) => {
