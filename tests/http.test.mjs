@@ -331,6 +331,86 @@ test("administrators paginate and review older qualifying orders", async () => {
   }
 });
 
+test("administrators can paginate and update older user accounts", async () => {
+  const [[{ baseline }]] = await pool.query(
+    "SELECT COUNT(*) AS baseline FROM users",
+  );
+  const [inserted] = await pool.query(
+    "INSERT INTO users(name,email,phone,password_hash) WITH RECURSIVE n AS (SELECT 1 AS value UNION ALL SELECT value+1 FROM n WHERE value<205) SELECT CONCAT('分页用户',value),CONCAT('pagination-',value,'@http.local'),CONCAT('136',LPAD(value,8,'0')),'hash' FROM n",
+  );
+  const firstId = inserted.insertId;
+  const lastId = firstId + inserted.affectedRows - 1;
+  try {
+    assert.equal(
+      (await request("/api/admin/users", undefined, studentCookie)).status,
+      403,
+    );
+    assert.equal(
+      (await request("/api/admin/users?before=0", undefined, adminCookie))
+        .status,
+      400,
+    );
+    const first = await request("/api/admin/users", undefined, adminCookie);
+    assert.equal(first.data.users.length, 100);
+    assert.equal(first.data.next_before, first.data.users.at(-1).id);
+    const second = await request(
+      `/api/admin/users?before=${first.data.next_before}`,
+      undefined,
+      adminCookie,
+    );
+    assert.equal(second.data.users.length, 100);
+    const third = await request(
+      `/api/admin/users?before=${second.data.next_before}`,
+      undefined,
+      adminCookie,
+    );
+    assert.equal(third.data.users.length, baseline + 5);
+    assert.equal(third.data.next_before, null);
+    const ids = [
+      ...first.data.users,
+      ...second.data.users,
+      ...third.data.users,
+    ].map((user) => user.id);
+    const [expected] = await pool.query(
+      "SELECT id FROM users ORDER BY id DESC",
+    );
+    assert.deepEqual(
+      ids,
+      expected.map((row) => row.id),
+    );
+    assert.equal(new Set(ids).size, baseline + 205);
+    const older = second.data.users[0].id;
+    assert.equal(
+      (
+        await request(
+          `/api/admin/users/${older}/status`,
+          { status: "SUSPENDED" },
+          adminCookie,
+        )
+      ).status,
+      200,
+    );
+    const refreshed = await request(
+      `/api/admin/users?before=${first.data.next_before}`,
+      undefined,
+      adminCookie,
+    );
+    assert.equal(
+      refreshed.data.users.find((user) => user.id === older).status,
+      "SUSPENDED",
+    );
+  } finally {
+    await pool.query(
+      "DELETE FROM audit_logs WHERE action='USER_STATUS' AND entity_id BETWEEN ? AND ?",
+      [firstId, lastId],
+    );
+    await pool.query("DELETE FROM users WHERE id BETWEEN ? AND ?", [
+      firstId,
+      lastId,
+    ]);
+  }
+});
+
 test("health identifies campus bike and protected routes need login", async () => {
   assert.equal((await request("/api/health")).data.system, "campus-bike");
   assert.equal((await request("/api/dashboard")).status, 401);

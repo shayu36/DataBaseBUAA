@@ -1392,6 +1392,76 @@ test("复核较早订单后保留已加载范围并显示新订单", async ({ pa
     ).toHaveCount(1);
 });
 
+test("管理较早账户后保留已加载范围并显示新账户", async ({ page }) => {
+  let suspended = false;
+  const users = () =>
+    (suspended
+      ? [106, 105, 104, 103, 102, 101]
+      : [105, 104, 103, 102, 101]
+    ).map((id) => ({
+      id,
+      name: `账户${id}`,
+      email: `user${id}@example.test`,
+      role: "STUDENT",
+      status: id === 102 && suspended ? "SUSPENDED" : "ACTIVE",
+    }));
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: 1,
+            name: "管理员",
+            email: "admin@test.local",
+            role: "ADMIN",
+            status: "ACTIVE",
+          },
+        },
+      });
+    if (url.pathname === "/api/dashboard")
+      return route.fulfill({ json: regressionDashboard });
+    if (url.pathname === "/api/admin/users/102/status") {
+      suspended = true;
+      return route.fulfill({ json: { ok: true } });
+    }
+    if (url.pathname === "/api/admin/users") {
+      const before = Number(url.searchParams.get("before") || Infinity);
+      const all = users().filter((row) => row.id < before);
+      const rows = all.slice(0, 2);
+      return route.fulfill({
+        json: {
+          users: rows,
+          next_before: all.length > 2 ? rows.at(-1)?.id : null,
+        },
+      });
+    }
+    if (url.pathname === "/api/admin/roads")
+      return route.fulfill({ json: { roads: [] } });
+    if (url.pathname === "/api/return-attempts")
+      return route.fulfill({ json: { attempts: [], next_before: null } });
+    if (url.pathname === "/api/admin/orders/review")
+      return route.fulfill({ json: { orders: [], next_before: null } });
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "基础资料", exact: true }).click();
+  await page.getByRole("button", { name: "加载更早账户" }).click();
+  const oldRow = page
+    .getByRole("row")
+    .filter({ hasText: "user102@example.test" });
+  await expect(oldRow).toBeVisible();
+  await oldRow.getByRole("button", { name: "停用" }).click();
+  await expect(
+    page.getByRole("row").filter({ hasText: "user106@example.test" }),
+  ).toBeVisible();
+  await expect(oldRow.getByRole("button", { name: "启用" })).toBeVisible();
+  for (const id of [106, 105, 104, 103, 102, 101])
+    await expect(
+      page.getByRole("row").filter({ hasText: `user${id}@example.test` }),
+    ).toHaveCount(1);
+});
+
 test("personal and administrator return histories load older records", async ({
   page,
 }) => {

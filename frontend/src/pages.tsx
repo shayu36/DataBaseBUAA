@@ -261,6 +261,7 @@ function PaginatedRows({
     | "entries"
     | "rides"
     | "orders"
+    | "users"
     | "dispatches"
     | "tickets";
   label: string;
@@ -1872,6 +1873,7 @@ export function Admin({ d, run }: Props) {
   const [kind, setKind] = useState("zones"),
     [edit, setEdit] = useState<any>({});
   const [users, setUsers] = useState<Row[]>([]),
+    [usersBefore, setUsersBefore] = useState<number | null>(null),
     [roads, setRoads] = useState<Row[]>([]),
     [road, setRoad] = useState<any>(),
     [attempts, setAttempts] = useState<Row[]>([]),
@@ -1894,6 +1896,7 @@ export function Admin({ d, run }: Props) {
       .then(([u, r, a, q]) => {
         if (!live) return;
         setUsers(u.users);
+        setUsersBefore(u.next_before ?? null);
         setRoads(r.roads || []);
         setAttempts(a.attempts || []);
         setAttemptsBefore(a.next_before ?? null);
@@ -2060,30 +2063,41 @@ export function Admin({ d, run }: Props) {
             {userError}
           </div>
         )}
-        <Table
-          rows={users}
-          columns={[
-            { label: "姓名", render: (r) => r.name },
-            { label: "邮箱", render: (r) => r.email },
-            { label: "角色", render: (r) => r.role },
-            { label: "状态", render: (r) => <Badge value={r.status} /> },
-            {
-              label: "操作",
-              render: (r) => (
-                <button
-                  className="tiny secondary"
-                  onClick={() =>
-                    run("/admin/users/" + r.id + "/status", {
-                      status: r.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE",
-                    })
-                  }
-                >
-                  {r.status === "ACTIVE" ? "停用" : "启用"}
-                </button>
-              ),
-            },
-          ]}
-        />
+        <PaginatedRows
+          initialRows={users}
+          initialBefore={usersBefore}
+          path="/admin/users"
+          field="users"
+          label="加载更早账户"
+        >
+          {(rows) => (
+            <Table
+              rows={rows}
+              columns={[
+                { label: "姓名", render: (r) => r.name },
+                { label: "邮箱", render: (r) => r.email },
+                { label: "角色", render: (r) => r.role },
+                { label: "状态", render: (r) => <Badge value={r.status} /> },
+                {
+                  label: "操作",
+                  render: (r) => (
+                    <button
+                      className="tiny secondary"
+                      onClick={() =>
+                        run("/admin/users/" + r.id + "/status", {
+                          status:
+                            r.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE",
+                        })
+                      }
+                    >
+                      {r.status === "ACTIVE" ? "停用" : "启用"}
+                    </button>
+                  ),
+                },
+              ]}
+            />
+          )}
+        </PaginatedRows>
       </section>
       <section className="panel">
         <div className="section-head">

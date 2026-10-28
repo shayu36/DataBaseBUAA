@@ -233,8 +233,14 @@ export function createApp(pool) {
   });
   app.get("/api/admin/users", async (req, res) => {
     requireAdmin(req.user);
-    const [users] = await pool.query(sql("admin_users"));
-    res.json({ users });
+    const { before } = z
+      .object({ before: idSchema.optional() })
+      .parse(req.query);
+    const [users] = await pool.query(sql("admin_users"), [
+      before ?? null,
+      before ?? null,
+    ]);
+    res.json(pageById(users, "users"));
   });
   app.get("/api/analytics", async (req, res) => {
     requireAdmin(req.user);

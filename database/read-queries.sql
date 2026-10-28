@@ -69,7 +69,8 @@ SELECT r.*,u.name user_name,b.code bike_code FROM ride_orders r
 JOIN users u ON u.id=r.user_id JOIN bikes b ON b.id=r.bike_id
 WHERE r.qualification_status='UNDER_REVIEW' AND (? IS NULL OR r.id<?) ORDER BY r.id DESC LIMIT 101;
 -- name: admin_users
-SELECT id,name,email,phone,role,status,created_at FROM users ORDER BY id;
+SELECT id,name,email,phone,role,status,created_at FROM users
+WHERE (? IS NULL OR id<?) ORDER BY id DESC LIMIT 101;
 -- name: metadata_columns
 SELECT TABLE_NAME table_name,COLUMN_NAME name,COLUMN_TYPE type,COLUMN_KEY col_key,IS_NULLABLE nullable
 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() ORDER BY ORDINAL_POSITION;
