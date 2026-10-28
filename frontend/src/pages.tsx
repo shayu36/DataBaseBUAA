@@ -1885,9 +1885,25 @@ export function Schema() {
               ]}
             />
             <h3>数据库对象</h3>
+            {v.trigger_catalogue_source === "SNAPSHOT" && (
+              <p className="muted">
+                触发器目录核验于 {date(v.trigger_catalogue_at)}
+                ；外部修改后请重新运行数据库迁移以更新目录。
+              </p>
+            )}
+            {v.trigger_catalogue_source === "UNAVAILABLE" && (
+              <p className="muted">
+                触发器目录暂不可用；请先备份并运行数据库迁移。
+              </p>
+            )}
             {Object.entries(v.objects).map(([k, items]: any) => (
               <p key={k}>
-                <strong>{k}</strong> · {items.join("、") || "无"}
+                <strong>{k}</strong> ·{" "}
+                {items.join("、") ||
+                  (k === "triggers" &&
+                  v.trigger_catalogue_source === "UNAVAILABLE"
+                    ? "未核验"
+                    : "无")}
               </p>
             ))}
           </section>

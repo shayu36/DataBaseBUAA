@@ -83,6 +83,21 @@ FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() ORDER BY ORDINAL_P
 SELECT TABLE_NAME name FROM information_schema.VIEWS WHERE TABLE_SCHEMA=DATABASE();
 -- name: metadata_triggers
 SELECT TRIGGER_NAME name FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE();
+-- name: trigger_catalogue_slot_available
+SELECT NOT EXISTS(SELECT 1 FROM system_settings WHERE name='__qingxing_trigger_catalogue_v1'
+ AND NOT (BINARY JSON_UNQUOTE(JSON_EXTRACT(value,'$.kind')) <=> BINARY 'qingxing.trigger_catalogue.v1')) AS available;
+-- name: refresh_trigger_catalogue
+INSERT INTO system_settings(name,value) VALUES('__qingxing_trigger_catalogue_v1',JSON_OBJECT(
+ 'kind','qingxing.trigger_catalogue.v1','captured_at',DATE_FORMAT(UTC_TIMESTAMP(3),'%Y-%m-%dT%H:%i:%s.%fZ'),
+ 'triggers',(SELECT COALESCE(JSON_ARRAYAGG(TRIGGER_NAME),JSON_ARRAY()) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE())))
+ON DUPLICATE KEY UPDATE value=IF(
+ BINARY JSON_UNQUOTE(JSON_EXTRACT(value,'$.kind')) <=> BINARY 'qingxing.trigger_catalogue.v1',
+ VALUES(value),value);
+-- name: trigger_catalogue
+SELECT JSON_UNQUOTE(JSON_EXTRACT(s.value,'$.captured_at')) AS captured_at,j.name
+FROM system_settings s LEFT JOIN JSON_TABLE(s.value,'$.triggers[*]' COLUMNS(name VARCHAR(64) PATH '$')) j ON TRUE
+WHERE s.name='__qingxing_trigger_catalogue_v1' AND BINARY JSON_UNQUOTE(JSON_EXTRACT(s.value,'$.kind'))=BINARY 'qingxing.trigger_catalogue.v1'
+ORDER BY j.name;
 -- name: metadata_routines
 SELECT ROUTINE_NAME name FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=DATABASE();
 -- name: metadata_tables_count

@@ -345,6 +345,7 @@ test("数据库设计页面打开实体关系图和完整报告", async ({ page 
   await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
   await page.getByRole("button", { name: "登录青行", exact: true }).click();
   await page.getByRole("button", { name: "数据库设计", exact: true }).click();
+  await expect(page.getByText(/触发器目录核验于/)).toBeVisible();
   const [diagram] = await Promise.all([
     page.waitForEvent("popup"),
     page.getByRole("link", { name: "打开完整 E-R 图" }).click(),
@@ -360,6 +361,25 @@ test("数据库设计页面打开实体关系图和完整报告", async ({ page 
   await expect(
     report.getByRole("heading", { name: "risk_alerts", exact: true }),
   ).toBeVisible();
+});
+
+test("触发器目录缺失时页面明确显示未核验", async ({ page }) => {
+  await page.route("**/api/schema", async (route) => {
+    const response = await route.fetch();
+    const data = await response.json();
+    data.trigger_catalogue_source = "UNAVAILABLE";
+    data.trigger_catalogue_at = null;
+    data.objects.triggers = [];
+    await route.fulfill({ response, json: data });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  await page.getByRole("button", { name: "数据库设计", exact: true }).click();
+  await expect(
+    page.getByText("触发器目录暂不可用；请先备份并运行数据库迁移。"),
+  ).toBeVisible();
+  await expect(page.getByText("triggers · 未核验")).toBeVisible();
 });
 
 test("student sees personal rides and responsive navigation", async ({

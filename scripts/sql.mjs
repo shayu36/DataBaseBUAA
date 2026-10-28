@@ -39,6 +39,22 @@ export async function applyProcedures(connection) {
   ]);
 }
 
+async function assertTriggerCatalogueSlot(connection) {
+  const [[{ available }]] = await connection.query(
+    sql("trigger_catalogue_slot_available"),
+  );
+  if (!available)
+    throw new Error(
+      "TRIGGER_CATALOGUE_CONFLICT：触发器目录配置与已有数据冲突，请核对后重试。",
+    );
+}
+
+export async function refreshTriggerCatalogue(connection) {
+  await assertTriggerCatalogueSlot(connection);
+  await connection.query(sql("refresh_trigger_catalogue"));
+  await assertTriggerCatalogueSlot(connection);
+}
+
 export function applySchema(pool) {
   return withSchemaLock(pool, (connection) =>
     withNamedLock(connection, async () => {
@@ -51,6 +67,7 @@ export function applySchema(pool) {
         await connection.query(statement);
       }
       await applyFeatureMigrationsLocked(connection, true);
+      await refreshTriggerCatalogue(connection);
       await applyProcedures(connection);
     }),
   );

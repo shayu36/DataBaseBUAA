@@ -1,6 +1,6 @@
 import { createPool, withNamedLock, withSchemaLock } from "../backend/db.mjs";
 import { applyFeatureMigrationsLocked } from "../backend/feature-migrations.mjs";
-import { applyProcedures } from "./sql.mjs";
+import { applyProcedures, refreshTriggerCatalogue } from "./sql.mjs";
 import { assertMysqlVersion } from "./mysql-version.mjs";
 
 const pool = createPool({
@@ -14,6 +14,7 @@ try {
   const result = await withSchemaLock(pool, (connection) =>
     withNamedLock(connection, async () => {
       const migration = await applyFeatureMigrationsLocked(connection, true);
+      await refreshTriggerCatalogue(connection);
       await applyProcedures(connection);
       return migration;
     }),

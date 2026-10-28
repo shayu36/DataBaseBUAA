@@ -5,7 +5,9 @@ import bcrypt from "bcryptjs";
 import { createPool, ledgerTransaction } from "../backend/db.mjs";
 import { upgradeCampusMap } from "../backend/campus.mjs";
 import { seedDemo } from "../backend/demo-seed.mjs";
-import { applySchema } from "../scripts/sql.mjs";
+import { applySchema, refreshTriggerCatalogue } from "../scripts/sql.mjs";
+import { schemaInfo } from "../backend/schema-info.mjs";
+import { sql } from "../backend/sql-statements.mjs";
 import { hotspotDemand, hotspotReport } from "../backend/hotspot-report.mjs";
 import { aggregateHotspots } from "./hotspot-reference.mjs";
 import { dispatchSuggestions as expectedSuggestions } from "./dispatch-reference.mjs";
@@ -113,6 +115,83 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
       `GRANT SELECT, INSERT, UPDATE, DELETE, EXECUTE ON \`${database}\`.* TO '${username}'@'localhost'`,
     );
     appPool = createPool({ database, user: username, password });
+    const structure = await schemaInfo(appPool);
+    assert.deepEqual(structure.objects.triggers.slice().sort(), [
+      "trg_carbon_guard",
+      "trg_payment_guard",
+    ]);
+    assert.equal(structure.trigger_catalogue_source, "SNAPSHOT");
+    assert.ok(structure.trigger_catalogue_at);
+    const liveStructure = await schemaInfo(pool);
+    assert.equal(liveStructure.trigger_catalogue_source, "LIVE");
+    assert.deepEqual(liveStructure.objects.triggers.slice().sort(), [
+      "trg_carbon_guard",
+      "trg_payment_guard",
+    ]);
+    await pool.query(
+      "DELETE FROM system_settings WHERE name='__qingxing_trigger_catalogue_v1'",
+    );
+    const missing = await schemaInfo(appPool);
+    assert.equal(missing.trigger_catalogue_source, "UNAVAILABLE");
+    assert.deepEqual(missing.objects.triggers, []);
+    await refreshTriggerCatalogue(pool);
+    assert.deepEqual(
+      (await schemaInfo(appPool)).objects.triggers.slice().sort(),
+      ["trg_carbon_guard", "trg_payment_guard"],
+    );
+    await pool.query(
+      "UPDATE system_settings SET value=JSON_OBJECT('custom','保留') WHERE name='__qingxing_trigger_catalogue_v1'",
+    );
+    await assert.rejects(
+      refreshTriggerCatalogue(pool),
+      /TRIGGER_CATALOGUE_CONFLICT/,
+    );
+    await pool.query(sql("refresh_trigger_catalogue"));
+    const [[reserved]] = await pool.query(
+      "SELECT JSON_UNQUOTE(JSON_EXTRACT(value,'$.custom')) custom FROM system_settings WHERE name='__qingxing_trigger_catalogue_v1'",
+    );
+    assert.equal(reserved.custom, "保留");
+    assert.equal(
+      (await schemaInfo(appPool)).trigger_catalogue_source,
+      "UNAVAILABLE",
+    );
+    await pool.query(
+      "UPDATE system_settings SET value=JSON_OBJECT('kind','QINGXING.TRIGGER_CATALOGUE.V1','custom','保留') WHERE name='__qingxing_trigger_catalogue_v1'",
+    );
+    await assert.rejects(
+      refreshTriggerCatalogue(pool),
+      /TRIGGER_CATALOGUE_CONFLICT/,
+    );
+    assert.equal(
+      (await schemaInfo(appPool)).trigger_catalogue_source,
+      "UNAVAILABLE",
+    );
+    await pool.query(
+      "DELETE FROM system_settings WHERE name='__qingxing_trigger_catalogue_v1'",
+    );
+    await refreshTriggerCatalogue(pool);
+    const concurrentChange = {
+      async query(statement) {
+        if (statement === sql("refresh_trigger_catalogue")) {
+          await pool.query(
+            "UPDATE system_settings SET value=JSON_OBJECT('custom','并发保留') WHERE name='__qingxing_trigger_catalogue_v1'",
+          );
+        }
+        return pool.query(statement);
+      },
+    };
+    await assert.rejects(
+      refreshTriggerCatalogue(concurrentChange),
+      /TRIGGER_CATALOGUE_CONFLICT/,
+    );
+    const [[concurrent]] = await pool.query(
+      "SELECT JSON_UNQUOTE(JSON_EXTRACT(value,'$.custom')) custom FROM system_settings WHERE name='__qingxing_trigger_catalogue_v1'",
+    );
+    assert.equal(concurrent.custom, "并发保留");
+    await pool.query(
+      "DELETE FROM system_settings WHERE name='__qingxing_trigger_catalogue_v1'",
+    );
+    await refreshTriggerCatalogue(pool);
     const guardedActions = [];
     const guardedAdmin = {
       async getConnection() {

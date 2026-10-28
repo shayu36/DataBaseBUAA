@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { sql } from "./sql-statements.mjs";
 const descriptions = {
   users: ["用户", "共享单车服务使用者及登录身份"],
@@ -105,26 +104,19 @@ export async function schemaInfo(pool) {
   const [t] = await pool.query(sql("metadata_triggers"));
   const [p] = await pool.query(sql("metadata_routines"));
   let triggers = t.map((x) => x.name),
-    source = "live information_schema";
-  // Runtime user lacks TRIGGER permission. The verified installation catalogue
-  // makes metadata visible without giving the HTTP app administrative access.
+    source = "live information_schema",
+    triggerCatalogueSource = "LIVE",
+    triggerCatalogueAt = null;
+  // Runtime user lacks TRIGGER permission; use the database's installation snapshot.
   if (!triggers.length) {
-    const catalogue = new URL(
-      "../.runtime/schema-objects.json",
-      import.meta.url,
-    );
-    const text = await readFile(catalogue, "utf8").catch((error) => {
-      if (error.code !== "ENOENT") throw error;
-      return null;
-    });
-    const snapshot = text ? JSON.parse(text) : null;
-    const [[{ name }]] = await pool.query(sql("current_database"));
-    if (snapshot?.database === name) {
-      triggers = snapshot.triggers;
-      source =
-        "live columns/views/procedures; trigger catalogue verified at " +
-        snapshot.generated_at;
+    const [snapshot] = await pool.query(sql("trigger_catalogue"));
+    if (snapshot.length) {
+      triggers = snapshot.map((row) => row.name).filter(Boolean);
+      triggerCatalogueAt = snapshot[0].captured_at;
+      triggerCatalogueSource = "SNAPSHOT";
+      source = "database trigger catalogue verified at " + triggerCatalogueAt;
     } else {
+      triggerCatalogueSource = "UNAVAILABLE";
       source = "live columns/views/procedures; trigger catalogue unavailable";
     }
   }
@@ -132,6 +124,8 @@ export async function schemaInfo(pool) {
     entities,
     relationships,
     object_catalogue_source: source,
+    trigger_catalogue_source: triggerCatalogueSource,
+    trigger_catalogue_at: triggerCatalogueAt,
     objects: {
       views: v.map((x) => x.name),
       triggers,
