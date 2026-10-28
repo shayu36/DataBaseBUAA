@@ -140,8 +140,6 @@ export function aggregateHotspots(
   for (const h of hotspots) {
     const p = peaks.get(h.zone_id);
     if (p) h.peak_hour = p.indexOf(Math.max(...p));
-    for (const key of ["coverage_minutes", "shortage_minutes", "full_minutes"])
-      h[key] = round(h[key]);
     h.net_flow = h.return_count - h.borrow_count;
   }
   const inventory_series = [...grouped.entries()].flatMap(([zoneId, list]) => {
@@ -165,10 +163,13 @@ export function aggregateHotspots(
   const perZonePossible = selectedMinutes(start, end),
     possibleMinutes = selectedZones.length * perZonePossible,
     covered = hotspots.reduce((sum, h) => sum + h.coverage_minutes, 0);
-  for (const h of hotspots)
+  for (const h of hotspots) {
     h.coverage_ratio = perZonePossible
       ? round(h.coverage_minutes / perZonePossible)
       : 0;
+    for (const key of ["coverage_minutes", "shortage_minutes", "full_minutes"])
+      h[key] = round(h[key]);
+  }
   return {
     hotspots,
     hourly,

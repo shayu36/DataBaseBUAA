@@ -49,7 +49,7 @@ CREATE PROCEDURE sp_hotspot_report(IN p_start DATETIME(3), IN p_end DATETIME(3),
  IN p_hour_start INT, IN p_hour_end INT, IN p_zone BIGINT UNSIGNED, IN p_details BOOLEAN, IN p_as_of DATETIME(3))
 SQL SECURITY INVOKER
 report: BEGIN
- DECLARE v_possible DECIMAL(30,8) DEFAULT 0;
+ DECLARE v_possible_us DECIMAL(40,0) DEFAULT 0;
  DECLARE v_events,v_intervals JSON;
  DECLARE v_snapshot_count BIGINT DEFAULT 0;
  DECLARE v_total_ratio DECIMAL(30,2) DEFAULT 0;
@@ -105,7 +105,7 @@ report: BEGIN
  )
  SELECT COALESCE(SUM(GREATEST(0,TIMESTAMPDIFF(MICROSECOND,
   GREATEST(p_start,TIMESTAMP(local_day)+INTERVAL p_hour_start HOUR-INTERVAL 8 HOUR),
-  LEAST(p_end,TIMESTAMP(local_day)+INTERVAL p_hour_end HOUR-INTERVAL 8 HOUR)))),0)/60000000 INTO v_possible
+  LEAST(p_end,TIMESTAMP(local_day)+INTERVAL p_hour_end HOUR-INTERVAL 8 HOUR)))),0) INTO v_possible_us
  FROM days WHERE p_day_type='ALL' OR (p_day_type='WEEKDAY' AND WEEKDAY(local_day)<5) OR (p_day_type='WEEKEND' AND WEEKDAY(local_day)>=5);
  WITH intervals AS (
   SELECT s.id,s.zone_id,s.captured_at,s.available,s.occupied,s.capacity,
@@ -128,19 +128,21 @@ report: BEGIN
   SELECT zone_id,available,occupied,capacity,
   GREATEST(0,TIMESTAMPDIFF(MICROSECOND,
    GREATEST(captured_at,p_start,TIMESTAMP(local_day)+INTERVAL p_hour_start HOUR-INTERVAL 8 HOUR),
-   LEAST(next_at,p_end,TIMESTAMP(local_day)+INTERVAL p_hour_end HOUR-INTERVAL 8 HOUR)))/60000000 AS minutes
+   LEAST(next_at,p_end,TIMESTAMP(local_day)+INTERVAL p_hour_end HOUR-INTERVAL 8 HOUR))) AS duration_us
   FROM interval_days WHERE p_day_type='ALL' OR (p_day_type='WEEKDAY' AND WEEKDAY(local_day)<5) OR (p_day_type='WEEKEND' AND WEEKDAY(local_day)>=5)
  ), coverage AS (
-  SELECT zone_id,ROUND(SUM(minutes),2) AS coverage_minutes,
-   ROUND(SUM(IF(available<=capacity*0.2,minutes,0)),2) AS shortage_minutes,
-   ROUND(SUM(IF(occupied>=capacity,minutes,0)),2) AS full_minutes FROM eligible GROUP BY zone_id
+  SELECT zone_id,SUM(duration_us) AS coverage_us,
+   SUM(IF(available<=capacity*0.2,duration_us,0)) AS shortage_us,
+   SUM(IF(occupied>=capacity,duration_us,0)) AS full_us FROM eligible GROUP BY zone_id
  )
  SELECT COALESCE(JSON_OBJECTAGG(counts.zone_id,JSON_OBJECT(
-   'zone_id',counts.zone_id,'coverage_minutes',COALESCE(coverage.coverage_minutes,0),'shortage_minutes',COALESCE(coverage.shortage_minutes,0),
-   'full_minutes',COALESCE(coverage.full_minutes,0),'coverage_ratio',COALESCE(ROUND(coverage.coverage_minutes/NULLIF(v_possible,0),2),0))),JSON_OBJECT()),
+   'zone_id',counts.zone_id,'coverage_minutes',ROUND(CAST(COALESCE(coverage.coverage_us,0) AS DECIMAL(40,16))/60000000,2),
+   'shortage_minutes',ROUND(CAST(COALESCE(coverage.shortage_us,0) AS DECIMAL(40,16))/60000000,2),
+   'full_minutes',ROUND(CAST(COALESCE(coverage.full_us,0) AS DECIMAL(40,16))/60000000,2),
+   'coverage_ratio',COALESCE(ROUND(CAST(coverage.coverage_us AS DECIMAL(40,16))/NULLIF(v_possible_us,0),2),0))),JSON_OBJECT()),
   COALESCE(SUM(counts.sample_count),0),
-  COALESCE(ROUND(SUM(COALESCE(coverage.coverage_minutes,0))/
-   NULLIF(v_possible*(SELECT COUNT(*) FROM parking_zones WHERE p_zone IS NULL OR id=p_zone),0),2),0)
+  COALESCE(ROUND(CAST(SUM(COALESCE(coverage.coverage_us,0)) AS DECIMAL(40,16))/
+   NULLIF(v_possible_us*(SELECT COUNT(*) FROM parking_zones WHERE p_zone IS NULL OR id=p_zone),0),2),0)
  INTO v_intervals,v_snapshot_count,v_total_ratio
  FROM sample_counts counts LEFT JOIN coverage ON coverage.zone_id=counts.zone_id;
  WITH event_zones AS (

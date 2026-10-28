@@ -91,6 +91,49 @@ beforeEach(async () => {
 });
 after(() => pool.end());
 
+test("hotspot coverage rounds only after computing from exact intervals", async () => {
+  for (const [date, endMillis] of [
+    ["2025-01-01", 17370],
+    ["2025-01-02", 17399],
+    ["2025-01-03", 299],
+  ]) {
+    const start = new Date(`${date}T04:00:00.000Z`);
+    const next = new Date(start.getTime() + endMillis);
+    const end = new Date(
+      start.getTime() + (endMillis === 299 ? 60000 : 120000),
+    );
+    await pool.query(
+      "INSERT INTO zone_snapshots(zone_id,available,occupied,capacity,captured_at,source) VALUES(1,1,1,12,?,'DEMO'),(1,1,1,12,?,'DEMO'),(2,1,1,12,?,'DEMO'),(2,1,1,12,?,'DEMO')",
+      [start, next, start, next],
+    );
+    const [result] = await pool.query(
+      "CALL sp_hotspot_report(?,?,?,?,?,?,?,?)",
+      [start, end, "ALL", 0, 24, null, true, end],
+    );
+    const expected =
+      endMillis === 299
+        ? { minutes: 0, ratio: 0 }
+        : { minutes: 0.29, ratio: 0.14 };
+    for (const zone of result[1]) {
+      assert.equal(
+        Number(zone.coverage_minutes),
+        expected.minutes,
+        `${date} 站点 ${zone.zone_id} 时长`,
+      );
+      assert.equal(
+        Number(zone.coverage_ratio),
+        expected.ratio,
+        `${date} 站点 ${zone.zone_id} 比例`,
+      );
+    }
+    assert.equal(
+      Number(result[4][0].coverage_ratio),
+      expected.ratio,
+      `${date} 总体比例`,
+    );
+  }
+});
+
 test("dashboard counts Beijing today only through the current instant", async () => {
   await pool.query(`INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES
     (2,1,1,2,'2026-10-27 15:59:59.999','2026-10-27 15:59:59.999',0,100,'UNPAID'),
