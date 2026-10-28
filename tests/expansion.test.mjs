@@ -1109,6 +1109,55 @@ test("teaching leaderboard excludes invalid and future credits while ranking pri
   }
 });
 
+test("teaching carbon history returns complete ordered entries without concatenation limits", async () => {
+  const [order] = await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
+  );
+  await business.payRide(pool, student, order.insertId, {
+    idempotency_key: "teaching-history",
+  });
+  await pool.query(
+    `INSERT INTO carbon_transactions(order_id,entry_type,idempotency_key,distance_m,points_change,carbon_kg_change,factor_kg_per_km,rule_version,reason)
+     WITH RECURSIVE n AS (SELECT 1 value UNION ALL SELECT value+1 FROM n WHERE value<200)
+     SELECT ?,'ADJUSTMENT',CONCAT('teaching-history-',value),0,1,0.01,0.21,'carbon-v1','测试流水' FROM n ORDER BY value`,
+    [order.insertId],
+  );
+  const teaching = await readFile(
+    new URL("../database/queries.sql", import.meta.url),
+    "utf8",
+  );
+  const queries = teaching
+    .split("-- Q25:")[1]
+    .split("-- Q26:")[0]
+    .replace(/^[^\n]*\n/, "")
+    .split(";")
+    .map((statement) => statement.trim())
+    .filter(Boolean);
+  assert.equal(queries.length, 2);
+  const connection = await pool.getConnection();
+  try {
+    await connection.query("SET SESSION group_concat_max_len=4");
+    const [[summary]] = await connection.query(queries[0]);
+    const [entries] = await connection.query(queries[1]);
+    assert.equal(summary.order_id, order.insertId);
+    assert.equal(Number(summary.net_points), 210);
+    assert.equal(Number(summary.net_carbon), 2.21);
+    assert.equal(summary.entries, 201);
+    assert.equal(entries.length, 201);
+    assert.deepEqual(
+      entries.map(({ id }) => id),
+      Array.from({ length: 201 }, (_, index) => index + 1),
+    );
+    assert.equal(entries[0].entry_type, "AWARD");
+    assert.ok(
+      entries.slice(1).every(({ entry_type }) => entry_type === "ADJUSTMENT"),
+    );
+  } finally {
+    await connection.query("SET SESSION group_concat_max_len=DEFAULT");
+    connection.release();
+  }
+});
+
 test("excluded historical award is reversed without failing invariant checks", async () => {
   const [order] = await pool.query(
     "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",

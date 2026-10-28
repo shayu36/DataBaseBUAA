@@ -73,8 +73,11 @@ SELECT r.id,b.code,r.score,r.level,r.reasons,r.rule_version,r.status,r.maintenan
 SELECT e.id,a.name from_node,b.name to_node,e.direction,e.status,e.slope_percent,e.surface,e.shade_level,e.lighting_level,e.traffic_mix,e.intersection_risk,e.attribute_source FROM road_edges e JOIN road_nodes a ON a.id=e.from_node_id JOIN road_nodes b ON b.id=e.to_node_id ORDER BY e.id;
 -- Q24: 还车证据及管理员复核历史。
 SELECT a.id,a.order_id,a.x,a.y,a.reason,a.location_captured_at,a.location_source,a.review_status,a.review_note,a.reviewed_at FROM return_attempts a ORDER BY a.id DESC;
--- Q25: 按订单统计追加式积分流水和净值。
-SELECT order_id,SUM(points_change) net_points,SUM(carbon_kg_change) net_carbon,COUNT(*) entries,GROUP_CONCAT(CONCAT(entry_type,':',rule_version) ORDER BY id) lineage FROM carbon_transactions GROUP BY order_id ORDER BY order_id;
+-- Q25: 分别查看每笔订单的积分净值和按编号排序的完整流水，避免拼接长度限制。
+SELECT order_id,SUM(points_change) net_points,SUM(carbon_kg_change) net_carbon,COUNT(*) entries FROM carbon_transactions GROUP BY order_id ORDER BY order_id;
+SELECT order_id,id,entry_type,idempotency_key,distance_m,points_change,carbon_kg_change,
+ factor_kg_per_km,points_per_km,rule_version,reason,actor_id,created_at
+FROM carbon_transactions ORDER BY order_id,id;
 -- Q26: 最近七天工作日北京时间 07:00–10:00 的借还热点。
 WITH events AS (
  SELECT start_zone_id AS zone_id,started_at AS event_at,1 AS borrowed,0 AS returned FROM ride_orders
