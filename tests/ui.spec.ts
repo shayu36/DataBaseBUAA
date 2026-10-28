@@ -60,6 +60,7 @@ test.describe("北京时间的运营分析", () => {
     await page.getByRole("button", { name: "自定义筛选" }).click();
     await expect(page.getByLabel("开始日期")).toHaveValue("2026-09-29");
     await expect(page.getByLabel("结束日期")).toHaveValue("2026-10-05");
+    await page.unrouteAll({ behavior: "wait" });
   });
 });
 

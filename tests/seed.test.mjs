@@ -550,6 +550,12 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
     assert.equal(empty.snapshot_count, 0);
     assert.equal(empty.hotspots[0].coverage_minutes, 0);
     assert.deepEqual(empty.inventory_series, []);
+    assert.equal(empty.hourly.length, 24);
+    assert.equal(empty.weekday.length, 7);
+    for (const bucket of [...empty.hourly, ...empty.weekday]) {
+      assert.equal(bucket.borrow_count, 0);
+      assert.equal(bucket.return_count, 0);
+    }
     await pool.query("DELETE FROM system_settings WHERE name='seed_version'");
     await assert.rejects(seedDemo(appPool, pool), /Nonempty unmarked database/);
     const [[afterFailure]] = await pool.query(

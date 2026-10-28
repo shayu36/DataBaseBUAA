@@ -50,6 +50,9 @@ CREATE PROCEDURE sp_hotspot_report(IN p_start DATETIME(3), IN p_end DATETIME(3),
 SQL SECURITY INVOKER
 report: BEGIN
  DECLARE v_possible DECIMAL(30,8) DEFAULT 0;
+ DECLARE v_events,v_intervals JSON;
+ DECLARE v_snapshot_count BIGINT DEFAULT 0;
+ DECLARE v_total_ratio DECIMAL(30,2) DEFAULT 0;
  SELECT * FROM v_zone_inventory WHERE p_zone IS NULL OR id=p_zone ORDER BY id;
  IF NOT p_details THEN
   WITH events AS (
@@ -89,11 +92,13 @@ report: BEGIN
   SELECT zone_id,hour,ROW_NUMBER() OVER (PARTITION BY zone_id ORDER BY borrow_count DESC,hour) AS position
   FROM zone_hours WHERE borrow_count>0
  )
- SELECT 'ZONE' AS kind,t.zone_id,NULL AS hour,NULL AS weekday,t.borrow_count,t.return_count,
-  t.return_count-t.borrow_count AS net_flow,p.hour AS peak_hour
- FROM zone_totals t LEFT JOIN zone_peaks p ON p.zone_id=t.zone_id AND p.position=1
- UNION ALL SELECT 'HOUR',NULL,hour,NULL,SUM(borrow_count),SUM(return_count),NULL,NULL FROM grouped GROUP BY hour
- UNION ALL SELECT 'WEEKDAY',NULL,NULL,weekday,SUM(borrow_count),SUM(return_count),NULL,NULL FROM grouped GROUP BY weekday;
+ SELECT COALESCE(JSON_OBJECTAGG(CONCAT(kind,identifier),JSON_OBJECT('kind',kind,'identifier',identifier,'borrow_count',borrow_count,'return_count',return_count,'peak_hour',peak_hour)),JSON_OBJECT()) INTO v_events
+ FROM (
+  SELECT 'ZONE' AS kind,t.zone_id AS identifier,t.borrow_count,t.return_count,p.hour AS peak_hour
+  FROM zone_totals t LEFT JOIN zone_peaks p ON p.zone_id=t.zone_id AND p.position=1
+  UNION ALL SELECT 'HOUR',hour,SUM(borrow_count),SUM(return_count),NULL FROM grouped GROUP BY hour
+  UNION ALL SELECT 'WEEKDAY',weekday,SUM(borrow_count),SUM(return_count),NULL FROM grouped GROUP BY weekday
+ ) event_rows;
  WITH RECURSIVE days AS (
   SELECT DATE(p_start+INTERVAL 8 HOUR) AS local_day
   UNION ALL SELECT local_day+INTERVAL 1 DAY FROM days WHERE local_day<DATE(p_end+INTERVAL 8 HOUR)
@@ -130,13 +135,38 @@ report: BEGIN
    ROUND(SUM(IF(available<=capacity*0.2,minutes,0)),2) AS shortage_minutes,
    ROUND(SUM(IF(occupied>=capacity,minutes,0)),2) AS full_minutes FROM eligible GROUP BY zone_id
  )
- SELECT counts.zone_id,COALESCE(coverage.coverage_minutes,0) AS coverage_minutes,
-  COALESCE(coverage.shortage_minutes,0) AS shortage_minutes,COALESCE(coverage.full_minutes,0) AS full_minutes,
-  COALESCE(ROUND(coverage.coverage_minutes/NULLIF(v_possible,0),2),0) AS coverage_ratio,
-  COALESCE(ROUND(SUM(COALESCE(coverage.coverage_minutes,0)) OVER ()/
-   NULLIF(v_possible*(SELECT COUNT(*) FROM parking_zones WHERE p_zone IS NULL OR id=p_zone),0),2),0) AS total_coverage_ratio,
-  SUM(counts.sample_count) OVER () AS snapshot_count
+ SELECT COALESCE(JSON_OBJECTAGG(counts.zone_id,JSON_OBJECT(
+   'zone_id',counts.zone_id,'coverage_minutes',COALESCE(coverage.coverage_minutes,0),'shortage_minutes',COALESCE(coverage.shortage_minutes,0),
+   'full_minutes',COALESCE(coverage.full_minutes,0),'coverage_ratio',COALESCE(ROUND(coverage.coverage_minutes/NULLIF(v_possible,0),2),0))),JSON_OBJECT()),
+  COALESCE(SUM(counts.sample_count),0),
+  COALESCE(ROUND(SUM(COALESCE(coverage.coverage_minutes,0))/
+   NULLIF(v_possible*(SELECT COUNT(*) FROM parking_zones WHERE p_zone IS NULL OR id=p_zone),0),2),0)
+ INTO v_intervals,v_snapshot_count,v_total_ratio
  FROM sample_counts counts LEFT JOIN coverage ON coverage.zone_id=counts.zone_id;
+ WITH event_zones AS (
+  SELECT DISTINCT identifier,borrow_count,return_count,peak_hour FROM JSON_TABLE(v_events,'$.*' COLUMNS(
+   kind VARCHAR(10) PATH '$.kind',identifier BIGINT UNSIGNED PATH '$.identifier',borrow_count BIGINT PATH '$.borrow_count',
+   return_count BIGINT PATH '$.return_count',peak_hour INT PATH '$.peak_hour')) events WHERE kind='ZONE'
+ ), interval_zones AS (
+  SELECT DISTINCT zone_id,coverage_minutes,shortage_minutes,full_minutes,coverage_ratio FROM JSON_TABLE(v_intervals,'$.*' COLUMNS(
+   zone_id BIGINT UNSIGNED PATH '$.zone_id',coverage_minutes DECIMAL(30,2) PATH '$.coverage_minutes',
+   shortage_minutes DECIMAL(30,2) PATH '$.shortage_minutes',full_minutes DECIMAL(30,2) PATH '$.full_minutes',
+   coverage_ratio DECIMAL(30,2) PATH '$.coverage_ratio')) samples
+ )
+ SELECT z.id AS zone_id,z.name,z.available,z.occupied,z.capacity,z.reserved,
+  COALESCE(e.borrow_count,0) AS borrow_count,COALESCE(e.return_count,0) AS return_count,
+  COALESCE(e.return_count,0)-COALESCE(e.borrow_count,0) AS net_flow,e.peak_hour,
+  COALESCE(i.shortage_minutes,0) AS shortage_minutes,COALESCE(i.full_minutes,0) AS full_minutes,
+  COALESCE(i.coverage_minutes,0) AS coverage_minutes,COALESCE(i.coverage_ratio,0) AS coverage_ratio
+ FROM v_zone_inventory z LEFT JOIN event_zones e ON e.identifier=z.id LEFT JOIN interval_zones i ON i.zone_id=z.id
+ WHERE p_zone IS NULL OR z.id=p_zone ORDER BY z.id;
+ WITH RECURSIVE hours AS (SELECT 0 AS n UNION ALL SELECT n+1 FROM hours WHERE n<23)
+ SELECT n AS hour,COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(v_events,CONCAT('$."HOUR',n,'".borrow_count'))) AS SIGNED),0) AS borrow_count,
+  COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(v_events,CONCAT('$."HOUR',n,'".return_count'))) AS SIGNED),0) AS return_count FROM hours ORDER BY n;
+ WITH RECURSIVE weekdays AS (SELECT 0 AS n UNION ALL SELECT n+1 FROM weekdays WHERE n<6)
+ SELECT n AS weekday,COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(v_events,CONCAT('$."WEEKDAY',n,'".borrow_count'))) AS SIGNED),0) AS borrow_count,
+  COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(v_events,CONCAT('$."WEEKDAY',n,'".return_count'))) AS SIGNED),0) AS return_count FROM weekdays ORDER BY n;
+ SELECT v_snapshot_count AS snapshot_count,v_total_ratio AS coverage_ratio;
  WITH filtered AS (
   SELECT id,zone_id,captured_at,available,COUNT(*) OVER (PARTITION BY zone_id) AS zone_count,
    LAG(captured_at) OVER (PARTITION BY zone_id ORDER BY captured_at,id) AS previous_at FROM zone_snapshots
