@@ -64,11 +64,11 @@ test.describe("北京时间的运营分析", () => {
   });
 });
 
-test("Beihang map names landmarks and keeps coordinate picking correct after zoom", async ({
+test("Beihang official map names landmarks and selects parking zones after zoom", async ({
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "管理员 · 贾鑫洋" }).click();
+  await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
   await page.getByRole("button", { name: "登录青行", exact: true }).click();
   const map = page.locator(".map-shell");
   await expect(
@@ -92,53 +92,55 @@ test("Beihang map names landmarks and keeps coordinate picking correct after zoo
   await expect(
     map.getByRole("link", { name: "北航官方校区地图" }),
   ).toHaveAttribute("href", "https://www.buaa.edu.cn/xygk/xydt1/xylxq.htm");
-  await page.getByRole("button", { name: "骑行与归还", exact: true }).click();
+  await expect(map.locator("svg image")).toHaveAttribute(
+    "href",
+    "/buaa-xueyuan-campus-map.jpg",
+  );
+  await expect(map.locator(".map-image-status")).toHaveCount(0);
+  await page.getByRole("button", { name: "借车与归还", exact: true }).click();
   await page.getByRole("button", { name: "放大地图" }).click();
-  const svg = map.locator("svg.campus-svg");
-  await svg.scrollIntoViewIfNeeded();
-  const point = await svg.evaluate((element) => {
-    const svg = element as SVGSVGElement;
-    const p = svg.createSVGPoint();
-    p.x = 110;
-    p.y = 105;
-    const screen = p.matrixTransform(svg.getScreenCTM()!);
-    return { x: screen.x, y: screen.y };
-  });
-  await page.mouse.click(point.x, point.y);
-  await expect(page.getByLabel("归还横坐标（米）")).toHaveValue(/^(109|110)$/);
-  await expect(page.getByLabel("归还纵坐标（米）")).toHaveValue(/^(104|105)$/);
+  await expect(map.locator("svg.campus-svg")).toHaveAttribute("style", /125%/);
   const station = page.getByRole("button", { name: /东门.*可借/ });
   await station.focus();
   await station.press("Space");
-  await expect(page.getByLabel("归还横坐标（米）")).toHaveValue(
-    /^900(?:\.0+)?$/,
-  );
-  await expect(page.getByLabel("归还纵坐标（米）")).toHaveValue(
-    /^330(?:\.0+)?$/,
-  );
+  await expect(page.getByLabel("借车停车点")).toHaveValue("1");
+  await expect(page.getByLabel("归还横坐标（米）")).toHaveCount(0);
 });
-test("login form validates and demo account opens campus dashboard", async ({
+test("demo admin opens dashboard without a database design page", async ({
   page,
 }) => {
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "让校园的每一程，更轻盈。" }),
+    page.getByRole("heading", { name: /让校园的每一程，\s*更轻盈。/ }),
   ).toBeVisible();
   await page.getByRole("button", { name: "管理员 · 贾鑫洋" }).click();
   await page.getByRole("button", { name: "登录青行", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "校园总览", exact: true }),
+    page.getByRole("heading", { name: "运营驾驶舱", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "骑行与归还", exact: true }).click();
-  await expect(page.getByLabel("归还横坐标（米）")).toBeVisible();
-  await page.getByRole("button", { name: "数据库设计", exact: true }).click();
+  await expect(page.locator("aside nav")).toContainText("运营分析");
   await expect(
-    page.getByRole("heading", { name: "数据库设计", exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText(/trg_payment_guard/)).toBeVisible();
+    page.getByRole("button", { name: "数据库设计", exact: true }),
+  ).toHaveCount(0);
+});
+test("login cover uses the official Beihang Xueyuan campus photograph", async ({
+  page,
+}) => {
+  await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "核心关系", exact: true }),
+    page.getByRole("img", { name: "北航学院路校区主楼实景" }),
   ).toBeVisible();
+  await expect(page.locator(".login-photo")).toHaveAttribute(
+    "src",
+    "/buaa-xueyuan-main-building.jpg",
+  );
+  await expect(page.getByRole("link", { name: /北航招生网.*主楼盛夏/ })).toHaveAttribute(
+    "href",
+    "https://zs.buaa.edu.cn/xxzl/xyfc.htm",
+  );
+  await expect(page.getByText("北京航空航天大学 · 学院路校区")).toBeVisible();
+  await expect(page.getByText("国立中央大学")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "学生 · 欧阳晨" })).toBeVisible();
 });
 test("管理员通过表单提交四位精度的碳积分调整", async ({ page }) => {
   const studentLogin = await page.request.post("/api/auth/login", {
@@ -170,25 +172,21 @@ test("管理员通过表单提交四位精度的碳积分调整", async ({ page 
   expect((await response.json()).duplicate).toBe(false);
 });
 
-test("数据库设计页面打开实体关系图和完整报告", async ({ page }) => {
+test("课程文档可直接访问且学生导航不显示数据库设计", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
   await page.getByRole("button", { name: "登录青行", exact: true }).click();
-  await page.getByRole("button", { name: "数据库设计", exact: true }).click();
-  const [diagram] = await Promise.all([
-    page.waitForEvent("popup"),
-    page.getByRole("link", { name: "打开完整 E-R 图" }).click(),
-  ]);
-  await expect(diagram.locator("svg")).toBeVisible();
-  const [report] = await Promise.all([
-    page.waitForEvent("popup"),
-    page.getByRole("link", { name: "查看课程报告" }).click(),
-  ]);
   await expect(
-    report.getByRole("heading", { name: "dispatch_suggestions", exact: true }),
+    page.getByRole("button", { name: "数据库设计", exact: true }),
+  ).toHaveCount(0);
+  await page.goto("/docs/ER图.svg");
+  await expect(page.locator("svg")).toBeVisible();
+  await page.goto("/api/report");
+  await expect(
+    page.getByRole("heading", { name: "dispatch_suggestions", exact: true }),
   ).toBeVisible();
   await expect(
-    report.getByRole("heading", { name: "risk_alerts", exact: true }),
+    page.getByRole("heading", { name: "risk_alerts", exact: true }),
   ).toBeVisible();
 });
 
@@ -200,57 +198,94 @@ test("student sees personal rides and responsive navigation", async ({
   await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
   await page.getByRole("button", { name: "登录青行", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "校园总览", exact: true }),
+    page.getByRole("heading", { name: "骑行首页", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "碳积分", exact: true }).click();
   await expect(page.getByText("模拟减排系数 0.21 kg/km")).toBeVisible();
 });
+test("student selects parking zones without coordinate inputs", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  await page.getByRole("button", { name: "借车与归还", exact: true }).click();
+  await expect(page.getByLabel("借车停车点")).toBeVisible();
+  await expect(page.getByLabel("归还停车点")).toBeVisible();
+  await expect(page.getByLabel("归还横坐标（米）")).toHaveCount(0);
+  await expect(page.getByLabel("归还纵坐标（米）")).toHaveCount(0);
+});
 
-test("ride preserves running order outside fence, then returns and pays once", async ({
+test("roles receive distinct navigation and map workspaces", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "管理员 · 贾鑫洋" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "运营驾驶舱" })).toBeVisible();
+  await expect(page.locator("aside nav")).toContainText("运营分析");
+  await expect(page.locator("aside nav")).not.toContainText("借车与归还");
+  await expect(page.getByLabel("管理员运营地图")).toBeVisible();
+  await page.getByRole("button", { name: "退出登录" }).click();
+
+  await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "骑行首页" })).toBeVisible();
+  await expect(page.locator("aside nav")).toContainText("借车与归还");
+  await expect(page.locator("aside nav")).not.toContainText("运营分析");
+  await expect(page.getByLabel("学生骑行地图")).toBeVisible();
+  await expect(
+    page.getByText("主楼三号教学楼禁行区", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("图书馆禁行区", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "退出登录" }).click();
+
+  await page.getByRole("button", { name: "运营员 · 郑一凡" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "运维工作台" })).toBeVisible();
+  await expect(page.locator("aside nav")).toContainText("风险处置");
+  await expect(page.locator("aside nav")).not.toContainText("我的订单");
+  await expect(page.getByLabel("运维任务地图")).toBeVisible();
+});
+
+test("station-only ride returns and pays once", async ({
   page,
 }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "学生 · 王奕" }).click();
   await page.getByRole("button", { name: "登录青行", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "校园总览", exact: true }),
+    page.getByRole("heading", { name: "骑行首页", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "骑行与归还", exact: true }).click();
+  await page.getByRole("button", { name: "借车与归还", exact: true }).click();
   const borrow = page.getByRole("button", { name: "借用自行车 ↗" }).first();
   if (await borrow.isEnabled()) await borrow.click();
   await expect(page.getByText(/正在骑行/).first()).toBeVisible();
-  await page.getByLabel("归还横坐标（米）").fill("0");
-  await page.getByLabel("归还纵坐标（米）").fill("0");
-  await page.getByRole("button", { name: "确认归还", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("OUTSIDE_FENCE");
-  await expect(page.getByText(/正在骑行/).first()).toBeVisible();
-  await page.getByRole("button", { name: /东门.*可借/ }).click();
-  await expect(page.getByLabel("归还横坐标（米）")).toHaveValue(
-    /^900(?:\.0+)?$/,
-  );
-  await expect(page.getByLabel("归还纵坐标（米）")).toHaveValue(
-    /^330(?:\.0+)?$/,
+  const returnRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" &&
+      /\/api\/rides\/\d+\/return$/.test(request.url()),
   );
   await page.getByRole("button", { name: "确认归还", exact: true }).click();
+  expect((await returnRequest).postDataJSON()).toEqual(
+    expect.objectContaining({ location_source: "MAP_SIMULATION" }),
+  );
+  expect((await returnRequest).postDataJSON()).not.toHaveProperty("x");
+  expect((await returnRequest).postDataJSON()).not.toHaveProperty("y");
   await expect(
     page.getByRole("button", { name: "模拟支付", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "模拟支付", exact: true }).click();
   await expect(page.getByText("没有待支付订单")).toBeVisible();
-  await page.getByRole("button", { name: "骑行订单", exact: true }).click();
+  await page.getByRole("button", { name: "我的订单", exact: true }).click();
   await expect(page.getByText("已支付", { exact: true }).first()).toBeVisible();
-  await expect(
-    page.getByText("OUTSIDE_FENCE", { exact: true }).last(),
-  ).toBeVisible();
 });
-test("admin can create and finish maintenance and dispatch tasks", async ({
-  page,
-}) => {
+test("admin can manage maintenance and dispatch tasks", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "管理员 · 贾鑫洋" }).click();
   await page.getByRole("button", { name: "登录青行", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "校园总览", exact: true }),
+    page.getByRole("heading", { name: "运营驾驶舱", exact: true }),
   ).toBeVisible();
   const dashboard = await page.request.get("/api/dashboard");
   expect(dashboard.ok()).toBeTruthy();
@@ -258,11 +293,13 @@ test("admin can create and finish maintenance and dispatch tasks", async ({
     (row: any) => row.status === "AVAILABLE",
   );
   expect(bike).toBeTruthy();
-  await page.getByRole("button", { name: "维修报修", exact: true }).click();
-  await page.getByLabel("车辆", { exact: true }).selectOption(String(bike.id));
   const description = "UI验收：后轮漏气 " + Date.now();
-  await page.getByLabel("问题描述").fill(description);
-  await page.getByRole("button", { name: "提交报修", exact: true }).click();
+  const created = await page.request.post("/api/maintenance", {
+    data: { bike_id: bike.id, fault_type: "TIRE", description },
+  });
+  expect(created.ok()).toBeTruthy();
+  await page.getByRole("button", { name: "刷新数据" }).click();
+  await page.getByRole("button", { name: "维修管理", exact: true }).click();
   const ticket = page.getByRole("row").filter({ hasText: description });
   await expect(ticket).toBeVisible({ timeout: 15000 });
   await ticket.getByRole("button", { name: "分配", exact: true }).click();
@@ -709,6 +746,7 @@ test("analytics refetches after suggestion creation and manual refresh while ret
 
 test("PDF expansion controls expose traceable workflows", async ({ page }) => {
   const posts: string[] = [];
+  let role = "ADMIN";
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -717,10 +755,10 @@ test("PDF expansion controls expose traceable workflows", async ({ page }) => {
       return route.fulfill({
         json: {
           user: {
-            id: 1,
-            name: "测试管理员",
-            email: "admin@test.local",
-            role: "ADMIN",
+            id: role === "ADMIN" ? 1 : 2,
+            name: role === "ADMIN" ? "测试管理员" : "测试学生",
+            email: role === "ADMIN" ? "admin@test.local" : "student@test.local",
+            role,
             status: "ACTIVE",
             leaderboard_alias: "航空蓝骑手",
             leaderboard_visible: false,
@@ -923,6 +961,8 @@ test("PDF expansion controls expose traceable workflows", async ({ page }) => {
   expect(posts).toContain("/api/dispatches/from-suggestion/7");
   expect(posts).toContain("/api/risks/9/acknowledge");
 
+  role = "STUDENT";
+  await page.reload();
   await page.getByRole("button", { name: "路线规划", exact: true }).click();
   await expect(page.getByRole("button", { name: /安全优先/ })).toBeVisible();
   await expect(
@@ -933,6 +973,8 @@ test("PDF expansion controls expose traceable workflows", async ({ page }) => {
   await expect(page.getByText("我的排名 #2")).toBeVisible();
   await expect(page.getByText("人工校正")).toBeVisible();
 
+  role = "ADMIN";
+  await page.reload();
   await page.getByRole("button", { name: "基础资料", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "校园路网属性维护" }),
@@ -1031,7 +1073,7 @@ test("work pages keep active tasks visible and load older history", async ({
     return route.fulfill({ json: {} });
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "维修报修", exact: true }).click();
+  await page.getByRole("button", { name: "维修管理", exact: true }).click();
   await expect(page.getByText("工单 1", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "加载更早工单" }).click();
   await expect(page.getByText("工单 100", { exact: true })).toBeVisible();
@@ -1097,10 +1139,10 @@ test("ride history pagination preserves actionable rides, filtering and export",
     return route.fulfill({ json: {} });
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "骑行与归还", exact: true }).click();
+  await page.getByRole("button", { name: "借车与归还", exact: true }).click();
   await expect(page.getByText(/正在骑行 BIKE-2/)).toBeVisible();
   await expect(page.getByText(/订单 #1/)).toBeVisible();
-  await page.getByRole("button", { name: "骑行订单", exact: true }).click();
+  await page.getByRole("button", { name: "我的订单", exact: true }).click();
   await page.getByRole("button", { name: "加载更早订单" }).click();
   await expect(
     page.getByText("#100 · BIKE-100", { exact: true }),
@@ -1465,6 +1507,7 @@ test("管理较早账户后保留已加载范围并显示新账户", async ({ pa
 test("personal and administrator return histories load older records", async ({
   page,
 }) => {
+  let role = "STUDENT";
   let resolved = false;
   const attempt = (id: number, orderId: number) => ({
     id,
@@ -1485,10 +1528,10 @@ test("personal and administrator return histories load older records", async ({
       return route.fulfill({
         json: {
           user: {
-            id: 1,
-            name: "管理员",
-            email: "admin@test.local",
-            role: "ADMIN",
+            id: role === "ADMIN" ? 1 : 2,
+            name: role === "ADMIN" ? "管理员" : "学生",
+            email: role === "ADMIN" ? "admin@test.local" : "student@test.local",
+            role,
             status: "ACTIVE",
           },
         },
@@ -1532,10 +1575,12 @@ test("personal and administrator return histories load older records", async ({
     return route.fulfill({ json: {} });
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "骑行订单", exact: true }).click();
+  await page.getByRole("button", { name: "我的订单", exact: true }).click();
   await expect(page.getByText("#501", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "加载更早归还记录" }).click();
   await expect(page.getByText("#500", { exact: true })).toBeVisible();
+  role = "ADMIN";
+  await page.reload();
   await page.getByRole("button", { name: "基础资料", exact: true }).click();
   await expect(page.getByText("#801 · TEST", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "加载更早归还记录" }).click();

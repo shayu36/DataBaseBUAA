@@ -1,6 +1,7 @@
 import { test, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import campus from "../database/campus-map.json" with { type: "json" };
+import previousCampus from "../database/campus-map-v2.json" with { type: "json" };
 import { createPool, ledgerTransaction } from "../backend/db.mjs";
 import { applySchema } from "../scripts/sql.mjs";
 import { findRoute } from "../backend/analytics.mjs";
@@ -83,11 +84,11 @@ beforeEach(async () => {
 });
 after(() => pool.end());
 
-test("campus graph connects all stations with rectilinear roads and consistent lengths", () => {
+test("official-plan graph connects all stations with consistent route lengths", () => {
   for (const edge of campus.edges) {
     const a = campus.nodes.find((n) => n.id === edge.from_node_id),
       b = campus.nodes.find((n) => n.id === edge.to_node_id);
-    assert.ok(a.x === b.x || a.y === b.y);
+    assert.ok(a && b);
     assert.equal(edge.distance_m, Math.round(Math.hypot(a.x - b.x, a.y - b.y)));
   }
   for (const a of campus.zones)
@@ -96,6 +97,62 @@ test("campus graph connects all stations with rectilinear roads and consistent l
         const route = findRoute(campus.nodes, campus.edges, a.id, b.id, mode);
         assert.ok(a.id === b.id || route.distance_m > 0);
       }
+});
+test("campus graph covers family roads and declares both no-ride areas", () => {
+  assert.equal(campus.version, "beihang-xueyuan-3");
+  assert.equal(campus.planSource, "https://www.buaa.edu.cn/images/xylxq20261013.jpg");
+  assert.deepEqual(
+    campus.restricted_areas.map((area) => area.name),
+    ["主楼三号教学楼禁行区", "图书馆禁行区"],
+  );
+  for (const area of campus.restricted_areas) {
+    assert.equal(area.rule, "NO_RIDE");
+    assert.ok(area.points.length >= 4);
+  }
+  const familyNodes = campus.nodes.filter((node) => node.area === "FAMILY");
+  assert.ok(familyNodes.length >= 5);
+  for (const node of familyNodes)
+    assert.ok(
+      campus.edges.some(
+        (edge) => edge.from_node_id === node.id || edge.to_node_id === node.id,
+      ),
+    );
+  const forbiddenEdges = campus.edges.filter(
+    (edge) => edge.status === "NO_RIDE",
+  );
+  assert.ok(forbiddenEdges.length >= 2);
+  const route = findRoute(campus.nodes, campus.edges, 1, 4, "shortest");
+  const pairs = new Set(
+    route.segments.map((segment) =>
+      [segment.from_node_id, segment.to_node_id]
+        .sort((a, b) => a - b)
+        .join(":"),
+    ),
+  );
+  for (const edge of forbiddenEdges)
+    assert.equal(
+      pairs.has(
+        [edge.from_node_id, edge.to_node_id].sort((a, b) => a - b).join(":"),
+      ),
+      false,
+    );
+});
+test("campus map upgrades the unmodified v2 graph without changing rides", async () => {
+  await pool.query("DELETE FROM road_edges");
+  await pool.query("DELETE FROM road_nodes");
+  for (const z of previousCampus.zones)
+    await pool.query("UPDATE parking_zones SET name=?,x=?,y=? WHERE id=?", [z.name,z.x,z.y,z.id]);
+  for (const n of previousCampus.nodes)
+    await pool.query("INSERT INTO road_nodes(id,name,x,y,zone_id) VALUES(?,?,?,?,?)", [n.id,n.name,n.x,n.y,n.zone_id]);
+  for (const e of previousCampus.edges)
+    await pool.query("INSERT INTO road_edges(from_node_id,to_node_id,distance_m,safety_cost,comfort_cost,status) VALUES(?,?,?,?,?,?)", [e.from_node_id,e.to_node_id,e.distance_m,e.safety_cost,e.comfort_cost,e.status || "OPEN"]);
+  await pool.query("INSERT INTO system_settings(name,value) VALUES('campus_map',JSON_OBJECT('version','beihang-xueyuan-2'))");
+  await pool.query("INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,amount_cents,distance_m,status) VALUES(1,1,1,2,DATE_SUB(UTC_TIMESTAMP(),INTERVAL 1 HOUR),UTC_TIMESTAMP(),100,390,'UNPAID')");
+  const [before] = await pool.query("SELECT * FROM ride_orders");
+  assert.equal(await ledgerTransaction(pool, upgradeCampusMap), true);
+  assert.equal(await ledgerTransaction(pool, upgradeCampusMap), false);
+  assert.deepEqual((await pool.query("SELECT * FROM ride_orders"))[0], before);
+  assert.equal((await pool.query("SELECT COUNT(*) n FROM road_edges"))[0][0].n, campus.edges.length);
 });
 test("campus migration preserves historical rides and bikes, aligns station nodes, and is idempotent", async () => {
   await pool.query(
