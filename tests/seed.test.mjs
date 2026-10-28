@@ -274,6 +274,9 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
       7,
       30,
       { days: 7, dayType: "WEEKDAY", startHour: 0, endHour: 12, zoneId: 1 },
+      { days: 30, dayType: "WEEKEND", startHour: 12, endHour: 24 },
+      { days: 7, zoneId: 999999 },
+      { start: "2020-01-01", end: "2020-01-01" },
       {
         start: beijingDay(new Date(now.getTime() - 4 * 86400000)),
         end: beijingDay(now),
@@ -320,6 +323,18 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
       delete expected.inventory_series;
       assert.deepEqual(actual, expected);
     }
+    const emptyDemand = await hotspotDemand(
+      pool,
+      { start: "2020-01-01", end: "2020-01-01" },
+      now,
+    );
+    assert.equal(emptyDemand.demand.length, allZones.length);
+    assert.ok(
+      emptyDemand.demand.every(
+        ({ borrow_count, return_count }) =>
+          borrow_count === 0 && return_count === 0,
+      ),
+    );
     await pool.query(`INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,amount_cents,distance_m,status) VALUES
       (2,1,1,2,'2022-01-01 00:00:00','2022-01-01 00:10:00',100,400,'UNPAID'),
       (2,1,1,2,'2022-01-01 00:05:00','2022-01-01 00:15:00',100,400,'UNPAID'),

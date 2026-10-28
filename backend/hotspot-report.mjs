@@ -22,13 +22,7 @@ async function hotspotInputs(db, filter, now, details) {
 
 export async function hotspotDemand(db, filter, now) {
   const { result, window } = await hotspotInputs(db, filter, now, false);
-  const [zones, events] = result;
-  const byZone = new Map(events.map((event) => [event.zone_id, event]));
-  const demand = zones.map((zone) => ({
-    zone_id: zone.id,
-    borrow_count: Number(byZone.get(zone.id)?.borrow_count ?? 0),
-    return_count: Number(byZone.get(zone.id)?.return_count ?? 0),
-  }));
+  const [zones, demand] = result;
   return { zones, demand, filter: window };
 }
 

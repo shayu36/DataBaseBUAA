@@ -49,13 +49,31 @@ SQL SECURITY INVOKER
 report: BEGIN
  DECLARE v_possible DECIMAL(30,8) DEFAULT 0;
  SELECT * FROM v_zone_inventory WHERE p_zone IS NULL OR id=p_zone ORDER BY id;
+ IF NOT p_details THEN
+  WITH events AS (
+   SELECT start_zone_id AS zone_id,started_at AS event_at,1 AS borrowed,0 AS returned FROM ride_orders
+    WHERE started_at>=p_start AND started_at<p_end AND (p_zone IS NULL OR start_zone_id=p_zone)
+   UNION ALL
+   SELECT end_zone_id,ended_at,0,1 FROM ride_orders
+    WHERE ended_at>=p_start AND ended_at<p_end AND (p_zone IS NULL OR end_zone_id=p_zone)
+  ), totals AS (
+   SELECT zone_id,SUM(borrowed) AS borrow_count,SUM(returned) AS return_count FROM events
+   WHERE HOUR(event_at+INTERVAL 8 HOUR)>=p_hour_start AND HOUR(event_at+INTERVAL 8 HOUR)<p_hour_end
+    AND (p_day_type='ALL' OR (p_day_type='WEEKDAY' AND WEEKDAY(event_at+INTERVAL 8 HOUR)<5) OR (p_day_type='WEEKEND' AND WEEKDAY(event_at+INTERVAL 8 HOUR)>=5))
+   GROUP BY zone_id
+  )
+  SELECT z.id AS zone_id,COALESCE(t.borrow_count,0) AS borrow_count,COALESCE(t.return_count,0) AS return_count
+  FROM parking_zones z LEFT JOIN totals t ON t.zone_id=z.id
+  WHERE p_zone IS NULL OR z.id=p_zone ORDER BY z.id;
+  LEAVE report;
+ END IF;
  WITH events AS (
   SELECT start_zone_id AS zone_id,started_at AS event_at,1 AS borrowed,0 AS returned FROM ride_orders WHERE started_at>=p_start AND started_at<p_end
   UNION ALL
   SELECT end_zone_id,ended_at,0,1 FROM ride_orders WHERE ended_at>=p_start AND ended_at<p_end
  ), grouped AS (
-  SELECT e.zone_id,IF(p_details,HOUR(e.event_at+INTERVAL 8 HOUR),0) AS hour,
-   IF(p_details,DAYOFWEEK(e.event_at+INTERVAL 8 HOUR)-1,0) AS weekday,
+  SELECT e.zone_id,HOUR(e.event_at+INTERVAL 8 HOUR) AS hour,
+   DAYOFWEEK(e.event_at+INTERVAL 8 HOUR)-1 AS weekday,
    SUM(e.borrowed) AS borrow_count,SUM(e.returned) AS return_count
   FROM events e JOIN parking_zones z ON z.id=e.zone_id
   WHERE (p_zone IS NULL OR e.zone_id=p_zone) AND HOUR(e.event_at+INTERVAL 8 HOUR)>=p_hour_start AND HOUR(e.event_at+INTERVAL 8 HOUR)<p_hour_end
@@ -64,7 +82,7 @@ report: BEGIN
  ), zone_totals AS (
   SELECT zone_id,SUM(borrow_count) AS borrow_count,SUM(return_count) AS return_count FROM grouped GROUP BY zone_id
  ), zone_hours AS (
-  SELECT zone_id,hour,SUM(borrow_count) AS borrow_count FROM grouped WHERE p_details GROUP BY zone_id,hour
+  SELECT zone_id,hour,SUM(borrow_count) AS borrow_count FROM grouped GROUP BY zone_id,hour
  ), zone_peaks AS (
   SELECT zone_id,hour,ROW_NUMBER() OVER (PARTITION BY zone_id ORDER BY borrow_count DESC,hour) AS position
   FROM zone_hours WHERE borrow_count>0
@@ -72,9 +90,8 @@ report: BEGIN
  SELECT 'ZONE' AS kind,t.zone_id,NULL AS hour,NULL AS weekday,t.borrow_count,t.return_count,
   t.return_count-t.borrow_count AS net_flow,p.hour AS peak_hour
  FROM zone_totals t LEFT JOIN zone_peaks p ON p.zone_id=t.zone_id AND p.position=1
- UNION ALL SELECT 'HOUR',NULL,hour,NULL,SUM(borrow_count),SUM(return_count),NULL,NULL FROM grouped WHERE p_details GROUP BY hour
- UNION ALL SELECT 'WEEKDAY',NULL,NULL,weekday,SUM(borrow_count),SUM(return_count),NULL,NULL FROM grouped WHERE p_details GROUP BY weekday;
- IF NOT p_details THEN LEAVE report; END IF;
+ UNION ALL SELECT 'HOUR',NULL,hour,NULL,SUM(borrow_count),SUM(return_count),NULL,NULL FROM grouped GROUP BY hour
+ UNION ALL SELECT 'WEEKDAY',NULL,NULL,weekday,SUM(borrow_count),SUM(return_count),NULL,NULL FROM grouped GROUP BY weekday;
  WITH RECURSIVE days AS (
   SELECT DATE(p_start+INTERVAL 8 HOUR) AS local_day
   UNION ALL SELECT local_day+INTERVAL 1 DAY FROM days WHERE local_day<DATE(p_end+INTERVAL 8 HOUR)
