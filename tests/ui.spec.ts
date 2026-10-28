@@ -597,6 +597,163 @@ test("pending writes reject duplicate submissions and block conflicting controls
   }
 });
 
+test("退出期间阻止重复请求和数据刷新，再登录只显示新账户数据", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1100 });
+  const admin = {
+    id: 1,
+    name: "旧管理员",
+    email: "old@test.local",
+    role: "ADMIN",
+    status: "ACTIVE",
+  };
+  const student = {
+    id: 2,
+    name: "新学生",
+    email: "new@test.local",
+    role: "STUDENT",
+    status: "ACTIVE",
+  };
+  let currentUser = admin;
+  let logoutCount = 0;
+  let dashboardCount = 0;
+  let release: () => void = () => {};
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/auth/me")
+      return route.fulfill({ json: { user: admin } });
+    if (path === "/api/auth/logout") {
+      logoutCount++;
+      await pending;
+      return route.fulfill({ json: { ok: true } });
+    }
+    if (path === "/api/auth/login") {
+      currentUser = student;
+      return route.fulfill({ json: { user: student } });
+    }
+    if (path === "/api/dashboard") {
+      dashboardCount++;
+      return route.fulfill({
+        json: {
+          ...regressionDashboard,
+          zones: regressionDashboard.zones.map((zone) => ({
+            ...zone,
+            name:
+              currentUser.id === 1
+                ? `旧账户${zone.name}`
+                : `新账户${zone.name}`,
+          })),
+        },
+      });
+    }
+    return route.fulfill({ json: {} });
+  });
+  try {
+    await page.goto("/");
+    await expect(
+      page.getByRole("button", { name: /旧账户测试源站/ }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "退出登录" }).click();
+    await expect.poll(() => logoutCount).toBe(1);
+    await expect(page.locator(".sidebar")).toHaveAttribute("inert", "");
+    await expect(page.locator(".page-content")).toHaveAttribute("inert", "");
+    await expect(page.getByRole("button", { name: "刷新数据" })).toBeDisabled();
+    await page.locator('button[aria-label="退出登录"]').dispatchEvent("click");
+    await page.getByRole("button", { name: "刷新数据" }).dispatchEvent("click");
+    release();
+    await expect(page.getByRole("heading", { name: "欢迎回来" })).toBeVisible();
+    expect(logoutCount).toBe(1);
+    expect(dashboardCount).toBe(1);
+    await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
+    await page.getByRole("button", { name: "登录青行", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: /新账户测试源站/ }),
+    ).toBeVisible();
+    await expect(page.getByText("旧账户测试源站")).toHaveCount(0);
+    expect(dashboardCount).toBe(2);
+  } finally {
+    release();
+  }
+});
+
+test("退出失败后保留当前账户并允许重试", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1100 });
+  let count = 0;
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: 1,
+            name: "测试管理员",
+            email: "admin@test.local",
+            role: "ADMIN",
+            status: "ACTIVE",
+          },
+        },
+      });
+    if (path === "/api/dashboard")
+      return route.fulfill({ json: regressionDashboard });
+    if (path === "/api/auth/logout") {
+      count++;
+      return count === 1
+        ? route.fulfill({ status: 503, json: { error: "退出失败" } })
+        : route.fulfill({ json: { ok: true } });
+    }
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "退出登录" }).click();
+  await expect(page.getByRole("alert")).toContainText("退出失败");
+  await expect(page.locator(".sidebar")).not.toHaveAttribute("inert", "");
+  await page.getByRole("button", { name: "退出登录" }).click();
+  await expect(page.getByRole("heading", { name: "欢迎回来" })).toBeVisible();
+  expect(count).toBe(2);
+});
+
+for (const viewport of [
+  { width: 1280, height: 720 },
+  { width: 390, height: 844 },
+]) {
+  test(`退出登录适配 ${viewport.width}×${viewport.height} 屏幕`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await page.route("**/api/**", async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === "/api/auth/me")
+        return route.fulfill({
+          json: {
+            user: {
+              id: 1,
+              name: "测试管理员",
+              email: "admin@test.local",
+              role: "ADMIN",
+              status: "ACTIVE",
+            },
+          },
+        });
+      if (path === "/api/dashboard")
+        return route.fulfill({ json: regressionDashboard });
+      return route.fulfill({ json: { ok: true } });
+    });
+    await page.goto("/");
+    const logout = page.getByRole("button", { name: "退出登录" });
+    await expect(logout).toBeInViewport();
+    await page
+      .getByRole("button", { name: "数据库设计", exact: true })
+      .scrollIntoViewIfNeeded();
+    await expect(logout).toBeInViewport();
+    await logout.click({ timeout: 2000 });
+    await expect(page.getByRole("heading", { name: "欢迎回来" })).toBeVisible();
+  });
+}
+
 test("successful save reports a failed refresh and manual refresh recovers", async ({
   page,
 }) => {

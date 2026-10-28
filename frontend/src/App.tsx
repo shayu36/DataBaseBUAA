@@ -299,6 +299,24 @@ export default function App() {
       setBusy(false);
     }
   }
+  async function logout() {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await api("/auth/logout", {});
+      setUser(undefined);
+      setD(undefined);
+      setPage("overview");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
   if (initial) return <div className="loading full">正在连接青行…</div>;
   if (!user) return <Login onLogin={setUser} />;
   const current = navigation.find((n) => n.id === page)!;
@@ -374,19 +392,7 @@ export default function App() {
                 }
               </small>
             </div>
-            <button
-              aria-label="退出登录"
-              onClick={async () => {
-                try {
-                  await api("/auth/logout", {});
-                  setUser(undefined);
-                  setD(undefined);
-                  setPage("overview");
-                } catch (e) {
-                  setError((e as Error).message);
-                }
-              }}
-            >
+            <button aria-label="退出登录" onClick={logout}>
               <LogOut size={17} />
             </button>
           </div>
