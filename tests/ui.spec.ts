@@ -52,8 +52,9 @@ test.describe("北京时间的运营分析", () => {
     await page.getByRole("button", { name: "登录青行", exact: true }).click();
     await page.getByRole("button", { name: "运营分析", exact: true }).click();
     const chart = page.getByRole("img", {
-      name: "停车区可用车辆库存时间序列",
+      name: "停车区可用状态车辆库存时间序列",
     });
+    await expect(page.getByText(/低库存指快照中可用状态车辆/)).toBeVisible();
     await expect(chart).toContainText("10/5 02时");
     await expect(chart.locator("polyline")).toHaveCount(2);
     await expect(chart.locator("circle")).toHaveCount(1);
@@ -946,6 +947,7 @@ for (const timezoneId of ["UTC", "America/Los_Angeles", "Asia/Shanghai"]) {
       await page.clock.install({ time: new Date("2026-10-27T15:59:00Z") });
       await page.goto("/");
       await expect(page.locator("header .date")).toHaveText(/10月27日.*星期二/);
+      await expect(page.getByText("今日开始 0 单")).toBeVisible();
       await page.clock.fastForward(60_000);
       await expect(page.locator("header .date")).toHaveText(/10月28日.*星期三/);
       await page.clock.fastForward(3 * 24 * 60 * 60 * 1000);

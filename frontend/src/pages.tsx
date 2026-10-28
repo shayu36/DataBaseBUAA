@@ -72,14 +72,14 @@ export function Overview({ d, user }: Props) {
       : user.role === "ADMIN"
         ? [
             [
-              "可用自行车",
+              "可借自行车",
               d.summary.available_bikes,
               `车辆总数 ${d.summary.total_bikes}`,
             ],
             [
               "当前骑行",
               d.summary.active_rides,
-              `今日完成 ${d.summary.today_rides} 单`,
+              `今日开始 ${d.summary.today_rides} 单`,
             ],
             ["开放维修工单", activeTickets.length, "待分配与处理中工单"],
             ["活动调度任务", activeDispatches.length, "待执行与运输中任务"],
@@ -87,7 +87,7 @@ export function Overview({ d, user }: Props) {
         : [
             ["待处理维修", activeTickets.length, "仅显示当前可处理工单"],
             ["活动调度", activeDispatches.length, "待执行与运输中任务"],
-            ["可用自行车", d.summary.available_bikes, "现场作业前核对站点库存"],
+            ["可借自行车", d.summary.available_bikes, "现场作业前核对站点库存"],
             ["停车站点", d.zones.length, "地图标记任务相关站点"],
           ];
   return (
@@ -1032,7 +1032,7 @@ function InventoryChart({ series, zones }: { series: Row[]; zones: Row[] }) {
       <svg
         viewBox="0 0 900 225"
         role="img"
-        aria-label="停车区可用车辆库存时间序列"
+        aria-label="停车区可用状态车辆库存时间序列"
       >
         <line x1="55" y1="40" x2="55" y2="185" />
         <line x1="55" y1="185" x2="845" y2="185" />
@@ -1515,7 +1515,7 @@ export function Analytics({ d, run }: Props) {
                       r.peak_hour === null ? "无记录" : r.peak_hour + " 时",
                   },
                   {
-                    label: "缺车 / 满车（分钟）",
+                    label: "低库存 / 满位（分钟）",
                     render: (r) => r.shortage_minutes + " / " + r.full_minutes,
                   },
                   {
@@ -1525,7 +1525,9 @@ export function Analytics({ d, run }: Props) {
                 ]}
               />
               <p className="muted">
-                只统计间隔不超过 5 分钟的相邻快照，缺失时段不视为正常。
+                低库存指快照中可用状态车辆不超过容量的
+                20%；满位指已占用达到容量，不含预留车位。历史快照未记录站点是否开放或禁行，不能直接视为实际可借数量。只统计间隔不超过
+                5 分钟的相邻快照，缺失时段不视为正常。
               </p>
               <h3>工作日分布</h3>
               <Table
