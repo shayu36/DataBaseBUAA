@@ -41,12 +41,13 @@ seed: BEGIN
       id INT PATH '$.id',name VARCHAR(60) PATH '$.name',x DECIMAL(10,2) PATH '$.x',y DECIMAL(10,2) PATH '$.y',zone_id INT PATH '$.zone_id' NULL ON EMPTY
     )) nodes;
   INSERT INTO road_edges(from_node_id,to_node_id,distance_m,safety_cost,comfort_cost,direction,status,slope_percent,surface,shade_level,lighting_level,traffic_mix,intersection_risk,attribute_source)
-    SELECT from_id,to_id,distance_m,safety_cost,comfort_cost,'BOTH','OPEN',
+    SELECT from_id,to_id,distance_m,safety_cost,comfort_cost,COALESCE(direction,'BOTH'),COALESCE(status,'OPEN'),
       (CAST(MOD(id,5) AS SIGNED)-2)*1.5,CASE WHEN MOD(id,5)=0 THEN 'ROUGH' WHEN MOD(id,2)=0 THEN 'AVERAGE' ELSE 'SMOOTH' END,
       LEAST(5,2+MOD(id,4)),5-MOD(id,3),CASE WHEN MOD(id,7)=0 THEN 'MOTOR_HEAVY' WHEN MOD(id,3)=0 THEN 'BIKE_ONLY' ELSE 'MIXED' END,
       MOD(id,4),'SIMULATED_COURSE_DATA'
     FROM JSON_TABLE(campus,'$.edges[*]' COLUMNS(id INT PATH '$.id',from_id INT PATH '$.from_node_id',to_id INT PATH '$.to_node_id',
-      distance_m INT PATH '$.distance_m',safety_cost DECIMAL(6,2) PATH '$.safety_cost',comfort_cost DECIMAL(6,2) PATH '$.comfort_cost')) edges;
+      distance_m INT PATH '$.distance_m',safety_cost DECIMAL(6,2) PATH '$.safety_cost',comfort_cost DECIMAL(6,2) PATH '$.comfort_cost',
+      direction VARCHAR(10) PATH '$.direction' NULL ON EMPTY,status VARCHAR(10) PATH '$.status' NULL ON EMPTY)) edges;
   INSERT INTO system_settings(name,value) VALUES('campus_map',JSON_OBJECT('version',JSON_UNQUOTE(JSON_EXTRACT(campus,'$.version')),'source',JSON_UNQUOTE(JSON_EXTRACT(campus,'$.source'))));
 
   WHILE day_no<14 DO

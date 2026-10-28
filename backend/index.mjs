@@ -30,6 +30,14 @@ try {
       throw new Error(
         "CAMPUS_MAP_VERSION_MISMATCH：校园地图未升级，请先备份并按 README 执行初始化或迁移。",
       );
+    const [differences] = await connection.query(
+      sql("campus_restriction_differences"),
+      [JSON.stringify(campus)],
+    );
+    if (differences.length)
+      console.warn(
+        `校园地图有 ${differences.length} 条默认禁行路段与当前数据库不同；请运行 npm run check 核对。`,
+      );
   });
 } catch (error) {
   await pool.end();

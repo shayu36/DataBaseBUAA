@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
+import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
+import { fileURLToPath } from "node:url";
 import bcrypt from "bcryptjs";
+import campus from "../database/campus-map.json" with { type: "json" };
 import { createPool, ledgerTransaction } from "../backend/db.mjs";
 import { upgradeCampusMap } from "../backend/campus.mjs";
 import { seedDemo } from "../backend/demo-seed.mjs";
@@ -12,6 +16,7 @@ import { hotspotDemand, hotspotReport } from "../backend/hotspot-report.mjs";
 import { aggregateHotspots } from "./hotspot-reference.mjs";
 import { dispatchSuggestions as expectedSuggestions } from "./dispatch-reference.mjs";
 import { dispatchSuggestions } from "../backend/dispatch-suggestions.mjs";
+import { findRoute } from "../backend/analytics.mjs";
 
 test("schema initialization holds its database lock through DDL", async () => {
   const database = `campus_bike_schema_test_${randomBytes(4).toString("hex")}`;
@@ -219,6 +224,132 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
       },
     };
     assert.equal(await seedDemo(appPool, guardedAdmin), true);
+    const [seedRoads] = await pool.query(
+      "SELECT from_node_id,to_node_id,direction,status FROM road_edges",
+    );
+    const indexedRoads = new Map(
+      seedRoads.map((road) => [
+        `${road.from_node_id}:${road.to_node_id}`,
+        road,
+      ]),
+    );
+    for (const edge of campus.edges) {
+      const road = indexedRoads.get(`${edge.from_node_id}:${edge.to_node_id}`);
+      assert.ok(road);
+      assert.equal(road.direction, edge.direction ?? "BOTH");
+      assert.equal(
+        road.status,
+        edge.status ?? "OPEN",
+        `路段 ${edge.from_node_id}-${edge.to_node_id}`,
+      );
+    }
+    const [graph] = await pool.query("CALL sp_route_graph()");
+    const expectedRoute = findRoute(campus.nodes, campus.edges, 1, 4);
+    const seededRoute = findRoute(graph[0], graph[1], 1, 4);
+    assert.deepEqual(seededRoute.path, expectedRoute.path);
+    assert.equal(seededRoute.distance_m, expectedRoute.distance_m);
+    const [originalDifferences] = await pool.query(
+      sql("campus_restriction_differences"),
+      [JSON.stringify(campus)],
+    );
+    assert.equal(originalDifferences.length, 0);
+    const restricted = campus.edges.find((edge) => edge.status === "NO_RIDE");
+    await pool.query(
+      "UPDATE road_edges SET status='OPEN' WHERE from_node_id=? AND to_node_id=?",
+      [restricted.from_node_id, restricted.to_node_id],
+    );
+    try {
+      const [differences] = await pool.query(
+        sql("campus_restriction_differences"),
+        [JSON.stringify(campus)],
+      );
+      assert.equal(differences.length, 1);
+      assert.equal(differences[0].status, "OPEN");
+      const result = spawnSync(
+        process.execPath,
+        [
+          fileURLToPath(new URL("../scripts/check.mjs", import.meta.url)),
+          database,
+        ],
+        { encoding: "utf8", timeout: 10000 },
+      );
+      assert.equal(result.status, 0);
+      assert.match(result.stderr, /默认禁行路段与当前数据库不同/);
+      assert.match(
+        result.stderr,
+        new RegExp(
+          `节点 ${restricted.from_node_id} → ${restricted.to_node_id}`,
+        ),
+      );
+      const app = spawn(
+        process.execPath,
+        [fileURLToPath(new URL("../backend/index.mjs", import.meta.url))],
+        {
+          env: {
+            ...process.env,
+            DB_NAME: database,
+            DB_USER: username,
+            DB_PASSWORD: password,
+            HOST: "127.0.0.1",
+            PORT: "0",
+          },
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      let spawnFailed = false;
+      try {
+        await new Promise((resolve, reject) => {
+          let out = "",
+            err = "";
+          const timer = setTimeout(
+            () => reject(new Error("启动提示超时")),
+            10000,
+          );
+          const check = () => {
+            if (
+              out.includes("Qingxing ready") &&
+              err.includes("1 条默认禁行路段")
+            ) {
+              clearTimeout(timer);
+              resolve();
+            }
+          };
+          app.stdout.on("data", (chunk) => {
+            out += chunk;
+            check();
+          });
+          app.stderr.on("data", (chunk) => {
+            err += chunk;
+            check();
+          });
+          app.once("error", (error) => {
+            spawnFailed = true;
+            clearTimeout(timer);
+            reject(error);
+          });
+          app.once("exit", () => {
+            clearTimeout(timer);
+            reject(new Error("测试服务提前退出"));
+          });
+        });
+      } finally {
+        if (!spawnFailed && app.exitCode === null && app.signalCode === null) {
+          const stopped = once(app, "exit");
+          app.kill("SIGTERM");
+          await stopped;
+        }
+      }
+      const [afterCheck] = await pool.query(
+        sql("campus_restriction_differences"),
+        [JSON.stringify(campus)],
+      );
+      assert.deepEqual(afterCheck, differences);
+    } finally {
+      await pool.query(
+        "UPDATE road_edges SET status='NO_RIDE' WHERE from_node_id=? AND to_node_id=?",
+        [restricted.from_node_id, restricted.to_node_id],
+      );
+    }
     assert.deepEqual(guardedActions, ["create", "drop"]);
     const [[counts]] = await pool.query(
       "SELECT (SELECT COUNT(*) FROM users) users, (SELECT COUNT(*) FROM bikes) bikes, (SELECT COUNT(*) FROM parking_zones) zones, (SELECT COUNT(*) FROM ride_orders) rides, (SELECT COUNT(*) FROM payments) payments, (SELECT COUNT(*) FROM carbon_transactions) credits",

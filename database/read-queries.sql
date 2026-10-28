@@ -21,6 +21,15 @@ SELECT EXISTS(SELECT 1 FROM system_settings WHERE name='seed_version') AS instal
 -- name: campus_map_compatible
 SELECT EXISTS(SELECT 1 FROM system_settings WHERE name='campus_map'
  AND BINARY JSON_UNQUOTE(JSON_EXTRACT(value,'$.version'))=BINARY ?) AS compatible;
+-- name: campus_restriction_differences
+SELECT expected.from_id,expected.to_id,a.name AS from_name,b.name AS to_name,actual.id,actual.status
+FROM JSON_TABLE(?,'$.edges[*]' COLUMNS(
+ from_id BIGINT UNSIGNED PATH '$.from_node_id',to_id BIGINT UNSIGNED PATH '$.to_node_id',
+ status VARCHAR(10) PATH '$.status' NULL ON EMPTY)) expected
+LEFT JOIN road_edges actual ON actual.from_node_id=expected.from_id AND actual.to_node_id=expected.to_id
+LEFT JOIN road_nodes a ON a.id=expected.from_id LEFT JOIN road_nodes b ON b.id=expected.to_id
+WHERE expected.status='NO_RIDE' AND NOT (BINARY actual.status <=> BINARY 'NO_RIDE')
+ORDER BY expected.from_id,expected.to_id;
 -- name: login_user
 SELECT id,name,email,phone,role,status,leaderboard_alias,leaderboard_visible,password_hash FROM users WHERE email=?;
 -- name: risk_alerts
