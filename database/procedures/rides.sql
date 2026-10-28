@@ -139,7 +139,7 @@ payment: BEGIN
  DECLARE v_payment_id BIGINT UNSIGNED DEFAULT NULL;
  DECLARE v_amount INT;
  DECLARE v_status VARCHAR(20);
- DECLARE v_key VARCHAR(100);
+ DECLARE v_key,v_payment_key VARCHAR(100);
  DECLARE v_awarded BOOLEAN;
  DECLARE v_points INT;
  DECLARE v_carbon DECIMAL(12,4);
@@ -155,8 +155,11 @@ payment: BEGIN
  IF v_existing_order IS NOT NULL AND v_existing_order<>p_order_id THEN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='IDEMPOTENCY_CONFLICT';
  END IF;
- SELECT id INTO v_payment_id FROM payments WHERE order_id=p_order_id;
+ SELECT id,idempotency_key INTO v_payment_id,v_payment_key FROM payments WHERE order_id=p_order_id;
  IF v_payment_id IS NOT NULL THEN
+  IF BINARY v_payment_key<>BINARY v_key THEN
+   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ORDER_ALREADY_PAID';
+  END IF;
   SELECT p.*,TRUE AS duplicate FROM payments p WHERE p.id=v_payment_id;
   LEAVE payment;
  END IF;

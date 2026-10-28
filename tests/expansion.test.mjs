@@ -1984,6 +1984,38 @@ test("automatic exclusion reversal does not collide with manual adjustment keys"
   );
 });
 
+test("paid orders reject new payment keys without binding them", async () => {
+  const ids = [];
+  for (let index = 0; index < 2; index++) {
+    const [order] = await pool.query(
+      "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
+    );
+    ids.push(order.insertId);
+  }
+  const first = { idempotency_key: "payment-KeyA" };
+  const replacement = { idempotency_key: "payment-keya" };
+  await business.payRide(pool, student, ids[0], first);
+  assert.equal(
+    (await business.payRide(pool, student, ids[0], first)).duplicate,
+    true,
+  );
+  await assert.rejects(business.payRide(pool, student, ids[0], replacement), {
+    code: "ORDER_ALREADY_PAID",
+    status: 409,
+  });
+  const [[before]] = await pool.query(
+    "SELECT (SELECT COUNT(*) FROM payments) payments,(SELECT COUNT(*) FROM carbon_transactions WHERE entry_type='AWARD') awards,(SELECT COUNT(*) FROM audit_logs WHERE action='SIMULATED_PAYMENT') audits",
+  );
+  assert.deepEqual(before, { payments: 1, awards: 1, audits: 1 });
+  assert.equal(
+    (await business.payRide(pool, student, ids[1], replacement)).duplicate,
+    false,
+  );
+  await assert.rejects(business.payRide(pool, student, ids[0], replacement), {
+    code: "IDEMPOTENCY_CONFLICT",
+  });
+});
+
 test("payment and carbon idempotency keys distinguish letter case", async () => {
   const ids = [];
   for (let index = 0; index < 3; index++) {

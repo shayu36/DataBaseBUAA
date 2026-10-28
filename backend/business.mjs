@@ -158,6 +158,11 @@ export async function payRide(pool, user, id, input) {
           "IDEMPOTENCY_CONFLICT",
           409,
         ],
+        ORDER_ALREADY_PAID: [
+          "订单已支付，请使用原支付请求编号重试或查看支付记录",
+          "ORDER_ALREADY_PAID",
+          409,
+        ],
         PAYMENT_INVALID_STATE: [
           "只能支付已结束的未付款订单",
           "INVALID_STATE",

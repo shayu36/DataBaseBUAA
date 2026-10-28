@@ -756,6 +756,13 @@ test("HTTP lifecycle has private orders and one payment", async () => {
     ).data.duplicate,
     true,
   );
+  const differentKey = await request(
+    "/api/rides/" + id + "/pay",
+    { idempotency_key: "http-pay-different" },
+    studentCookie,
+  );
+  assert.equal(differentKey.status, 409);
+  assert.equal(differentKey.data.code, "ORDER_ALREADY_PAID");
   const d = (await request("/api/dashboard", undefined, studentCookie)).data;
   assert.equal(d.carbon.points, 4);
   assert.equal(d.carbon.ride_count, 1);
