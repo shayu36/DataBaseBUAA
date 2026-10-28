@@ -1,6 +1,8 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import bcrypt from "bcryptjs";
+import { gzipSync } from "node:zlib";
+import { setTimeout as delay } from "node:timers/promises";
 import { createPool } from "../backend/db.mjs";
 import { applySchema } from "../scripts/sql.mjs";
 import { createApp } from "../backend/app.mjs";
@@ -409,6 +411,79 @@ test("administrators can paginate and update older user accounts", async () => {
       lastId,
     ]);
   }
+});
+
+test("compressed JSON with trailing bytes does not stop the HTTP service", async () => {
+  const body = Buffer.concat([
+    gzipSync("{}"),
+    Buffer.from([0]),
+    Buffer.alloc(100 * 1024, 0x58),
+  ]);
+  const response = await fetch(base + "/api/auth/logout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Content-Encoding": "gzip" },
+    body,
+  });
+  assert.ok([200, 400].includes(response.status));
+  await response.arrayBuffer();
+  await delay(250);
+  assert.equal((await request("/api/health")).status, 200);
+});
+
+test("malformed compression and unsupported encodings report client errors", async () => {
+  for (const [headers, body, status, code] of [
+    [
+      { "Content-Type": "application/json", "Content-Encoding": "gzip" },
+      Buffer.from("invalid gzip"),
+      400,
+      "INVALID_COMPRESSED_BODY",
+    ],
+    [
+      { "Content-Type": "application/json", "Content-Encoding": "gzip" },
+      gzipSync("{}").subarray(0, 12),
+      400,
+      "INVALID_COMPRESSED_BODY",
+    ],
+    [
+      { "Content-Type": "application/json", "Content-Encoding": "gzip" },
+      gzipSync("{invalid json"),
+      400,
+      "INVALID_JSON",
+    ],
+    [
+      { "Content-Type": "application/json", "Content-Encoding": "deflate" },
+      Buffer.from("invalid deflate"),
+      400,
+      "INVALID_COMPRESSED_BODY",
+    ],
+    [
+      { "Content-Type": "application/json", "Content-Encoding": "br" },
+      Buffer.from("invalid brotli"),
+      400,
+      "INVALID_COMPRESSED_BODY",
+    ],
+    [
+      { "Content-Type": "application/json", "Content-Encoding": "unsupported" },
+      "{}",
+      415,
+      "UNSUPPORTED_CONTENT_ENCODING",
+    ],
+    [
+      { "Content-Type": "application/json; charset=iso-8859-1" },
+      "{}",
+      415,
+      "UNSUPPORTED_CHARSET",
+    ],
+  ]) {
+    const response = await fetch(base + "/api/auth/logout", {
+      method: "POST",
+      headers,
+      body,
+    });
+    assert.equal(response.status, status);
+    assert.equal((await response.json()).code, code);
+  }
+  assert.equal((await request("/api/health")).status, 200);
 });
 
 test("health identifies campus bike and protected routes need login", async () => {

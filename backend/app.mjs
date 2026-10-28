@@ -382,6 +382,24 @@ export function createApp(pool) {
       return res
         .status(413)
         .json({ error: "请求内容过大", code: "PAYLOAD_TOO_LARGE" });
+    if (e.type === "encoding.unsupported")
+      return res.status(415).json({
+        error: "不支持该请求内容编码",
+        code: "UNSUPPORTED_CONTENT_ENCODING",
+      });
+    if (e.type === "charset.unsupported")
+      return res
+        .status(415)
+        .json({ error: "不支持该字符编码", code: "UNSUPPORTED_CHARSET" });
+    if (
+      e.status === 400 &&
+      e.expose === true &&
+      typeof e.code === "string" &&
+      (e.code.startsWith("Z_") || e.code.startsWith("ERR__ERROR_"))
+    )
+      return res
+        .status(400)
+        .json({ error: "压缩请求内容无效", code: "INVALID_COMPRESSED_BODY" });
     if (e.code === "ER_DUP_ENTRY")
       return res.status(409).json({
         error: "记录已存在或此业务正在处理中，请刷新后重试",

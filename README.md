@@ -88,6 +88,7 @@ npm start
 | `npm test` | 运行后端和数据库测试 |
 | `npm run test:e2e` | 运行浏览器测试 |
 | `npm run format:check` | 检查代码格式 |
+| `npm audit --registry=https://registry.npmjs.org` | 使用 npm 官方服务检查锁文件中的已知依赖漏洞 |
 | `npm run check` | 检查业务数据不变量 |
 | `node scripts/run-queries.mjs` | 执行 27 组教学查询，结果写入本机 `docs/evidence/` |
 | `npm run backup` | 备份当前业务数据库 |

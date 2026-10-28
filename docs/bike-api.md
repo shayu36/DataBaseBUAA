@@ -2,6 +2,8 @@
 
 除特别说明外，路径均加 /api；查询返回 JSON，写入使用 POST JSON。错误格式为 {error,code}；业务字段使用 snake_case，运营筛选参数使用下文列出的 camelCase。id 为数字，金额以整数分表示，日期为 ISO 格式。用户 {id,name,email,phone,role,status} role=STUDENT/ADMIN/OPERATOR，status=ACTIVE/SUSPENDED。除健康检查、登录、注册和退出外，接口均需登录；管理员或运维权限按下文和业务状态检查。前端以响应为准刷新，不伪造成功；写入成功但刷新失败时保留保存成功的结果并提示手动刷新，刷新成功或重新刷新时清除旧提示。
 
+压缩请求内容损坏时返回 HTTP 400 和 `INVALID_COMPRESSED_BODY`；不支持的内容编码或字符编码分别返回 HTTP 415 和 `UNSUPPORTED_CONTENT_ENCODING`、`UNSUPPORTED_CHARSET`。
+
 碳规则配置无效时，读取该规则的请求返回 HTTP 503 和 `INVALID_CARBON_RULE`；涉及写入的事务回滚。已完成支付的幂等重试仍返回原支付结果。配置范围和缺省值见 README。
 
 行程按当前规则计算出的积分或减排量超出流水字段范围时，支付或确认有效行程返回 HTTP 503 和 `CARBON_AWARD_OUT_OF_RANGE`，事务回滚；具体范围和处理方法见 README。
