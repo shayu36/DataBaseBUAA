@@ -1878,7 +1878,26 @@ export function Schema() {
     </Remote>
   );
 }
-export function Admin({ d, run }: Props) {
+type PendingAdjustment = {
+  order_id: number;
+  points_change: number;
+  carbon_kg_change: number;
+  reason: string;
+  idempotency_key: string;
+};
+
+export function Admin({ d, user, run }: Props) {
+  const adjustmentStorageKey = `qingxing-adjustment-${user.id}`;
+  const [pendingAdjustment, setPendingAdjustment] =
+    useState<PendingAdjustment | null>(() => {
+      try {
+        const stored = sessionStorage.getItem(adjustmentStorageKey);
+        return stored ? JSON.parse(stored) : null;
+      } catch {
+        return null;
+      }
+    });
+  const [adjustmentError, setAdjustmentError] = useState("");
   const [kind, setKind] = useState("zones"),
     [edit, setEdit] = useState<any>({});
   const [users, setUsers] = useState<Row[]>([]),
@@ -1889,10 +1908,18 @@ export function Admin({ d, run }: Props) {
     [attemptsBefore, setAttemptsBefore] = useState<number | null>(null),
     [reviews, setReviews] = useState<Row[]>([]),
     [reviewsBefore, setReviewsBefore] = useState<number | null>(null),
-    [adjustOrder, setAdjustOrder] = useState(""),
-    [adjustPoints, setAdjustPoints] = useState(0),
-    [adjustCarbon, setAdjustCarbon] = useState(0),
-    [adjustReason, setAdjustReason] = useState("课程演示人工校正"),
+    [adjustOrder, setAdjustOrder] = useState(
+      pendingAdjustment ? String(pendingAdjustment.order_id) : "",
+    ),
+    [adjustPoints, setAdjustPoints] = useState(
+      pendingAdjustment?.points_change ?? 0,
+    ),
+    [adjustCarbon, setAdjustCarbon] = useState(
+      pendingAdjustment?.carbon_kg_change ?? 0,
+    ),
+    [adjustReason, setAdjustReason] = useState(
+      pendingAdjustment?.reason ?? "课程演示人工校正",
+    ),
     [userError, setUserError] = useState("");
   useEffect(() => {
     let live = true;
@@ -2387,23 +2414,63 @@ export function Admin({ d, run }: Props) {
       <section className="panel">
         <h2>碳积分人工调整</h2>
         <form
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            run("/carbon/adjustments", {
-              order_id: Number(adjustOrder),
-              points_change: adjustPoints,
-              carbon_kg_change: adjustCarbon,
-              reason: adjustReason,
-              idempotency_key: `manual-${adjustOrder}-${Date.now()}`,
-            });
+            let request = pendingAdjustment;
+            if (!request) {
+              try {
+                const random = crypto.getRandomValues(new Uint8Array(16));
+                request = {
+                  order_id: Number(adjustOrder),
+                  points_change: adjustPoints,
+                  carbon_kg_change: adjustCarbon,
+                  reason: adjustReason,
+                  idempotency_key: `manual-${Array.from(random, (n) => n.toString(16).padStart(2, "0")).join("")}`,
+                };
+                sessionStorage.setItem(
+                  adjustmentStorageKey,
+                  JSON.stringify(request),
+                );
+              } catch {
+                setAdjustmentError(
+                  "无法保存重试信息，请检查浏览器存储设置后再提交。",
+                );
+                return;
+              }
+              setPendingAdjustment(request);
+            }
+            setAdjustmentError("");
+            if (await run("/carbon/adjustments", request)) {
+              try {
+                sessionStorage.removeItem(adjustmentStorageKey);
+                setPendingAdjustment(null);
+                setAdjustPoints(0);
+                setAdjustCarbon(0);
+              } catch {
+                setAdjustmentError(
+                  "操作已保存，但无法清除浏览器中的重试信息；请检查浏览器存储设置。",
+                );
+              }
+            }
           }}
         >
+          {pendingAdjustment && (
+            <p className="muted">
+              此次调整的结果尚待确认。可以使用原请求重试；放弃重试前请先核对流水，因为操作可能已经保存。
+            </p>
+          )}
+          {adjustmentError && (
+            <div className="error" role="alert">
+              {adjustmentError}
+            </div>
+          )}
           <div className="form-row">
             <Field label="已支付订单 ID">
               <input
                 required
                 type="number"
                 min="1"
+                disabled={!!pendingAdjustment}
                 value={adjustOrder}
                 onChange={(e) => setAdjustOrder(e.target.value)}
               />
@@ -2411,6 +2478,7 @@ export function Admin({ d, run }: Props) {
             <Field label="积分变动">
               <input
                 type="number"
+                disabled={!!pendingAdjustment}
                 value={adjustPoints}
                 onChange={(e) => setAdjustPoints(Number(e.target.value))}
               />
@@ -2419,6 +2487,7 @@ export function Admin({ d, run }: Props) {
               <input
                 type="number"
                 step="0.0001"
+                disabled={!!pendingAdjustment}
                 value={adjustCarbon}
                 onChange={(e) => setAdjustCarbon(Number(e.target.value))}
               />
@@ -2427,14 +2496,34 @@ export function Admin({ d, run }: Props) {
               <input
                 required
                 minLength={2}
+                disabled={!!pendingAdjustment}
                 value={adjustReason}
                 onChange={(e) => setAdjustReason(e.target.value)}
               />
             </Field>
           </div>
           <button disabled={adjustPoints === 0 && adjustCarbon === 0}>
-            新增调整流水
+            {pendingAdjustment ? "重试调整" : "新增调整流水"}
           </button>
+          {pendingAdjustment && (
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                try {
+                  sessionStorage.removeItem(adjustmentStorageKey);
+                  setPendingAdjustment(null);
+                  setAdjustmentError("");
+                } catch {
+                  setAdjustmentError(
+                    "无法清除浏览器中的重试信息，请检查浏览器存储设置。",
+                  );
+                }
+              }}
+            >
+              放弃重试
+            </button>
+          )}
         </form>
       </section>
     </>
