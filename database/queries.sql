@@ -48,6 +48,7 @@ SELECT r.id,r.bike_id,b.status,b.current_zone_id FROM ride_orders r JOIN bikes b
 -- Q17: 重复活动订单不变量，正常时无结果。
 SELECT 'USER' kind,user_id entity_id,COUNT(*) active_count FROM ride_orders WHERE status='RUNNING' GROUP BY user_id HAVING COUNT(*)>1 UNION ALL SELECT 'BIKE',bike_id,COUNT(*) FROM ride_orders WHERE status='RUNNING' GROUP BY bike_id HAVING COUNT(*)>1;
 -- Q18: 支付和有效碳积分不变量，正常时无结果；旧记录的积分比例可能未知。
+-- 先乘保存的十进制系数再换算公里，避免会话除法精度截断距离。
 SELECT r.id,r.status,r.qualification_status,p.id payment_id,c.id award_id FROM ride_orders r
 LEFT JOIN payments p ON p.order_id=r.id LEFT JOIN carbon_transactions c ON c.order_id=r.id AND c.entry_type='AWARD'
 WHERE (r.status='PAID')<>(p.id IS NOT NULL) OR (p.id IS NOT NULL AND p.amount_cents<>r.amount_cents)
@@ -56,8 +57,8 @@ WHERE (r.status='PAID')<>(p.id IS NOT NULL) OR (p.id IS NOT NULL AND p.amount_ce
  OR (r.qualification_status='EXCLUDED' AND c.id IS NOT NULL AND NOT EXISTS(
    SELECT 1 FROM carbon_transactions reversal WHERE reversal.order_id=r.id AND reversal.entry_type='ADJUSTMENT'
    AND reversal.idempotency_key IN (CONCAT('exclude-',r.id),CONCAT('auto:exclude-',r.id)) AND reversal.points_change=-c.points_change AND reversal.carbon_kg_change=-c.carbon_kg_change))
- OR (c.id IS NOT NULL AND (c.distance_m<>r.distance_m OR c.carbon_kg_change<>ROUND(r.distance_m/1000*c.factor_kg_per_km,4)
-   OR (c.points_per_km IS NOT NULL AND c.points_change<>FLOOR(r.distance_m/1000*c.points_per_km))));
+ OR (c.id IS NOT NULL AND (c.distance_m<>r.distance_m OR c.carbon_kg_change<>ROUND(r.distance_m*c.factor_kg_per_km/1000,4)
+   OR (c.points_per_km IS NOT NULL AND c.points_change<>FLOOR(r.distance_m*c.points_per_km/1000))));
 -- Q19: 数据库对象清单。
 SELECT TABLE_NAME,TABLE_TYPE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_TYPE,TABLE_NAME;
 SELECT TRIGGER_NAME,ACTION_TIMING,EVENT_MANIPULATION FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE();

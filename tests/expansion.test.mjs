@@ -1279,6 +1279,59 @@ test("carbon rule and ledger return exact decimal strings at supported limits", 
   assert.equal(repeated.points_per_km, null);
 });
 
+test("carbon invariant and teaching query retain precision with low division settings", async () => {
+  const [order] = await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),400,100,'UNPAID')",
+  );
+  await business.payRide(pool, student, order.insertId, {
+    idempotency_key: "low-division-payment",
+  });
+  const checks = await readFile(
+    new URL("../database/invariant-checks.sql", import.meta.url),
+    "utf8",
+  );
+  const teaching = await readFile(
+    new URL("../database/queries.sql", import.meta.url),
+    "utf8",
+  );
+  const q18 = teaching
+    .split("-- Q18:")[1]
+    .split("-- Q19:")[0]
+    .replace(/^[^\n]*\n/, "");
+  const connection = await pool.getConnection();
+  try {
+    const verify = async (expected) => {
+      for (const increment of [0, 4, 12]) {
+        await connection.query("SET SESSION div_precision_increment=?", [
+          increment,
+        ]);
+        const [results] = await connection.query(checks);
+        const integrity = results.find(
+          (row) => row.name === "有效已支付订单恰有一条版本化积分发放",
+        );
+        assert.equal(Number(integrity.errors), expected);
+        assert.deepEqual(
+          (await connection.query(q18))[0].map((row) => row.id),
+          expected ? [order.insertId] : [],
+        );
+      }
+    };
+    await verify(0);
+    await connection.query(
+      "UPDATE carbon_transactions SET points_change=points_change+1 WHERE order_id=? AND entry_type='AWARD'",
+      [order.insertId],
+    );
+    await verify(1);
+    await connection.query(
+      "UPDATE carbon_transactions SET points_change=points_change-1,carbon_kg_change=carbon_kg_change+0.0001 WHERE order_id=? AND entry_type='AWARD'",
+      [order.insertId],
+    );
+    await verify(1);
+  } finally {
+    connection.destroy();
+  }
+});
+
 test("carbon awards retain precise historical factors and validate their own rule", async () => {
   await pool.query(
     "UPDATE system_settings SET value=JSON_OBJECT('kg_per_km',0.21019,'points_per_km',12.345678,'rule_version','precise-v1') WHERE name='carbon'",
