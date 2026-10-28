@@ -10,9 +10,8 @@ function clock(now) {
   if (!Number.isFinite(n)) throw new Error("Invalid date");
   return n;
 }
-export function findRoute(nodes, edges, fromId, toId, mode = "shortest") {
-  if (!["shortest", "safe", "comfortable"].includes(mode))
-    throw new Error("Invalid route mode");
+const routeModes = ["shortest", "safe", "comfortable"];
+function buildGraph(nodes, edges, fromId, toId, modes) {
   const graph = new Map(nodes.map((n) => [n.id, []]));
   if (!graph.has(fromId) || !graph.has(toId))
     throw new Error("Unknown road node");
@@ -45,24 +44,31 @@ export function findRoute(nodes, edges, fromId, toId, mode = "shortest") {
         surface +
         Math.abs(Number(edge.slope_percent || 0)) * 0.04 +
         Math.max(0, 5 - number(edge.shade_level ?? 5)) * 0.08,
-      weight =
+      detail = { ...edge, distance, safetyPenalty, comfortPenalty };
+    const weights = {};
+    for (const mode of modes) {
+      const weight =
         distance *
         (mode === "safe"
           ? 1 + safetyPenalty
           : mode === "comfortable"
             ? 1 + comfortPenalty
-            : 1),
-      detail = { ...edge, distance, safetyPenalty, comfortPenalty };
-    if (!Number.isFinite(weight)) throw new Error("Invalid route weight");
+            : 1);
+      if (!Number.isFinite(weight)) throw new Error("Invalid route weight");
+      weights[mode] = weight;
+    }
     if (edge.direction !== "REVERSE")
       graph
         .get(edge.from_node_id)
-        .push({ to: edge.to_node_id, distance, weight, detail });
+        .push({ to: edge.to_node_id, distance, weights, detail });
     if (edge.direction !== "FORWARD")
       graph
         .get(edge.to_node_id)
-        .push({ to: edge.from_node_id, distance, weight, detail });
+        .push({ to: edge.from_node_id, distance, weights, detail });
   }
+  return graph;
+}
+function findGraphRoute(graph, fromId, toId, mode) {
   // A binary heap keeps route search O((V + E) log V). Stable discovery
   // order preserves deterministic choices when path costs are equal.
   const heap = [],
@@ -112,7 +118,7 @@ export function findRoute(nodes, edges, fromId, toId, mode = "shortest") {
     }
     visited.add(next);
     for (const edge of graph.get(next)) {
-      const candidate = best + edge.weight;
+      const candidate = best + edge.weights[mode];
       if (
         !visited.has(edge.to) &&
         candidate < (costs.get(edge.to) ?? Infinity)
@@ -187,6 +193,21 @@ export function findRoute(nodes, edges, fromId, toId, mode = "shortest") {
     explanation,
     attribute_source: "SIMULATED_COURSE_DATA",
   };
+}
+export function findRoute(nodes, edges, fromId, toId, mode = "shortest") {
+  if (!routeModes.includes(mode)) throw new Error("Invalid route mode");
+  return findGraphRoute(
+    buildGraph(nodes, edges, fromId, toId, [mode]),
+    fromId,
+    toId,
+    mode,
+  );
+}
+export function findRoutes(nodes, edges, fromId, toId) {
+  const graph = buildGraph(nodes, edges, fromId, toId, routeModes);
+  return Object.fromEntries(
+    routeModes.map((mode) => [mode, findGraphRoute(graph, fromId, toId, mode)]),
+  );
 }
 export function parseReportingDay(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value)))

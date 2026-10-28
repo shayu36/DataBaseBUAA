@@ -4,7 +4,7 @@ import { aggregateHotspots } from "./hotspot-reference.mjs";
 import { bikeRisks } from "./risk-reference.mjs";
 import { dispatchSuggestions } from "./dispatch-reference.mjs";
 import assert from "node:assert/strict";
-import { findRoute, reportFilter } from "../backend/analytics.mjs";
+import { findRoute, findRoutes, reportFilter } from "../backend/analytics.mjs";
 import { routeForZones } from "../backend/business.mjs";
 
 test("route options reuse one graph read and match single-mode results", async () => {
@@ -60,6 +60,14 @@ test("route options reuse one graph read and match single-mode results", async (
     assert.deepEqual(result.routes[mode], findRoute(nodes, edges, 1, 2, mode));
   assert.deepEqual(result.routes.shortest.path, [1, 2]);
   assert.deepEqual(result.routes.safe.path, [1, 3, 2]);
+  assert.deepEqual(result.routes.comfortable.path, [1, 3, 2]);
+  const sameStation = findRoutes(nodes, edges, 1, 1);
+  for (const route of Object.values(sameStation)) {
+    assert.deepEqual(route.path, [1]);
+    assert.equal(route.distance_m, 0);
+    assert.deepEqual(route.segments, []);
+  }
+  assert.throws(() => findRoutes(nodes, [], 1, 2), /No route/);
 });
 
 test("route modes use weighted undirected paths and actual distance", () => {
@@ -472,6 +480,10 @@ test("route segments follow travel direction and reverse the signed slope", () =
     },
   ];
   const reverse = findRoute(nodes, edges, 3, 1, "comfortable");
+  const allReverse = findRoutes(nodes, edges, 3, 1);
+  assert.deepEqual(allReverse.comfortable, reverse);
+  assert.deepEqual(allReverse.safe.path, [3, 2, 1]);
+  assert.deepEqual(allReverse.shortest.path, [3, 2, 1]);
   assert.deepEqual(reverse.path, [3, 2, 1]);
   assert.deepEqual(
     reverse.segments.map(

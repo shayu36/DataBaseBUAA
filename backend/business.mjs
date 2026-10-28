@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { AppError, actorTransaction, callProcedure } from "./db.mjs";
-import { findRoute } from "./analytics.mjs";
+import { findRoute, findRoutes } from "./analytics.mjs";
 export const idSchema = z.coerce.number().int().positive().safe();
 // Reject values that cannot be represented in return_attempts before writing evidence.
 const coord = z.number().finite().min(-99999999.99).max(99999999.99);
@@ -24,12 +24,7 @@ export function routesForGraph(result, from, to, mode = "shortest") {
       return {
         nodes,
         edges,
-        routes: Object.fromEntries(
-          ["shortest", "safe", "comfortable"].map((name) => [
-            name,
-            findRoute(nodes, edges, start.id, end.id, name),
-          ]),
-        ),
+        routes: findRoutes(nodes, edges, start.id, end.id),
       };
     return { ...findRoute(nodes, edges, start.id, end.id, mode), nodes, edges };
   } catch {
