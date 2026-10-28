@@ -205,6 +205,7 @@ DELIMITER $$
 CREATE PROCEDURE sp_dashboard(IN p_user BIGINT UNSIGNED, IN p_role VARCHAR(20))
 SQL SECURITY INVOKER
 BEGIN
+ DECLARE v_now DATETIME(3) DEFAULT UTC_TIMESTAMP(3);
  DECLARE v_factor DECIMAL(20,8);
  DECLARE v_rate DECIMAL(20,8);
  DECLARE v_version VARCHAR(30);
@@ -244,8 +245,8 @@ BEGIN
  SELECT a.* FROM return_attempts a JOIN ride_orders r ON r.id=a.order_id WHERE r.user_id=p_user ORDER BY a.id DESC LIMIT 101;
  SELECT (SELECT COUNT(*) FROM bikes WHERE status<>'RETIRED') total_bikes,(SELECT COUNT(*) FROM bikes WHERE status='AVAILABLE') available_bikes,
   (SELECT COUNT(*) FROM ride_orders WHERE status='RUNNING') active_rides,
-  (SELECT COUNT(*) FROM ride_orders WHERE started_at>=TIMESTAMP(DATE(UTC_TIMESTAMP()+INTERVAL 8 HOUR))-INTERVAL 8 HOUR
-   AND started_at<TIMESTAMP(DATE(UTC_TIMESTAMP()+INTERVAL 8 HOUR))+INTERVAL 16 HOUR) today_rides,
+  (SELECT COUNT(*) FROM ride_orders WHERE started_at>=TIMESTAMP(DATE(v_now+INTERVAL 8 HOUR))-INTERVAL 8 HOUR
+   AND started_at<=v_now) today_rides,
   (SELECT COALESCE(SUM(carbon_kg_change),0) FROM carbon_transactions) carbon_kg,
   (SELECT COUNT(*) FROM maintenance_tickets WHERE status<>'COMPLETED') open_tickets;
  SELECT * FROM v_ride_details WHERE user_id=p_user AND status IN ('RUNNING','UNPAID') ORDER BY id DESC;

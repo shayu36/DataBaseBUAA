@@ -91,6 +91,35 @@ beforeEach(async () => {
 });
 after(() => pool.end());
 
+test("dashboard counts Beijing today only through the current instant", async () => {
+  await pool.query(`INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES
+    (2,1,1,2,'2026-10-27 15:59:59.999','2026-10-27 15:59:59.999',0,100,'UNPAID'),
+    (2,1,1,2,'2026-10-27 16:00:00.000','2026-10-27 16:00:00.000',0,100,'UNPAID'),
+    (2,1,1,2,'2026-10-28 03:59:59.999','2026-10-28 03:59:59.999',0,100,'UNPAID'),
+    (2,1,1,2,'2026-10-28 04:00:00.000','2026-10-28 04:00:00.000',0,100,'UNPAID'),
+    (2,1,1,2,'2026-10-28 04:00:00.001','2026-10-28 04:00:00.001',0,100,'UNPAID'),
+    (2,1,1,2,'2026-10-28 16:00:00.000','2026-10-28 16:00:00.000',0,100,'UNPAID')`);
+  const connection = await pool.getConnection();
+  try {
+    for (const timeZone of ["+00:00", "+05:30"]) {
+      await connection.query("SET SESSION time_zone=?", [timeZone]);
+      for (const [now, expected] of [
+        ["2026-10-27T16:00:00Z", 1],
+        ["2026-10-28T04:00:00Z", 3],
+      ]) {
+        await connection.query("SET timestamp=?", [Date.parse(now) / 1000]);
+        const [result] = await connection.query("CALL sp_dashboard(?,?)", [
+          student.id,
+          student.role,
+        ]);
+        assert.equal(result[10][0].today_rides, expected, `${timeZone} ${now}`);
+      }
+    }
+  } finally {
+    connection.destroy();
+  }
+});
+
 test("SQL registration preserves the full user id in default aliases", async () => {
   await pool.query("ALTER TABLE users AUTO_INCREMENT=9999");
   const aliases = [];
