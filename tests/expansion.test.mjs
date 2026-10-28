@@ -1282,6 +1282,47 @@ test("a rider without eligible activity sees a private unranked summary", async 
   assert.deepEqual(board.rows, []);
 });
 
+test("leaderboard never returns other private participants from MySQL", async () => {
+  await pool.query("UPDATE users SET leaderboard_visible=1 WHERE id=3");
+  await pool.query(`INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES
+    (1,1,1,2,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3),1000,100,'UNPAID'),
+    (1,2,1,2,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3),1000,100,'UNPAID'),
+    (2,3,1,2,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3),1000,100,'UNPAID'),
+    (3,4,1,2,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3),1000,100,'UNPAID')`);
+  await pool.query(
+    "INSERT INTO payments(order_id,amount_cents,idempotency_key) SELECT id,100,CONCAT('leaderboard-private-',id) FROM ride_orders",
+  );
+  await pool.query("UPDATE ride_orders SET status='PAID'");
+  const [raw] = await pool.query("CALL sp_leaderboard(?,?,?)", [
+    "week",
+    "rides",
+    student.id,
+  ]);
+  assert.deepEqual(
+    raw[0].map(({ user_id }) => user_id),
+    [2, 3],
+  );
+  const board = await leaderboard(pool, "week", "rides", student.id);
+  assert.equal(board.me.rank, 2);
+  assert.equal(board.me.private, true);
+  assert.deepEqual(
+    board.rows.map(({ user_id, rank }) => ({ user_id, rank })),
+    [{ user_id: 3, rank: 2 }],
+  );
+  const [users] = await pool.query("SELECT * FROM users");
+  const [rides] = await pool.query("SELECT * FROM ride_orders");
+  const expected = buildLeaderboard(
+    users,
+    rides,
+    [],
+    "week",
+    "rides",
+    new Date(board.window.end),
+    student.id,
+  );
+  assert.deepEqual(board, expected);
+});
+
 test("leaderboard participation is explicit and audited", async () => {
   const profile = await updateLeaderboardProfile(pool, student, {
     alias: "航空蓝骑手",

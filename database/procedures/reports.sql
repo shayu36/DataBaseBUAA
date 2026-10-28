@@ -35,7 +35,9 @@ BEGIN
   SELECT NULL,u.id,COALESCE(NULLIF(u.leaderboard_alias,''),CONCAT(LEFT(COALESCE(NULLIF(u.name,''),'同学'),1),'**')),
    u.leaderboard_visible,0,0,0,0 FROM users u
   WHERE u.id=p_viewer AND NOT EXISTS(SELECT 1 FROM ranked WHERE user_id=p_viewer)
- ) ranked_with_viewer ORDER BY (`rank` IS NULL),`rank`,user_id;
+ ) ranked_with_viewer
+ WHERE (visible=1 AND `rank` IS NOT NULL) OR user_id=p_viewer
+ ORDER BY (`rank` IS NULL),`rank`,user_id;
  SELECT v_start AS start_time,v_now AS end_time;
 END$$
 DELIMITER ;
