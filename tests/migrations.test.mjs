@@ -188,7 +188,7 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
         "UPDATE system_settings SET value=JSON_OBJECT('version',0) WHERE name='pdf_expansion'",
       );
       assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
-        "pdf_expansion@13",
+        "pdf_expansion@14",
       ]);
       const [[actualRule]] = await pool.query(
         "SELECT value FROM system_settings WHERE name='carbon'",
@@ -226,7 +226,7 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
       [historicalCredits[0].idempotency_key, historicalCredits[0].id],
     );
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
-      "pdf_expansion@13",
+      "pdf_expansion@14",
     ]);
     assert.deepEqual(
       (
@@ -271,7 +271,7 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
       "UPDATE system_settings SET value=JSON_OBJECT('version',12) WHERE name='pdf_expansion'",
     );
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
-      "pdf_expansion@13",
+      "pdf_expansion@14",
     ]);
     const [[afterViewUpgrade]] = await pool.query(
       "SELECT * FROM v_user_carbon WHERE user_id=1",
@@ -385,7 +385,7 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
       "ALTER TABLE carbon_transactions DROP COLUMN points_per_km, MODIFY factor_kg_per_km DECIMAL(5,3) NOT NULL DEFAULT 0.210",
     );
     await pool.query(
-      "CREATE VIEW carbon_ledger AS SELECT id,order_id,distance_m,points_change points,carbon_kg_change carbon_kg,factor_kg_per_km,created_at FROM carbon_transactions WHERE entry_type='AWARD'",
+      "CREATE OR REPLACE VIEW carbon_ledger AS SELECT id,order_id,distance_m,points_change points,carbon_kg_change carbon_kg,factor_kg_per_km,created_at FROM carbon_transactions WHERE entry_type='AWARD'",
     );
     await pool.query(
       "UPDATE system_settings SET value=JSON_OBJECT('version',8) WHERE name='pdf_expansion'",
@@ -428,6 +428,282 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
   } finally {
     await pool.end();
     await admin.query(`DROP DATABASE IF EXISTS \`${dbName}\``);
+    await admin.end();
+  }
+});
+
+test("legacy carbon migration rejects equal-total rows with conflicting history", async () => {
+  const database = `campus_bike_carbon_migration_${randomBytes(4).toString("hex")}`;
+  const credentials = {
+    user: process.env.DB_ADMIN_USER,
+    password: process.env.DB_ADMIN_PASSWORD,
+  };
+  const admin = createPool({ ...credentials, database: undefined });
+  let pool,
+    created = false;
+  try {
+    await admin.query(
+      `CREATE DATABASE \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci`,
+    );
+    created = true;
+    pool = createPool({ ...credentials, database });
+    await applySchema(pool);
+    await pool.query(
+      "INSERT INTO users(id,name,email,phone,password_hash) VALUES(1,'学生','legacy@test.local','13700000001','hash')",
+    );
+    await pool.query(
+      "INSERT INTO parking_zones(id,name,location,x,y,radius,capacity) VALUES(1,'站点','校园',10,10,10,10)",
+    );
+    await pool.query(
+      "INSERT INTO bikes(id,code,deployed_at,current_zone_id) VALUES(1,'LEGACY-1','2024-01-01',1)",
+    );
+    await pool.query(
+      "INSERT INTO ride_orders(id,user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,amount_cents,distance_m,status) VALUES(1,1,1,1,1,'2024-01-01 00:00:00','2024-01-01 00:05:00',100,500,'UNPAID'),(2,1,1,1,1,'2024-01-02 00:00:00','2024-01-02 00:05:00',100,500,'UNPAID')",
+    );
+    await pool.query(
+      "INSERT INTO payments(order_id,idempotency_key,amount_cents) VALUES(1,'payment-legacy-1',100),(2,'payment-legacy-2',100)",
+    );
+    await pool.query("UPDATE ride_orders SET status='PAID'");
+    await pool.query(
+      "INSERT INTO carbon_transactions(id,order_id,entry_type,idempotency_key,distance_m,points_change,carbon_kg_change,factor_kg_per_km,rule_version,reason,created_at) VALUES(1,1,'AWARD','historic-key',500,5,0.1050,0.210,'old-rule','已有记录','2024-01-01 01:00:00.000')",
+    );
+    await pool.query("DROP VIEW carbon_ledger");
+    await pool.query(
+      "CREATE TABLE carbon_ledger(id BIGINT UNSIGNED PRIMARY KEY,order_id BIGINT UNSIGNED,distance_m INT,points INT,carbon_kg DECIMAL(12,4),factor_kg_per_km DECIMAL(5,3),created_at DATETIME(3))",
+    );
+    await pool.query(
+      "INSERT INTO carbon_ledger VALUES(1,2,500,5,0.1050,0.210,'2024-01-01 01:00:00.000')",
+    );
+    await pool.query(
+      "UPDATE system_settings SET value=JSON_OBJECT('version',0) WHERE name='pdf_expansion'",
+    );
+    await assert.rejects(
+      applyFeatureMigrations(pool),
+      /MIGRATION_CARBON_CONFLICT/,
+    );
+    const [[old]] = await pool.query(
+      "SELECT id,order_id,distance_m,points,carbon_kg FROM carbon_ledger",
+    );
+    assert.deepEqual(old, {
+      id: 1,
+      order_id: 2,
+      distance_m: 500,
+      points: 5,
+      carbon_kg: 0.105,
+    });
+    const [[current]] = await pool.query(
+      "SELECT id,order_id,idempotency_key,distance_m,points_change,carbon_kg_change FROM carbon_transactions",
+    );
+    assert.deepEqual(current, {
+      id: 1,
+      order_id: 1,
+      idempotency_key: "historic-key",
+      distance_m: 500,
+      points_change: 5,
+      carbon_kg_change: 0.105,
+    });
+    for (const mutation of [
+      "order_id=1,distance_m=501,factor_kg_per_km=0.210,created_at='2024-01-01 01:00:00.000'",
+      "order_id=1,distance_m=500,factor_kg_per_km=0.211,created_at='2024-01-01 01:00:00.000'",
+      "order_id=1,distance_m=500,factor_kg_per_km=0.210,created_at='2024-01-01 01:00:00.001'",
+    ]) {
+      await pool.query(`UPDATE carbon_ledger SET ${mutation} WHERE id=1`);
+      const [before] = await pool.query(
+        "SELECT * FROM carbon_ledger ORDER BY id",
+      );
+      await assert.rejects(
+        applyFeatureMigrations(pool),
+        /MIGRATION_CARBON_CONFLICT/,
+      );
+      assert.deepEqual(
+        (await pool.query("SELECT * FROM carbon_ledger ORDER BY id"))[0],
+        before,
+      );
+      assert.deepEqual(
+        (
+          await pool.query(
+            "SELECT id,order_id,idempotency_key,distance_m,points_change,carbon_kg_change FROM carbon_transactions",
+          )
+        )[0][0],
+        current,
+      );
+    }
+    await pool.query(
+      "UPDATE carbon_ledger SET order_id=1,distance_m=500,factor_kg_per_km=0.210,created_at='2024-01-01 01:00:00.000' WHERE id=1",
+    );
+    await pool.query("CREATE TABLE carbon_ledger_legacy LIKE carbon_ledger");
+    await assert.rejects(
+      applyFeatureMigrations(pool),
+      /MIGRATION_CARBON_LEGACY_COLLISION/,
+    );
+    await pool.query("DROP TABLE carbon_ledger_legacy");
+    await pool.query(
+      "INSERT INTO carbon_ledger VALUES(2,2,500,5,0.1050,0.210,'2024-01-02 01:00:00.000')",
+    );
+    await pool.query(
+      "UPDATE carbon_transactions SET idempotency_key='legacy-award-2' WHERE id=1",
+    );
+    await assert.rejects(
+      applyFeatureMigrations(pool),
+      /MIGRATION_CARBON_CONFLICT/,
+    );
+    await pool.query(
+      "UPDATE carbon_transactions SET idempotency_key='historic-key' WHERE id=1",
+    );
+    await pool.query("UPDATE carbon_ledger SET order_id=1 WHERE id=2");
+    await assert.rejects(
+      applyFeatureMigrations(pool),
+      /MIGRATION_CARBON_CONFLICT/,
+    );
+    await pool.query(
+      "UPDATE carbon_ledger SET order_id=2,distance_m=NULL WHERE id=2",
+    );
+    await assert.rejects(
+      applyFeatureMigrations(pool),
+      /MIGRATION_CARBON_CONFLICT/,
+    );
+    await pool.query("UPDATE carbon_ledger SET distance_m=500 WHERE id=2");
+    await pool.query("UPDATE ride_orders SET status='UNPAID' WHERE id=2");
+    await assert.rejects(
+      applyFeatureMigrations(pool),
+      /MIGRATION_CARBON_CONFLICT/,
+    );
+    await pool.query("UPDATE ride_orders SET status='PAID' WHERE id=2");
+    await pool.query("UPDATE payments SET amount_cents=101 WHERE order_id=2");
+    await assert.rejects(
+      applyFeatureMigrations(pool),
+      /MIGRATION_CARBON_CONFLICT/,
+    );
+    await pool.query("UPDATE payments SET amount_cents=100 WHERE order_id=2");
+    await pool.query("DELETE FROM payments WHERE order_id=2");
+    await assert.rejects(
+      applyFeatureMigrations(pool),
+      /MIGRATION_CARBON_CONFLICT/,
+    );
+    await pool.query("UPDATE ride_orders SET status='UNPAID' WHERE id=2");
+    await pool.query(
+      "INSERT INTO payments(order_id,idempotency_key,amount_cents) VALUES(2,'payment-legacy-2',100)",
+    );
+    await pool.query("UPDATE ride_orders SET status='PAID' WHERE id=2");
+    const [[beforeRestore]] = await pool.query(
+      "SELECT COUNT(*) AS n FROM carbon_transactions",
+    );
+    assert.equal(beforeRestore.n, 1);
+    await pool.query("ALTER TABLE carbon_ledger MODIFY created_at DATETIME(6)");
+    await pool.query(
+      "UPDATE carbon_ledger SET created_at='2024-01-02 01:00:00.000001' WHERE id=2",
+    );
+    await assert.rejects(
+      applyFeatureMigrations(pool),
+      /MIGRATION_CARBON_VERIFY_FAILED/,
+    );
+    const [[legacyStillPresent]] = await pool.query(
+      "SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='carbon_ledger' AND table_type='BASE TABLE'",
+    );
+    assert.equal(legacyStillPresent.n, 1);
+    const [[legacyTime]] = await pool.query(
+      "SELECT DATE_FORMAT(created_at,'%Y-%m-%d %H:%i:%s.%f') AS value FROM carbon_ledger WHERE id=2",
+    );
+    assert.equal(legacyTime.value, "2024-01-02 01:00:00.000001");
+    await pool.query(
+      "UPDATE carbon_ledger SET created_at='2024-01-02 01:00:00.000000' WHERE id=2",
+    );
+    assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
+      "pdf_expansion@14",
+    ]);
+    const [awards] = await pool.query(
+      "SELECT id,order_id,idempotency_key,distance_m,points_change,carbon_kg_change,rule_version FROM carbon_transactions ORDER BY id",
+    );
+    assert.deepEqual(awards, [
+      { ...current, rule_version: "old-rule" },
+      {
+        id: 2,
+        order_id: 2,
+        idempotency_key: "legacy-award-2",
+        distance_m: 500,
+        points_change: 5,
+        carbon_kg_change: 0.105,
+        rule_version: "legacy-v1",
+      },
+    ]);
+    const [[legacyRows]] = await pool.query(
+      "SELECT COUNT(*) AS n FROM carbon_ledger_legacy",
+    );
+    assert.equal(legacyRows.n, 2);
+    const [[compatibilityView]] = await pool.query(
+      "SELECT table_type AS kind FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='carbon_ledger'",
+    );
+    assert.equal(compatibilityView.kind, "VIEW");
+    const [compatibilityRows] = await pool.query(
+      "SELECT id,order_id,distance_m,points,carbon_kg FROM carbon_ledger ORDER BY id",
+    );
+    assert.deepEqual(compatibilityRows, [
+      { id: 1, order_id: 1, distance_m: 500, points: 5, carbon_kg: 0.105 },
+      { id: 2, order_id: 2, distance_m: 500, points: 5, carbon_kg: 0.105 },
+    ]);
+    await pool.query(
+      "INSERT INTO ride_orders(id,user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,amount_cents,distance_m,status) VALUES(3,1,1,1,1,'2024-01-03 00:00:00','2024-01-03 00:05:00',100,500,'UNPAID')",
+    );
+    await pool.query(
+      "INSERT INTO payments(order_id,idempotency_key,amount_cents) VALUES(3,'payment-modern-3',100)",
+    );
+    await pool.query("UPDATE ride_orders SET status='PAID' WHERE id=3");
+    await pool.query(
+      "INSERT INTO carbon_transactions(id,order_id,entry_type,idempotency_key,distance_m,points_change,carbon_kg_change,factor_kg_per_km,rule_version,reason,created_at) VALUES(3,3,'AWARD','modern-award-3',500,5,0.105,0.210,'carbon-v1','后续记录','2024-01-03 01:00:00.000')",
+    );
+    await pool.query(
+      "UPDATE system_settings SET value=JSON_OBJECT('version',13) WHERE name='pdf_expansion'",
+    );
+    await pool.query(
+      "UPDATE carbon_transactions SET distance_m=501 WHERE id=1",
+    );
+    await assert.rejects(
+      applyFeatureMigrations(pool),
+      /MIGRATION_CARBON_CONFLICT/,
+    );
+    const [[stillDifferent]] = await pool.query(
+      "SELECT distance_m FROM carbon_transactions WHERE id=1",
+    );
+    assert.equal(stillDifferent.distance_m, 501);
+    await pool.query(
+      "UPDATE carbon_transactions SET distance_m=500 WHERE id=1",
+    );
+    await pool.query("DROP VIEW carbon_ledger");
+    await pool.query("CREATE TABLE carbon_ledger LIKE carbon_ledger_legacy");
+    await pool.query(
+      "INSERT INTO carbon_ledger SELECT * FROM carbon_ledger_legacy",
+    );
+    await assert.rejects(
+      applyFeatureMigrations(pool),
+      /MIGRATION_CARBON_LEGACY_COLLISION/,
+    );
+    const [[retained]] = await pool.query(
+      "SELECT (SELECT COUNT(*) FROM carbon_ledger) source_rows,(SELECT COUNT(*) FROM carbon_ledger_legacy) backup_rows",
+    );
+    assert.deepEqual(retained, { source_rows: 2, backup_rows: 2 });
+    await pool.query("DROP TABLE carbon_ledger");
+    assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
+      "pdf_expansion@14",
+    ]);
+    const [[restored]] = await pool.query(
+      "SELECT table_type AS kind FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='carbon_ledger'",
+    );
+    assert.equal(restored.kind, "VIEW");
+    assert.deepEqual(
+      (
+        await pool.query(
+          "SELECT id,order_id,distance_m,points,carbon_kg FROM carbon_ledger ORDER BY id",
+        )
+      )[0],
+      [
+        ...compatibilityRows,
+        { id: 3, order_id: 3, distance_m: 500, points: 5, carbon_kg: 0.105 },
+      ],
+    );
+    assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
+  } finally {
+    if (pool) await pool.end();
+    if (created) await admin.query(`DROP DATABASE IF EXISTS \`${database}\``);
     await admin.end();
   }
 });
@@ -553,14 +829,14 @@ test("schema initialization rejects unknown or malformed migration versions befo
       "INSERT INTO users(id,name,email,phone,password_hash,role) VALUES(1,'测试用户','version@test.local','13700000001','hash','STUDENT')",
     );
     await pool.query(
-      "UPDATE system_settings SET value=JSON_OBJECT('version','13') WHERE name='pdf_expansion'",
+      "UPDATE system_settings SET value=JSON_OBJECT('version','14') WHERE name='pdf_expansion'",
     );
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
     const [[revisionBefore]] = await pool.query(
       "SELECT value FROM system_settings WHERE name='procedure_revision'",
     );
     const versions = [
-      ["JSON_OBJECT('version',14)", /UNSUPPORTED_SCHEMA_VERSION/],
+      ["JSON_OBJECT('version',15)", /UNSUPPORTED_SCHEMA_VERSION/],
       ["JSON_OBJECT('version',999999)", /UNSUPPORTED_SCHEMA_VERSION/],
       [
         "CAST('{\"version\":18446744073709551615}' AS JSON)",

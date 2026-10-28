@@ -88,7 +88,7 @@ SELECT 1;
 -- name: schema_version_compatible
 SELECT EXISTS(SELECT 1 FROM system_settings WHERE name='pdf_expansion'
  AND JSON_TYPE(JSON_EXTRACT(value,'$.version')) IN ('INTEGER','STRING')
- AND BINARY JSON_UNQUOTE(JSON_EXTRACT(value,'$.version'))=BINARY '13')
+ AND BINARY JSON_UNQUOTE(JSON_EXTRACT(value,'$.version'))=BINARY '14')
  AND EXISTS(SELECT 1 FROM system_settings WHERE name='procedure_revision'
  AND BINARY JSON_UNQUOTE(JSON_EXTRACT(value,'$.sha256'))=BINARY ?) AS compatible;
 -- name: clear_procedure_revision

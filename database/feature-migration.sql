@@ -4,11 +4,8 @@ CREATE PROCEDURE __MIGRATION_PROCEDURE__(IN p_preparing BOOLEAN)
 SQL SECURITY INVOKER
 migration: BEGIN
   DECLARE current_version INT DEFAULT 0;
-  DECLARE old_count, new_count BIGINT DEFAULT 0;
   DECLARE has_staff_name, has_staff_phone, has_road_source, seed_road_attributes BOOLEAN DEFAULT FALSE;
   DECLARE road_attribute_count INT DEFAULT 0;
-  DECLARE old_points, new_points BIGINT DEFAULT 0;
-  DECLARE old_carbon, new_carbon DECIMAL(20,4) DEFAULT 0;
   IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='users' AND table_type='BASE TABLE') THEN
     SELECT 0 AS migrated;
     LEAVE migration;
@@ -22,7 +19,7 @@ migration: BEGIN
   END IF;
   IF EXISTS(SELECT 1 FROM system_settings WHERE name='pdf_expansion' AND
     CASE WHEN CHAR_LENGTH(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')))>2 THEN TRUE
-    ELSE CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)>13 END) THEN
+    ELSE CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)>14 END) THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='UNSUPPORTED_SCHEMA_VERSION: use the matching newer application version';
   END IF;
   SELECT COALESCE(MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)),0) INTO current_version FROM system_settings WHERE name='pdf_expansion';
@@ -38,10 +35,23 @@ migration: BEGIN
     END IF;
     SET seed_road_attributes=(road_attribute_count=0 AND NOT has_road_source);
   END IF;
-  IF p_preparing OR current_version<13 THEN
+  IF current_version>=1 AND current_version<14 THEN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='carbon_ledger' AND table_type='BASE TABLE') THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='MIGRATION_CARBON_LEGACY_COLLISION';
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='carbon_ledger_legacy' AND table_type='BASE TABLE') THEN
+      IF EXISTS (SELECT 1 FROM carbon_ledger_legacy l LEFT JOIN carbon_transactions c ON c.id=l.id WHERE c.id IS NULL OR
+          NOT (c.entry_type<=>'AWARD') OR NOT (c.order_id<=>l.order_id) OR NOT (c.distance_m<=>l.distance_m)
+          OR NOT (c.points_change<=>l.points) OR NOT (c.carbon_kg_change<=>l.carbon_kg)
+          OR NOT (c.factor_kg_per_km<=>l.factor_kg_per_km) OR NOT (c.created_at<=>l.created_at)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='MIGRATION_CARBON_CONFLICT';
+      END IF;
+    END IF;
+  END IF;
+  IF p_preparing OR current_version<14 THEN
     DELETE FROM system_settings WHERE name='procedure_revision';
   END IF;
-  IF current_version = 13 THEN
+  IF current_version = 14 THEN
     SELECT 0 AS migrated;
     LEAVE migration;
   END IF;
@@ -178,16 +188,33 @@ migration: BEGIN
     ) ENGINE=InnoDB;
     END IF;
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='carbon_ledger' AND table_type='BASE TABLE') THEN
-      INSERT IGNORE INTO carbon_transactions (id,order_id,entry_type,idempotency_key,distance_m,points_change,carbon_kg_change,factor_kg_per_km,rule_version,reason,created_at)
-        SELECT id,order_id,'AWARD',CONCAT('legacy-award-',order_id),distance_m,points,carbon_kg,factor_kg_per_km,'legacy-v1','历史积分迁移',created_at FROM carbon_ledger;
-      SELECT COUNT(*),COALESCE(SUM(points),0),COALESCE(SUM(carbon_kg),0) INTO old_count,old_points,old_carbon FROM carbon_ledger;
-      SELECT COUNT(*),COALESCE(SUM(points_change),0),COALESCE(SUM(carbon_kg_change),0) INTO new_count,new_points,new_carbon FROM carbon_transactions WHERE entry_type='AWARD';
-      IF old_count<>new_count OR old_points<>new_points OR old_carbon<>new_carbon THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Carbon migration verification failed';
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='carbon_ledger_legacy') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='MIGRATION_CARBON_LEGACY_COLLISION';
       END IF;
-      IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='carbon_ledger_legacy' AND table_type='BASE TABLE') THEN
-        RENAME TABLE carbon_ledger TO carbon_ledger_legacy;
+      IF EXISTS (SELECT 1 FROM carbon_ledger l LEFT JOIN ride_orders r ON r.id=l.order_id LEFT JOIN payments p ON p.order_id=l.order_id
+        WHERE r.id IS NULL OR p.id IS NULL OR NOT (r.status<=>'PAID') OR NOT (p.amount_cents<=>r.amount_cents)
+          OR l.distance_m IS NULL OR l.points IS NULL OR l.carbon_kg IS NULL OR l.factor_kg_per_km IS NULL OR l.created_at IS NULL
+          OR l.distance_m<0 OR l.points<0 OR l.carbon_kg<0 OR l.factor_kg_per_km<0)
+        OR EXISTS (SELECT 1 FROM carbon_ledger GROUP BY order_id HAVING COUNT(*)>1)
+        OR EXISTS (SELECT 1 FROM carbon_ledger l JOIN carbon_transactions c ON c.id=l.id WHERE
+          NOT (c.entry_type<=>'AWARD') OR NOT (c.order_id<=>l.order_id) OR NOT (c.distance_m<=>l.distance_m)
+          OR NOT (c.points_change<=>l.points) OR NOT (c.carbon_kg_change<=>l.carbon_kg)
+          OR NOT (c.factor_kg_per_km<=>l.factor_kg_per_km) OR NOT (c.created_at<=>l.created_at))
+        OR EXISTS (SELECT 1 FROM carbon_transactions c LEFT JOIN carbon_ledger l ON l.id=c.id WHERE c.entry_type='AWARD' AND l.id IS NULL)
+        OR EXISTS (SELECT 1 FROM carbon_ledger l JOIN carbon_transactions c ON c.idempotency_key=CONCAT('legacy-award-',l.order_id) WHERE c.id<>l.id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='MIGRATION_CARBON_CONFLICT';
       END IF;
+      INSERT INTO carbon_transactions (id,order_id,entry_type,idempotency_key,distance_m,points_change,carbon_kg_change,factor_kg_per_km,rule_version,reason,created_at)
+        SELECT l.id,l.order_id,'AWARD',CONCAT('legacy-award-',l.order_id),l.distance_m,l.points,l.carbon_kg,l.factor_kg_per_km,'legacy-v1','历史积分迁移',l.created_at
+        FROM carbon_ledger l LEFT JOIN carbon_transactions c ON c.id=l.id WHERE c.id IS NULL;
+      IF EXISTS (SELECT 1 FROM carbon_ledger l LEFT JOIN carbon_transactions c ON c.id=l.id WHERE c.id IS NULL OR
+          NOT (c.entry_type<=>'AWARD') OR NOT (c.order_id<=>l.order_id) OR NOT (c.distance_m<=>l.distance_m)
+          OR NOT (c.points_change<=>l.points) OR NOT (c.carbon_kg_change<=>l.carbon_kg)
+          OR NOT (c.factor_kg_per_km<=>l.factor_kg_per_km) OR NOT (c.created_at<=>l.created_at))
+        OR EXISTS (SELECT 1 FROM carbon_transactions c LEFT JOIN carbon_ledger l ON l.id=c.id WHERE c.entry_type='AWARD' AND l.id IS NULL) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='MIGRATION_CARBON_VERIFY_FAILED';
+      END IF;
+      RENAME TABLE carbon_ledger TO carbon_ledger_legacy;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='dispatch_suggestions' AND table_type='BASE TABLE') THEN
       CREATE TABLE dispatch_suggestions (
@@ -280,7 +307,7 @@ migration: BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='carbon_transactions' AND column_name='points_per_km') THEN
     ALTER TABLE carbon_transactions ADD COLUMN points_per_km DECIMAL(20,8) NULL;
   END IF;
-  IF EXISTS (SELECT 1 FROM information_schema.views WHERE table_schema=DATABASE() AND table_name='carbon_ledger') THEN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='carbon_ledger' AND table_type='BASE TABLE') THEN
     CREATE OR REPLACE VIEW carbon_ledger AS
       SELECT id,order_id,distance_m,points_change points,carbon_kg_change carbon_kg,factor_kg_per_km,created_at
       FROM carbon_transactions WHERE entry_type='AWARD';
@@ -336,6 +363,6 @@ migration: BEGIN
        COALESCE(SUM(CASE WHEN c.entry_type='AWARD' AND r.status='PAID' AND r.qualification_status='VALID' THEN c.distance_m ELSE 0 END),0) distance_m
       FROM users u LEFT JOIN ride_orders r ON r.user_id=u.id LEFT JOIN carbon_transactions c ON c.order_id=r.id GROUP BY u.id;
   END IF;
-  INSERT INTO system_settings(name,value) VALUES('pdf_expansion',JSON_OBJECT('version',13,'applied_at',UTC_TIMESTAMP(3))) ON DUPLICATE KEY UPDATE value=VALUES(value);
+  INSERT INTO system_settings(name,value) VALUES('pdf_expansion',JSON_OBJECT('version',14,'applied_at',UTC_TIMESTAMP(3))) ON DUPLICATE KEY UPDATE value=VALUES(value);
   SELECT 1 AS migrated;
 END
