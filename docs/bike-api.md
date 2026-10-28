@@ -31,7 +31,7 @@
 - GET /routes?from=1&to=2&mode=shortest|safe|comfortable -> {nodes:[{id,name,x,y}],edges:[{id,from_node_id,to_node_id,distance_m,safety_cost,comfort_cost}],path:number[],distance_m,duration_minutes,mode}; 同站返回零里程。
 - GET /leaderboard?period=week|month&metric=points|distance|rides -> {period,metric,rows:[{rank,user_id,name,rides,distance_m,points,carbon_kg}],me,window}；me 为个人结果，没有有效记录时 rank 为 null；rows 只包含自愿公开的参与者。
 - GET /schema -> {entities:[{table,name,description,columns:[{name,type,key,nullable}],count}],relationships:[{name,from,to,cardinality,description}],objects:{views:string[],triggers:string[],procedures:string[]}}
-- GET /report -> 报告 HTML；生成报告后也可直接访问不带 /api 前缀的 /docs/ER图.svg 和 /docs/数据库课程设计报告.html。
+- GET /report -> 报告 HTML；生成报告后也可直接访问不带 /api 前缀的 /docs/ER图.svg 和 /docs/数据库课程设计报告.html；其他文档路径返回 404。
 
 ## analytics.mjs 给后端的导出接口
 

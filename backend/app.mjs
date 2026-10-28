@@ -47,6 +47,7 @@ import {
 } from "./history.mjs";
 import { schemaInfo } from "./schema-info.mjs";
 const root = fileURLToPath(new URL("../", import.meta.url));
+const publicDocuments = new Set(["ER图.svg", "数据库课程设计报告.html"]);
 export function createApp(pool) {
   const app = express();
   app.disable("x-powered-by");
@@ -336,12 +337,11 @@ export function createApp(pool) {
   app.use("/api", (_req, res) =>
     res.status(404).json({ error: "接口不存在", code: "NOT_FOUND" }),
   );
-  app.get("/docs/ER图.svg", (_req, res) =>
-    res.sendFile(path.join(root, "docs", "ER图.svg")),
-  );
-  app.get("/docs/数据库课程设计报告.html", (_req, res) =>
-    res.sendFile(path.join(root, "docs", "数据库课程设计报告.html")),
-  );
+  app.get("/docs/:document", (req, res, next) => {
+    if (!publicDocuments.has(req.params.document)) return next();
+    res.sendFile(path.join(root, "docs", req.params.document));
+  });
+  app.use("/docs", (_req, res) => res.status(404).send("文件不存在"));
   app.use(express.static(path.join(root, "dist")));
   app.get("/{*path}", (_req, res) =>
     res.sendFile(path.join(root, "dist", "index.html")),

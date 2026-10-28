@@ -5,7 +5,8 @@ SQL SECURITY INVOKER
 migration: BEGIN
   DECLARE current_version INT DEFAULT 0;
   DECLARE old_count, new_count BIGINT DEFAULT 0;
-  DECLARE has_staff_name, has_staff_phone BOOLEAN DEFAULT FALSE;
+  DECLARE has_staff_name, has_staff_phone, has_road_source, seed_road_attributes BOOLEAN DEFAULT FALSE;
+  DECLARE road_attribute_count INT DEFAULT 0;
   DECLARE old_points, new_points BIGINT DEFAULT 0;
   DECLARE old_carbon, new_carbon DECIMAL(20,4) DEFAULT 0;
   IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='users' AND table_type='BASE TABLE') THEN
@@ -25,6 +26,18 @@ migration: BEGIN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='UNSUPPORTED_SCHEMA_VERSION: use the matching newer application version';
   END IF;
   SELECT COALESCE(MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)),0) INTO current_version FROM system_settings WHERE name='pdf_expansion';
+  IF current_version < 1 THEN
+    SELECT COUNT(*) INTO road_attribute_count FROM information_schema.columns
+    WHERE table_schema=DATABASE() AND table_name='road_edges' AND column_name IN
+      ('slope_percent','surface','shade_level','lighting_level','traffic_mix','intersection_risk');
+    SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='road_edges' AND column_name='attribute_source') INTO has_road_source;
+    IF has_road_source AND road_attribute_count<6 THEN
+      IF EXISTS(SELECT 1 FROM road_edges WHERE attribute_source='MEASURED') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='MIGRATION_INCOMPLETE_MEASURED_ROADS';
+      END IF;
+    END IF;
+    SET seed_road_attributes=(road_attribute_count=0 AND NOT has_road_source);
+  END IF;
   IF p_preparing OR current_version<13 THEN
     DELETE FROM system_settings WHERE name='procedure_revision';
   END IF;
@@ -109,7 +122,7 @@ migration: BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='return_attempts' AND column_name='reviewed_at') THEN
       ALTER TABLE `return_attempts` ADD COLUMN `reviewed_at` DATETIME(3) NULL;
     END IF;
-    UPDATE return_attempts SET location_captured_at=created_at,location_source='HISTORICAL_SIMULATION' WHERE location_captured_at IS NULL OR location_source IS NULL;
+    UPDATE return_attempts SET location_captured_at=COALESCE(location_captured_at,created_at),location_source=COALESCE(location_source,'HISTORICAL_SIMULATION') WHERE location_captured_at IS NULL OR location_source IS NULL;
     ALTER TABLE return_attempts MODIFY location_captured_at DATETIME(3) NOT NULL, MODIFY location_source ENUM('MAP_SIMULATION','DEVICE_GPS','MANUAL','HISTORICAL_SIMULATION') NOT NULL;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='road_edges' AND column_name='direction') THEN
       ALTER TABLE `road_edges` ADD COLUMN `direction` ENUM('BOTH','FORWARD','REVERSE') NOT NULL DEFAULT 'BOTH';
@@ -138,11 +151,13 @@ migration: BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='road_edges' AND column_name='attribute_source') THEN
       ALTER TABLE `road_edges` ADD COLUMN `attribute_source` ENUM('SIMULATED_COURSE_DATA','MEASURED') NOT NULL DEFAULT 'SIMULATED_COURSE_DATA';
     END IF;
-    UPDATE road_edges SET slope_percent=((CAST(MOD(id,5) AS SIGNED)-2)*1.5),
-      surface=CASE WHEN MOD(id,5)=0 THEN 'ROUGH' WHEN MOD(id,2)=0 THEN 'AVERAGE' ELSE 'SMOOTH' END,
-      shade_level=LEAST(5,2+MOD(id,4)),lighting_level=5-MOD(id,3),
-      traffic_mix=CASE WHEN MOD(id,7)=0 THEN 'MOTOR_HEAVY' WHEN MOD(id,3)=0 THEN 'BIKE_ONLY' ELSE 'MIXED' END,
-      intersection_risk=MOD(id,4),attribute_source='SIMULATED_COURSE_DATA';
+    IF seed_road_attributes THEN
+      UPDATE road_edges SET slope_percent=((CAST(MOD(id,5) AS SIGNED)-2)*1.5),
+        surface=CASE WHEN MOD(id,5)=0 THEN 'ROUGH' WHEN MOD(id,2)=0 THEN 'AVERAGE' ELSE 'SMOOTH' END,
+        shade_level=LEAST(5,2+MOD(id,4)),lighting_level=5-MOD(id,3),
+        traffic_mix=CASE WHEN MOD(id,7)=0 THEN 'MOTOR_HEAVY' WHEN MOD(id,3)=0 THEN 'BIKE_ONLY' ELSE 'MIXED' END,
+        intersection_risk=MOD(id,4),attribute_source='SIMULATED_COURSE_DATA';
+    END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='carbon_transactions' AND table_type='BASE TABLE') THEN
       CREATE TABLE carbon_transactions (
       id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

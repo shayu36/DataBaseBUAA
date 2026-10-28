@@ -140,6 +140,28 @@ test("login form validates and demo account opens campus dashboard", async ({
     page.getByRole("heading", { name: "核心关系", exact: true }),
   ).toBeVisible();
 });
+test("数据库设计页面打开实体关系图和完整报告", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  await page.getByRole("button", { name: "数据库设计", exact: true }).click();
+  const [diagram] = await Promise.all([
+    page.waitForEvent("popup"),
+    page.getByRole("link", { name: "打开完整 E-R 图" }).click(),
+  ]);
+  await expect(diagram.locator("svg")).toBeVisible();
+  const [report] = await Promise.all([
+    page.waitForEvent("popup"),
+    page.getByRole("link", { name: "查看课程报告" }).click(),
+  ]);
+  await expect(
+    report.getByRole("heading", { name: "dispatch_suggestions", exact: true }),
+  ).toBeVisible();
+  await expect(
+    report.getByRole("heading", { name: "risk_alerts", exact: true }),
+  ).toBeVisible();
+});
+
 test("student sees personal rides and responsive navigation", async ({
   page,
 }) => {

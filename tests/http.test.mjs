@@ -79,6 +79,32 @@ after(async () => {
   if (server) await new Promise((r) => server.close(r));
   await pool.end();
 });
+test("encoded Chinese documentation URLs serve the intended generated files", async () => {
+  await import("../scripts/render-report.mjs");
+  const diagram = await fetch(base + "/docs/" + encodeURIComponent("ER图.svg"));
+  assert.equal(diagram.status, 200);
+  assert.match(diagram.headers.get("content-type"), /^image\/svg\+xml/);
+  assert.match(await diagram.text(), /<svg\b/);
+  const report = await fetch(
+    base + "/docs/" + encodeURIComponent("数据库课程设计报告.html"),
+  );
+  assert.equal(report.status, 200);
+  assert.match(report.headers.get("content-type"), /^text\/html/);
+  assert.match(await report.text(), /dispatch_suggestions/);
+  const authenticated = await fetch(base + "/api/report", {
+    headers: { Cookie: studentCookie },
+  });
+  assert.equal(authenticated.status, 200);
+  assert.match(await authenticated.text(), /dispatch_suggestions/);
+  for (const path of [
+    "/docs/README.md",
+    "/docs/..%2FREADME.md",
+    "/docs/evidence/report.txt",
+  ]) {
+    assert.equal((await fetch(base + path)).status, 404);
+  }
+});
+
 test("health identifies campus bike and protected routes need login", async () => {
   assert.equal((await request("/api/health")).data.system, "campus-bike");
   assert.equal((await request("/api/dashboard")).status, 401);

@@ -93,6 +93,27 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
       "INSERT INTO road_nodes VALUES(1,'起点',100,100,1),(2,'路口',200,100,NULL)",
     );
     await pool.query("INSERT INTO road_edges VALUES(1,1,2,100,1,1)");
+    await pool.query(
+      "ALTER TABLE return_attempts ADD COLUMN location_captured_at DATETIME(3) NULL, ADD COLUMN location_source ENUM('MAP_SIMULATION','DEVICE_GPS','MANUAL','HISTORICAL_SIMULATION') NULL",
+    );
+    await pool.query(
+      "UPDATE return_attempts SET location_captured_at='2024-01-01 01:02:03.123' WHERE id=1",
+    );
+    await pool.query(
+      "INSERT INTO return_attempts(id,order_id,zone_id,x,y,reason,created_at,location_source) VALUES(2,1,1,0,0,'OUTSIDE_FENCE','2024-01-02 03:04:05.123','DEVICE_GPS')",
+    );
+    await pool.query(
+      "INSERT INTO return_attempts(id,order_id,zone_id,x,y,reason,created_at,location_captured_at,location_source) VALUES(3,1,1,0,0,'OUTSIDE_FENCE','2024-01-03 12:00:00.000','2024-01-03 11:59:59.456','MANUAL')",
+    );
+    await pool.query(
+      "ALTER TABLE road_edges ADD COLUMN slope_percent DECIMAL(5,2) NOT NULL DEFAULT 0, ADD COLUMN surface ENUM('SMOOTH','AVERAGE','ROUGH') NOT NULL DEFAULT 'SMOOTH', ADD COLUMN shade_level TINYINT UNSIGNED NOT NULL DEFAULT 3, ADD COLUMN lighting_level TINYINT UNSIGNED NOT NULL DEFAULT 3, ADD COLUMN traffic_mix ENUM('BIKE_ONLY','MIXED','MOTOR_HEAVY') NOT NULL DEFAULT 'MIXED', ADD COLUMN intersection_risk TINYINT UNSIGNED NOT NULL DEFAULT 1, ADD COLUMN attribute_source ENUM('SIMULATED_COURSE_DATA','MEASURED') NOT NULL DEFAULT 'SIMULATED_COURSE_DATA'",
+    );
+    await pool.query(
+      "UPDATE road_edges SET slope_percent=7.25,surface='ROUGH',shade_level=5,lighting_level=2,traffic_mix='BIKE_ONLY',intersection_risk=4,attribute_source='MEASURED' WHERE id=1",
+    );
+    const [[originalEdge]] = await pool.query(
+      "SELECT slope_percent,surface,shade_level,lighting_level,traffic_mix,intersection_risk,attribute_source FROM road_edges WHERE id=1",
+    );
 
     await pool.query("UPDATE payments SET idempotency_key=NULL WHERE id=1");
     await assert.rejects(
@@ -117,6 +138,30 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
       "SELECT value FROM system_settings WHERE name='carbon'",
     );
     assert.deepEqual(migratedRule, originalRule);
+    const [[migratedEdge]] = await pool.query(
+      "SELECT slope_percent,surface,shade_level,lighting_level,traffic_mix,intersection_risk,attribute_source FROM road_edges WHERE id=1",
+    );
+    assert.deepEqual(migratedEdge, originalEdge);
+    const [evidence] = await pool.query(
+      "SELECT id,DATE_FORMAT(location_captured_at,'%Y-%m-%d %H:%i:%s.%f') captured,location_source FROM return_attempts ORDER BY id",
+    );
+    assert.deepEqual(evidence, [
+      {
+        id: 1,
+        captured: "2024-01-01 01:02:03.123000",
+        location_source: "HISTORICAL_SIMULATION",
+      },
+      {
+        id: 2,
+        captured: "2024-01-02 03:04:05.123000",
+        location_source: "DEVICE_GPS",
+      },
+      {
+        id: 3,
+        captured: "2024-01-03 11:59:59.456000",
+        location_source: "MANUAL",
+      },
+    ]);
     for (const [legacyRule, expected] of [
       [
         { kg_per_km: 0.42, points_per_km: 8, extra: "保留" },
@@ -303,7 +348,7 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
     assert.deepEqual(edge, {
       direction: "BOTH",
       status: "OPEN",
-      attribute_source: "SIMULATED_COURSE_DATA",
+      attribute_source: "MEASURED",
     });
     // Version 1 installations need the constraints introduced in version 2.
     await pool.query("ALTER TABLE road_edges DROP CHECK chk_road_attributes");
@@ -383,6 +428,103 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
   } finally {
     await pool.end();
     await admin.query(`DROP DATABASE IF EXISTS \`${dbName}\``);
+    await admin.end();
+  }
+});
+
+test("migration preserves partial roads and rejects incomplete measured attributes", async () => {
+  const database = `campus_bike_road_migration_${randomBytes(4).toString("hex")}`;
+  const credentials = {
+    user: process.env.DB_ADMIN_USER,
+    password: process.env.DB_ADMIN_PASSWORD,
+  };
+  const admin = createPool({ ...credentials, database: undefined });
+  let pool,
+    created = false;
+  try {
+    await admin.query(
+      `CREATE DATABASE \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci`,
+    );
+    created = true;
+    pool = createPool({ ...credentials, database });
+    await applySchema(pool);
+    await pool.query(
+      "INSERT INTO road_nodes(id,name,x,y) VALUES(1,'起点',0,0),(2,'终点',10,10)",
+    );
+    await pool.query(
+      "INSERT INTO road_edges(id,from_node_id,to_node_id,distance_m,slope_percent,surface,shade_level,lighting_level,traffic_mix,intersection_risk,attribute_source) VALUES(1,1,2,15,7.25,'ROUGH',5,2,'BIKE_ONLY',4,'MEASURED')",
+    );
+    await pool.query(
+      "ALTER TABLE road_edges DROP CHECK chk_road_attributes, DROP COLUMN lighting_level",
+    );
+    await pool.query(
+      "UPDATE system_settings SET value=JSON_OBJECT('version',0) WHERE name='pdf_expansion'",
+    );
+    const [[beforeRevision]] = await pool.query(
+      "SELECT value FROM system_settings WHERE name='procedure_revision'",
+    );
+    const [[before]] = await pool.query(
+      "SELECT slope_percent,surface,shade_level,traffic_mix,intersection_risk,attribute_source FROM road_edges WHERE id=1",
+    );
+    await assert.rejects(
+      applyFeatureMigrations(pool),
+      /MIGRATION_INCOMPLETE_MEASURED_ROADS/,
+    );
+    assert.deepEqual(
+      (
+        await pool.query(
+          "SELECT slope_percent,surface,shade_level,traffic_mix,intersection_risk,attribute_source FROM road_edges WHERE id=1",
+        )
+      )[0][0],
+      before,
+    );
+    assert.deepEqual(
+      (
+        await pool.query(
+          "SELECT value FROM system_settings WHERE name='procedure_revision'",
+        )
+      )[0][0],
+      beforeRevision,
+    );
+    const [[missing]] = await pool.query(
+      "SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='road_edges' AND column_name='lighting_level'",
+    );
+    assert.equal(missing.n, 0);
+    await pool.query(
+      "UPDATE road_edges SET attribute_source='SIMULATED_COURSE_DATA' WHERE id=1",
+    );
+    await applyFeatureMigrations(pool);
+    const [[partial]] = await pool.query(
+      "SELECT slope_percent,surface,shade_level,lighting_level,traffic_mix,intersection_risk,attribute_source FROM road_edges WHERE id=1",
+    );
+    assert.deepEqual(partial, {
+      ...before,
+      attribute_source: "SIMULATED_COURSE_DATA",
+      lighting_level: 3,
+    });
+    assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
+    await pool.query(
+      "ALTER TABLE road_edges DROP CHECK chk_road_attributes, DROP COLUMN slope_percent, DROP COLUMN surface, DROP COLUMN shade_level, DROP COLUMN lighting_level, DROP COLUMN traffic_mix, DROP COLUMN intersection_risk, DROP COLUMN attribute_source",
+    );
+    await pool.query(
+      "UPDATE system_settings SET value=JSON_OBJECT('version',0) WHERE name='pdf_expansion'",
+    );
+    await applyFeatureMigrations(pool);
+    const [[fresh]] = await pool.query(
+      "SELECT slope_percent,surface,shade_level,lighting_level,traffic_mix,intersection_risk,attribute_source FROM road_edges WHERE id=1",
+    );
+    assert.deepEqual(fresh, {
+      slope_percent: -1.5,
+      surface: "SMOOTH",
+      shade_level: 3,
+      lighting_level: 4,
+      traffic_mix: "MIXED",
+      intersection_risk: 1,
+      attribute_source: "SIMULATED_COURSE_DATA",
+    });
+  } finally {
+    if (pool) await pool.end();
+    if (created) await admin.query(`DROP DATABASE IF EXISTS \`${database}\``);
     await admin.end();
   }
 });
