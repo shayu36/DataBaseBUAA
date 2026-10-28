@@ -53,6 +53,39 @@ const navigation = [
   { id: "admin", name: "基础资料", icon: Settings, roles: ["ADMIN"] },
   { id: "schema", name: "数据库设计", icon: Database },
 ];
+function BeijingDate() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const day = 24 * 60 * 60 * 1000;
+    const offset = 8 * 60 * 60 * 1000;
+    let timer: number;
+    const schedule = () => {
+      window.clearTimeout(timer);
+      const current = Date.now();
+      setNow(current);
+      timer = window.setTimeout(schedule, day - ((current + offset) % day));
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") schedule();
+    };
+    schedule();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
+  return (
+    <span className="date">
+      {new Date(now).toLocaleDateString("zh-CN", {
+        timeZone: "Asia/Shanghai",
+        month: "long",
+        day: "numeric",
+        weekday: "long",
+      })}
+    </span>
+  );
+}
 function Login({ onLogin }: { onLogin: (u: User) => void }) {
   const [register, setRegister] = useState(false),
     [email, setEmail] = useState(""),
@@ -368,14 +401,7 @@ export default function App() {
             <h1>{current.name}</h1>
           </div>
           <div className="header-right">
-            <span className="date">
-              {new Date().toLocaleDateString("zh-CN", {
-                timeZone: "Asia/Shanghai",
-                month: "long",
-                day: "numeric",
-                weekday: "long",
-              })}
-            </span>
+            <BeijingDate />
             <button
               className="icon-btn"
               aria-label="刷新数据"

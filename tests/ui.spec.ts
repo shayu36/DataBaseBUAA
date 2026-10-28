@@ -389,11 +389,17 @@ for (const timezoneId of ["UTC", "America/Los_Angeles", "Asia/Shanghai"]) {
           });
         return route.fulfill({ json: regressionDashboard });
       });
-      await page.clock.setFixedTime(new Date("2026-10-27T15:59:00Z"));
+      await page.clock.install({ time: new Date("2026-10-27T15:59:00Z") });
       await page.goto("/");
       await expect(page.locator("header .date")).toHaveText(/10月27日.*星期二/);
-      await page.clock.setFixedTime(new Date("2026-10-27T16:00:00Z"));
-      await page.reload();
+      await page.clock.fastForward(60_000);
+      await expect(page.locator("header .date")).toHaveText(/10月28日.*星期三/);
+      await page.clock.fastForward(3 * 24 * 60 * 60 * 1000);
+      await expect(page.locator("header .date")).toHaveText(/10月31日.*星期六/);
+      await page.clock.setSystemTime(new Date("2026-10-28T04:00:00Z"));
+      await page.evaluate(() =>
+        document.dispatchEvent(new Event("visibilitychange")),
+      );
       await expect(page.locator("header .date")).toHaveText(/10月28日.*星期三/);
     });
   });
