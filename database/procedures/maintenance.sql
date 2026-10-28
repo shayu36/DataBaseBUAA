@@ -122,9 +122,13 @@ BEGIN
   'tickets',(SELECT JSON_OBJECT('ids',CAST(CONCAT('[',COALESCE(GROUP_CONCAT(t.id ORDER BY t.id SEPARATOR ','),''),']') AS JSON),'count',COUNT(*))
    FROM maintenance_tickets t WHERE t.bike_id=j.bike_id AND t.created_at<=p_now),
   'fingerprint',j.fingerprint)),JSON_ARRAY()) INTO v_new
- FROM JSON_TABLE(p_risks,'$[*]' COLUMNS(
-  bike_id BIGINT UNSIGNED PATH '$.bike_id',score INT PATH '$.score',level VARCHAR(10) PATH '$.level',
-  reasons JSON PATH '$.reasons',fingerprint CHAR(64) PATH '$.fingerprint')) j
+ FROM (SELECT input.bike_id,input.score,input.level,input.reasons,
+  SHA2(CONCAT('{"bike_id":',input.bike_id,',"version":',JSON_QUOTE(p_version),',"reasons":[',
+   (SELECT GROUP_CONCAT(JSON_QUOTE(message) ORDER BY position SEPARATOR ',')
+    FROM JSON_TABLE(input.messages,'$[*]' COLUMNS(position FOR ORDINALITY,message VARCHAR(500) PATH '$')) items),']}'),256) AS fingerprint
+  FROM JSON_TABLE(p_risks,'$[*]' COLUMNS(
+   bike_id BIGINT UNSIGNED PATH '$.bike_id',score INT PATH '$.score',level VARCHAR(10) PATH '$.level',
+   reasons JSON PATH '$.reason_details',messages JSON PATH '$.reasons')) input WHERE input.score>=30) j
  LEFT JOIN risk_alerts r ON r.open_fingerprint=j.fingerprint COLLATE utf8mb4_0900_ai_ci WHERE r.id IS NULL;
  IF EXISTS (SELECT 1 FROM JSON_TABLE(v_new,'$[*]' COLUMNS(tickets JSON PATH '$.tickets')) j
   WHERE COALESCE(JSON_TYPE(JSON_EXTRACT(j.tickets,'$.ids')),'')<>'ARRAY'

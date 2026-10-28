@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { z } from "zod";
 import { sql } from "./sql-statements.mjs";
 import { AppError, actorTransaction, callProcedure } from "./db.mjs";
@@ -11,29 +10,12 @@ export function refreshRiskAlerts(pool, actor, now = new Date()) {
     throw new AppError("仅管理员可运行风险规则", "FORBIDDEN", 403);
   return actorTransaction(pool, actor, async (c) => {
     const { risks, evaluated } = await riskData(c, now);
-    const candidates = risks
-      .filter((risk) => risk.score >= 30)
-      .map((risk) => ({
-        bike_id: risk.bike_id,
-        score: risk.score,
-        level: risk.level,
-        reasons: risk.reason_details,
-        fingerprint: createHash("sha256")
-          .update(
-            JSON.stringify({
-              bike_id: risk.bike_id,
-              version: RULE_VERSION,
-              reasons: risk.reasons,
-            }),
-          )
-          .digest("hex"),
-      }));
     const [result] = await c.query("CALL sp_refresh_risk_alerts(?,?,?,?,?)", [
       actor.id,
       evaluated,
       RULE_VERSION,
       now,
-      JSON.stringify(candidates),
+      JSON.stringify(risks),
     ]);
     return {
       created: result[0].map((row) => row.id),

@@ -620,14 +620,13 @@ test("risk ticket references remain complete with a small session aggregation li
           bike_id: 1,
           score: 30,
           level: "MEDIUM",
-          reasons: [{ rule: "SERVICE_GAP", message: "测试" }],
-          fingerprint: "c".repeat(64),
+          reasons: ["测试"],
+          reason_details: [{ rule: "SERVICE_GAP", message: "测试" }],
         },
       ]),
     ]);
     const [[row]] = await connection.query(
-      "SELECT ticket_ids FROM risk_alerts WHERE fingerprint=?",
-      ["c".repeat(64)],
+      "SELECT ticket_ids FROM risk_alerts WHERE bike_id=1",
     );
     const ids =
       typeof row.ticket_ids === "string"
@@ -645,6 +644,43 @@ test("risk ticket references remain complete with a small session aggregation li
     await connection.query("SET SESSION group_concat_max_len=DEFAULT");
     connection.release();
   }
+});
+
+test("SQL risk fingerprints preserve existing JSON encoding and deduplication", async () => {
+  const version = "risk-v1";
+  const reasons = ['引号"和反斜线\\', "换行\n制表\t", "单车🚲"];
+  const details = reasons.map((message) => ({ rule: "REPEAT_FAULT", message }));
+  const fingerprint = (bike_id) =>
+    createHash("sha256")
+      .update(JSON.stringify({ bike_id, version, reasons }))
+      .digest("hex");
+  await pool.query(
+    "INSERT INTO risk_alerts(bike_id,score,level,reasons,ticket_ids,fingerprint,rule_version,recommendation) VALUES(1,30,'MEDIUM',?,JSON_ARRAY(),?,?,'请检查')",
+    [JSON.stringify(details), fingerprint(1), version],
+  );
+  const [result] = await pool.query("CALL sp_refresh_risk_alerts(?,?,?,?,?)", [
+    admin.id,
+    2,
+    version,
+    new Date("2026-10-27T12:00:00Z"),
+    JSON.stringify(
+      [1, 2].map((bike_id) => ({
+        bike_id,
+        score: 30,
+        level: "MEDIUM",
+        reasons,
+        reason_details: details,
+      })),
+    ),
+  ]);
+  assert.equal(result[0].length, 1);
+  const [saved] = await pool.query(
+    "SELECT bike_id,fingerprint FROM risk_alerts ORDER BY bike_id",
+  );
+  assert.deepEqual(
+    saved,
+    [1, 2].map((bike_id) => ({ bike_id, fingerprint: fingerprint(bike_id) })),
+  );
 });
 
 test("short abnormal rides appear as risk clues without changing the score", async () => {
