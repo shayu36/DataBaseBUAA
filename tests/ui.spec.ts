@@ -1222,6 +1222,9 @@ test("PDF expansion controls expose traceable workflows", async ({ page }) => {
 test("路线方案共用一次查询并在刷新后同时更新", async ({ page }) => {
   let dashboards = 0;
   let requests = 0;
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/routes") requests++;
+  });
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/api/auth/me")
@@ -1241,7 +1244,6 @@ test("路线方案共用一次查询并在刷新后同时更新", async ({ page 
       return route.fulfill({ json: regressionDashboard });
     }
     if (url.pathname === "/api/routes") {
-      requests++;
       const version = dashboards > 1 ? 400 : 0;
       const nodes = [
         { id: 1, name: "测试源站", x: 100, y: 100 },
@@ -1284,16 +1286,20 @@ test("路线方案共用一次查询并在刷新后同时更新", async ({ page 
   await page.getByRole("button", { name: "路线规划", exact: true }).click();
   const safe = page.getByRole("button", { name: /安全优先/ });
   await expect(safe).toContainText("0.43 km");
+  // React StrictMode may run the initial effect twice in development.
+  const initialRequests = requests;
+  expect(initialRequests).toBeGreaterThanOrEqual(1);
+  expect(initialRequests).toBeLessThanOrEqual(2);
   await page.getByRole("button", { name: "刷新数据" }).click();
   await expect(safe).toContainText("0.83 km");
-  await expect.poll(() => requests).toBe(2);
+  await expect.poll(() => requests).toBe(initialRequests + 1);
   await safe.click();
   await expect(page.locator(".route-result")).toContainText("0.83 km");
   await page.getByRole("button", { name: /舒适优先/ }).click();
   await expect(page.locator(".route-result")).toContainText("0.83 km");
-  expect(requests).toBe(2);
+  expect(requests).toBe(initialRequests + 1);
   await page.getByLabel("目的停车区").selectOption("1");
-  await expect.poll(() => requests).toBe(3);
+  await expect.poll(() => requests).toBe(initialRequests + 2);
 });
 
 test("路线详情按实际行驶方向展示路段、通行规则和坡度", async ({ page }) => {
