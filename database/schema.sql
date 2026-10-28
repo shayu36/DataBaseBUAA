@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS dispatch_suggestions (
  status ENUM('OPEN','CONFIRMED','STALE','DISMISSED') NOT NULL DEFAULT 'OPEN', task_id BIGINT UNSIGNED NULL, created_by BIGINT UNSIGNED NOT NULL,
  resolution_note VARCHAR(500) NULL, created_at DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)), resolved_at DATETIME(3) NULL,
  FOREIGN KEY(source_zone_id) REFERENCES parking_zones(id), FOREIGN KEY(target_zone_id) REFERENCES parking_zones(id),
+ UNIQUE KEY uq_dispatch_suggestion_task(task_id),
  FOREIGN KEY(task_id) REFERENCES dispatch_tasks(id), FOREIGN KEY(created_by) REFERENCES users(id), CHECK(quantity>0 AND source_zone_id<>target_zone_id),
  CONSTRAINT chk_suggestion_state CHECK((status='OPEN' AND task_id IS NULL AND resolved_at IS NULL) OR (status='CONFIRMED' AND task_id IS NOT NULL AND resolved_at IS NOT NULL) OR (status IN('STALE','DISMISSED') AND task_id IS NULL AND resolved_at IS NOT NULL))
 ) ENGINE=InnoDB;

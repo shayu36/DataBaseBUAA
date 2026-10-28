@@ -82,8 +82,8 @@ test("application refuses an incompatible or missing database version before lis
     await applySchema(pool);
     const revision = procedureRevision(await loadProcedureSources());
     for (const expression of [
-      "JSON_OBJECT('version',16)",
-      "JSON_OBJECT('version','16')",
+      "JSON_OBJECT('version',17)",
+      "JSON_OBJECT('version','17')",
     ]) {
       await pool.query(
         `UPDATE system_settings SET value=${expression} WHERE name='pdf_expansion'`,
@@ -120,7 +120,8 @@ test("application refuses an incompatible or missing database version before lis
       assert.equal(snapshots, 0);
     };
     for (const expression of [
-      "JSON_OBJECT('version',17)",
+      "JSON_OBJECT('version',18)",
+      "JSON_OBJECT('version',16)",
       "JSON_OBJECT('version',15)",
       "JSON_OBJECT('version',14)",
       "JSON_OBJECT('version',CONCAT('11',CHAR(10)))",
@@ -137,7 +138,7 @@ test("application refuses an incompatible or missing database version before lis
       await assertStartupRejected(`版本标记 ${expression}`);
     }
     await pool.query(
-      "INSERT INTO system_settings(name,value) VALUES('pdf_expansion',JSON_OBJECT('version',16)) ON DUPLICATE KEY UPDATE value=VALUES(value)",
+      "INSERT INTO system_settings(name,value) VALUES('pdf_expansion',JSON_OBJECT('version',17)) ON DUPLICATE KEY UPDATE value=VALUES(value)",
     );
     await pool.query(
       "UPDATE system_settings SET value=JSON_OBJECT('sha256',REPEAT('0',64)) WHERE name='procedure_revision'",

@@ -19,7 +19,7 @@ migration: BEGIN
   END IF;
   IF EXISTS(SELECT 1 FROM system_settings WHERE name='pdf_expansion' AND
     CASE WHEN CHAR_LENGTH(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')))>2 THEN TRUE
-    ELSE CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)>16 END) THEN
+    ELSE CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)>17 END) THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='UNSUPPORTED_SCHEMA_VERSION: use the matching newer application version';
   END IF;
   SELECT COALESCE(MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)),0) INTO current_version FROM system_settings WHERE name='pdf_expansion';
@@ -48,10 +48,10 @@ migration: BEGIN
       END IF;
     END IF;
   END IF;
-  IF p_preparing OR current_version<16 THEN
+  IF p_preparing OR current_version<17 THEN
     DELETE FROM system_settings WHERE name='procedure_revision';
   END IF;
-  IF current_version = 16 THEN
+  IF current_version = 17 THEN
     SELECT 0 AS migrated;
     LEAVE migration;
   END IF;
@@ -225,6 +225,7 @@ migration: BEGIN
       status ENUM('OPEN','CONFIRMED','STALE','DISMISSED') NOT NULL DEFAULT 'OPEN', task_id BIGINT UNSIGNED NULL, created_by BIGINT UNSIGNED NOT NULL,
       resolution_note VARCHAR(500) NULL, created_at DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)), resolved_at DATETIME(3) NULL,
       FOREIGN KEY(source_zone_id) REFERENCES parking_zones(id), FOREIGN KEY(target_zone_id) REFERENCES parking_zones(id),
+      UNIQUE KEY uq_dispatch_suggestion_task(task_id),
       FOREIGN KEY(task_id) REFERENCES dispatch_tasks(id), FOREIGN KEY(created_by) REFERENCES users(id), CHECK(quantity>0 AND source_zone_id<>target_zone_id)
     ) ENGINE=InnoDB;
     END IF;
@@ -387,6 +388,20 @@ migration: BEGIN
       CREATE INDEX idx_ride_user_id ON ride_orders(user_id,id);
     END IF;
   END IF;
-  INSERT INTO system_settings(name,value) VALUES('pdf_expansion',JSON_OBJECT('version',16,'applied_at',UTC_TIMESTAMP(3))) ON DUPLICATE KEY UPDATE value=VALUES(value);
+  IF current_version < 17 THEN
+    IF EXISTS(SELECT 1 FROM dispatch_suggestions WHERE task_id IS NOT NULL GROUP BY task_id HAVING COUNT(*)>1) THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='MIGRATION_DUPLICATE_SUGGESTION_TASKS';
+    END IF;
+    IF EXISTS(SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='dispatch_suggestions' AND index_name='uq_dispatch_suggestion_task') THEN
+      IF (SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='dispatch_suggestions' AND index_name='uq_dispatch_suggestion_task')<>1
+       OR NOT EXISTS(SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='dispatch_suggestions' AND index_name='uq_dispatch_suggestion_task'
+        AND seq_in_index=1 AND column_name='task_id' AND sub_part IS NULL AND non_unique=0 AND index_type='BTREE' AND collation='A' AND is_visible='YES') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='MIGRATION_SUGGESTION_TASK_INDEX_CONFLICT';
+      END IF;
+    ELSE
+      CREATE UNIQUE INDEX uq_dispatch_suggestion_task ON dispatch_suggestions(task_id);
+    END IF;
+  END IF;
+  INSERT INTO system_settings(name,value) VALUES('pdf_expansion',JSON_OBJECT('version',17,'applied_at',UTC_TIMESTAMP(3))) ON DUPLICATE KEY UPDATE value=VALUES(value);
   SELECT 1 AS migrated;
 END

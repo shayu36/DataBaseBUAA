@@ -133,6 +133,18 @@ MySQL 结构变更会隐式提交；迁移失败时应检查错误并从备份�
 
 新版迁移为个人订单按编号分页添加 `idx_ride_user_id(user_id,id)`。若报 `MIGRATION_RIDE_USER_INDEX_CONFLICT`，请先备份并核对同名索引的列、排序、可见性及唯一性；确认原因后修正冲突，再重新运行迁移。索引会占用存储并增加写入维护成本，实际性能取决于数据分布。
 
+新版迁移限制一个调度任务最多关联一条已确认建议；尚未关联任务的建议可以有多条。若报 `MIGRATION_DUPLICATE_SUGGESTION_TASKS`，请备份后用下面的只读 SQL 找出重复任务，并结合建议、任务和审计记录人工核对，修正后重试；迁移不会自动删除或改写这些历史记录。
+
+```sql
+SELECT task_id, COUNT(*) AS 建议数
+FROM dispatch_suggestions
+WHERE task_id IS NOT NULL
+GROUP BY task_id
+HAVING COUNT(*) > 1;
+```
+
+若报 `MIGRATION_SUGGESTION_TASK_INDEX_CONFLICT`，请备份并检查同名索引的列和唯一性；调整索引时须保留外键所需索引，再重试迁移。
+
 支付与积分流水的请求编号区分字母大小写；升级会保留历史编号。如果旧记录的编号为空，迁移报 `MIGRATION_INVALID_PAYMENT_KEYS` 或 `MIGRATION_INVALID_CARBON_KEYS` 并停止，应依据备份人工核对并补全后重试。员工姓名和电话统一保存在用户表；升级时若旧员工表中的姓名或电话与用户表不一致，迁移会报 `STAFF_NAME_MISMATCH` 或 `STAFF_PHONE_MISMATCH` 并停止。请先根据备份人工核对差异，再修正旧表或用户表后重新迁移。
 
 新版数据库使用 UTC 默认时间，不依赖 MySQL 服务器时区；迁移不修改历史时间，若旧库使用过非 UTC 服务器时区，应根据原始环境和备份核对历史记录。

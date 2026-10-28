@@ -33,7 +33,7 @@ export async function applyFeatureMigrationsLocked(
       name,
       preparing,
     ]);
-    return { applied: result[0][0].migrated ? ["pdf_expansion@16"] : [] };
+    return { applied: result[0][0].migrated ? ["pdf_expansion@17"] : [] };
   } catch (error) {
     failed = true;
     failure = error;

@@ -1,9 +1,114 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { createPool } from "../backend/db.mjs";
 import { applyFeatureMigrations } from "../backend/feature-migrations.mjs";
 import { applySchema } from "../scripts/sql.mjs";
+
+test("suggestion task uniqueness migrates safely without discarding conflicting history", async () => {
+  const database = `campus_bike_suggestion_index_${randomBytes(4).toString("hex")}`;
+  const credentials = {
+    user: process.env.DB_ADMIN_USER,
+    password: process.env.DB_ADMIN_PASSWORD,
+  };
+  const admin = createPool({ ...credentials, database: undefined });
+  let pool,
+    created = false;
+  try {
+    await admin.query(`CREATE DATABASE \`${database}\` CHARACTER SET utf8mb4`);
+    created = true;
+    pool = createPool({ ...credentials, database });
+    await applySchema(pool);
+    await pool.query(
+      "INSERT INTO users(id,name,email,phone,password_hash) VALUES(1,'管理员','suggestion@test.local','13000000000','hash')",
+    );
+    await pool.query(
+      "INSERT INTO parking_zones(id,name,location,x,y,radius,capacity) VALUES(1,'源','北',10,10,10,10),(2,'目标','南',20,20,10,10)",
+    );
+    await pool.query(
+      "INSERT INTO dispatch_tasks(id,source_zone_id,target_zone_id) VALUES(1,1,2)",
+    );
+    await pool.query(
+      "ALTER TABLE dispatch_suggestions ADD INDEX legacy_task_index(task_id), DROP INDEX uq_dispatch_suggestion_task",
+    );
+    await pool.query(
+      "UPDATE system_settings SET value=JSON_OBJECT('version',16) WHERE name='pdf_expansion'",
+    );
+    await pool.query(`INSERT INTO dispatch_suggestions(id,source_zone_id,target_zone_id,quantity,source_available,target_occupied,target_capacity,target_reserved,borrow_count,return_count,desired_inventory,window_start,window_end,reason,algorithm_version,status,task_id,created_by,resolved_at) VALUES
+      (1,1,2,1,1,0,10,0,1,0,1,'2026-01-01','2026-01-02','测试一','v1','CONFIRMED',1,1,UTC_TIMESTAMP(3)),
+      (2,1,2,1,1,0,10,0,1,0,1,'2026-01-01','2026-01-02','测试二','v1','CONFIRMED',1,1,UTC_TIMESTAMP(3))`);
+    const original = (
+      await pool.query("SELECT * FROM dispatch_suggestions ORDER BY id")
+    )[0];
+    const checks = await readFile(
+      new URL("../database/invariant-checks.sql", import.meta.url),
+      "utf8",
+    );
+    const [bad] = await pool.query(checks);
+    assert.equal(
+      Number(
+        bad.find((row) => row.name === "确认的调度建议唯一关联正式任务").errors,
+      ),
+      1,
+    );
+    await assert.rejects(applyFeatureMigrations(pool), {
+      sqlMessage: "MIGRATION_DUPLICATE_SUGGESTION_TASKS",
+    });
+    assert.deepEqual(
+      (await pool.query("SELECT * FROM dispatch_suggestions ORDER BY id"))[0],
+      original,
+    );
+    const [[marker]] = await pool.query(
+      "SELECT JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS version FROM system_settings WHERE name='pdf_expansion'",
+    );
+    assert.equal(marker.version, "16");
+    await pool.query(
+      "UPDATE dispatch_suggestions SET status='DISMISSED',task_id=NULL WHERE id=2",
+    );
+    await pool.query(
+      "ALTER TABLE dispatch_suggestions ADD INDEX uq_dispatch_suggestion_task(source_zone_id)",
+    );
+    await assert.rejects(applyFeatureMigrations(pool), {
+      sqlMessage: "MIGRATION_SUGGESTION_TASK_INDEX_CONFLICT",
+    });
+    await pool.query(
+      "ALTER TABLE dispatch_suggestions ADD INDEX legacy_source_index(source_zone_id), DROP INDEX uq_dispatch_suggestion_task",
+    );
+    assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
+      "pdf_expansion@17",
+    ]);
+    assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
+    const [index] = await pool.query(
+      "SELECT column_name AS column_name,non_unique AS non_unique FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='dispatch_suggestions' AND index_name='uq_dispatch_suggestion_task'",
+    );
+    assert.deepEqual(index, [{ column_name: "task_id", non_unique: 0 }]);
+    await assert.rejects(
+      pool.query(
+        "UPDATE dispatch_suggestions SET status='CONFIRMED',task_id=1 WHERE id=2",
+      ),
+      { code: "ER_DUP_ENTRY" },
+    );
+    await pool.query(`INSERT INTO dispatch_suggestions(source_zone_id,target_zone_id,quantity,source_available,target_occupied,target_capacity,target_reserved,borrow_count,return_count,desired_inventory,window_start,window_end,reason,algorithm_version,created_by)
+      VALUES (1,2,1,1,0,10,0,1,0,1,'2026-01-01','2026-01-02','测试三','v1',1)`);
+    const [[{ unlinked }]] = await pool.query(
+      "SELECT COUNT(*) AS unlinked FROM dispatch_suggestions WHERE task_id IS NULL",
+    );
+    assert.equal(unlinked, 2);
+    const [good] = await pool.query(checks);
+    assert.equal(
+      Number(
+        good.find((row) => row.name === "确认的调度建议唯一关联正式任务")
+          .errors,
+      ),
+      0,
+    );
+  } finally {
+    if (pool) await pool.end();
+    if (created) await admin.query(`DROP DATABASE \`${database}\``);
+    await admin.end();
+  }
+});
 
 test("personal ride pagination index migrates safely from version 15", async () => {
   const database = `campus_bike_user_index_${randomBytes(4).toString("hex")}`;
@@ -37,7 +142,7 @@ test("personal ride pagination index migrates safely from version 15", async () 
       "UPDATE system_settings SET value=JSON_OBJECT('version',15) WHERE name='pdf_expansion'",
     );
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
-      "pdf_expansion@16",
+      "pdf_expansion@17",
     ]);
     const [index] = await pool.query(
       "SELECT column_name AS column_name,non_unique AS non_unique,collation AS collation,is_visible AS is_visible FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='ride_orders' AND index_name='idx_ride_user_id' ORDER BY seq_in_index",
@@ -80,7 +185,7 @@ test("personal ride pagination index migrates safely from version 15", async () 
     }
     await pool.query("ALTER TABLE ride_orders DROP INDEX idx_ride_user_id");
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
-      "pdf_expansion@16",
+      "pdf_expansion@17",
     ]);
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
   } finally {
@@ -114,7 +219,7 @@ test("review queue index migrates safely from version 14 and can be retried", as
       "UPDATE system_settings SET value=JSON_OBJECT('version',14) WHERE name='pdf_expansion'",
     );
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
-      "pdf_expansion@16",
+      "pdf_expansion@17",
     ]);
     const [index] = await pool.query(
       "SELECT column_name AS column_name,non_unique AS non_unique FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='ride_orders' AND index_name='idx_ride_qualification' ORDER BY seq_in_index",
@@ -142,7 +247,7 @@ test("review queue index migrates safely from version 14 and can be retried", as
       "ALTER TABLE ride_orders DROP INDEX idx_ride_qualification",
     );
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
-      "pdf_expansion@16",
+      "pdf_expansion@17",
     ]);
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
   } finally {
@@ -335,7 +440,7 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
         "UPDATE system_settings SET value=JSON_OBJECT('version',0) WHERE name='pdf_expansion'",
       );
       assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
-        "pdf_expansion@16",
+        "pdf_expansion@17",
       ]);
       const [[actualRule]] = await pool.query(
         "SELECT value FROM system_settings WHERE name='carbon'",
@@ -373,7 +478,7 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
       [historicalCredits[0].idempotency_key, historicalCredits[0].id],
     );
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
-      "pdf_expansion@16",
+      "pdf_expansion@17",
     ]);
     assert.deepEqual(
       (
@@ -418,7 +523,7 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
       "UPDATE system_settings SET value=JSON_OBJECT('version',12) WHERE name='pdf_expansion'",
     );
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
-      "pdf_expansion@16",
+      "pdf_expansion@17",
     ]);
     const [[afterViewUpgrade]] = await pool.query(
       "SELECT * FROM v_user_carbon WHERE user_id=1",
@@ -756,7 +861,7 @@ test("legacy carbon migration rejects equal-total rows with conflicting history"
       "UPDATE carbon_ledger SET created_at='2024-01-02 01:00:00.000000' WHERE id=2",
     );
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
-      "pdf_expansion@16",
+      "pdf_expansion@17",
     ]);
     const [awards] = await pool.query(
       "SELECT id,order_id,idempotency_key,distance_m,points_change,carbon_kg_change,rule_version FROM carbon_transactions ORDER BY id",
@@ -830,7 +935,7 @@ test("legacy carbon migration rejects equal-total rows with conflicting history"
     assert.deepEqual(retained, { source_rows: 2, backup_rows: 2 });
     await pool.query("DROP TABLE carbon_ledger");
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
-      "pdf_expansion@16",
+      "pdf_expansion@17",
     ]);
     const [[restored]] = await pool.query(
       "SELECT table_type AS kind FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='carbon_ledger'",
@@ -976,14 +1081,14 @@ test("schema initialization rejects unknown or malformed migration versions befo
       "INSERT INTO users(id,name,email,phone,password_hash,role) VALUES(1,'测试用户','version@test.local','13700000001','hash','STUDENT')",
     );
     await pool.query(
-      "UPDATE system_settings SET value=JSON_OBJECT('version','16') WHERE name='pdf_expansion'",
+      "UPDATE system_settings SET value=JSON_OBJECT('version','17') WHERE name='pdf_expansion'",
     );
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
     const [[revisionBefore]] = await pool.query(
       "SELECT value FROM system_settings WHERE name='procedure_revision'",
     );
     const versions = [
-      ["JSON_OBJECT('version',17)", /UNSUPPORTED_SCHEMA_VERSION/],
+      ["JSON_OBJECT('version',18)", /UNSUPPORTED_SCHEMA_VERSION/],
       ["JSON_OBJECT('version',999999)", /UNSUPPORTED_SCHEMA_VERSION/],
       [
         "CAST('{\"version\":18446744073709551615}' AS JSON)",
