@@ -1597,7 +1597,7 @@ export function Routes({ d }: Props) {
                   {
                     label: "长度 / 坡度",
                     render: (r) =>
-                      `${r.distance_m} m / ${Number(r.slope_percent).toFixed(1)}%`,
+                      `${r.distance_m} m / ${Number(r.slope_percent).toFixed(2)}%`,
                   },
                   {
                     label: "路面 / 交通",
@@ -2087,7 +2087,7 @@ export function Admin({ d, run }: Props) {
           <div>
             <h2>校园路网属性维护</h2>
             <p className="muted">
-              方向、禁骑状态、坡度、路面、遮阴、照明和混行属性会直接影响三种路线方案。
+              方向、禁骑状态、坡度、路面、遮阴、照明和混行属性会直接影响三种路线方案。修改坡度等属性后将标为课程模拟数据；仅修改方向或状态时保留原属性来源。
             </p>
           </div>
         </div>
@@ -2127,7 +2127,7 @@ export function Admin({ d, run }: Props) {
               <Field label="坡度 %">
                 <input
                   type="number"
-                  step="0.1"
+                  step="0.01"
                   min="-30"
                   max="30"
                   value={road.slope_percent}
@@ -2211,7 +2211,7 @@ export function Admin({ d, run }: Props) {
             {
               label: "坡度 / 路面",
               render: (r) =>
-                `${Number(r.slope_percent).toFixed(1)}% / ${r.surface}`,
+                `${Number(r.slope_percent).toFixed(2)}% / ${r.surface}`,
             },
             {
               label: "交通 / 风险",

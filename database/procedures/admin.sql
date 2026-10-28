@@ -189,20 +189,33 @@ CREATE PROCEDURE sp_save_road(IN p_actor BIGINT UNSIGNED, IN p_data JSON)
 SQL SECURITY INVOKER
 BEGIN
  DECLARE v_id BIGINT UNSIGNED;
- DECLARE v_before JSON DEFAULT NULL;
- SELECT id INTO v_id FROM JSON_TABLE(p_data,'$' COLUMNS(id BIGINT UNSIGNED PATH '$.id')) input_data;
+ DECLARE v_direction,v_status,v_surface,v_traffic VARCHAR(20);
+ DECLARE v_slope DECIMAL(5,2);
+ DECLARE v_shade,v_lighting,v_risk INT;
+ DECLARE v_before,v_after JSON DEFAULT NULL;
+ DECLARE v_changed BOOLEAN DEFAULT FALSE;
+ SELECT id,direction,status,slope,surface,shade,lighting,traffic,risk
+ INTO v_id,v_direction,v_status,v_slope,v_surface,v_shade,v_lighting,v_traffic,v_risk
+ FROM JSON_TABLE(p_data,'$' COLUMNS(id BIGINT UNSIGNED PATH '$.id',direction VARCHAR(10) PATH '$.direction',status VARCHAR(10) PATH '$.status',
+ slope DECIMAL(5,2) PATH '$.slope_percent',surface VARCHAR(10) PATH '$.surface',shade INT PATH '$.shade_level',lighting INT PATH '$.lighting_level',
+ traffic VARCHAR(20) PATH '$.traffic_mix',risk INT PATH '$.intersection_risk')) d;
  SELECT JSON_OBJECT('id',id,'from_node_id',from_node_id,'to_node_id',to_node_id,'distance_m',distance_m,
  'safety_cost',safety_cost,'comfort_cost',comfort_cost,'direction',direction,'status',status,'slope_percent',slope_percent,
  'surface',surface,'shade_level',shade_level,'lighting_level',lighting_level,'traffic_mix',traffic_mix,'intersection_risk',intersection_risk,
- 'attribute_source',attribute_source) INTO v_before FROM road_edges WHERE id=v_id FOR UPDATE;
+ 'attribute_source',attribute_source),
+ NOT (slope_percent<=>v_slope) OR NOT (surface<=>v_surface) OR NOT (shade_level<=>v_shade) OR
+ NOT (lighting_level<=>v_lighting) OR NOT (traffic_mix<=>v_traffic) OR NOT (intersection_risk<=>v_risk)
+ INTO v_before,v_changed FROM road_edges WHERE id=v_id FOR UPDATE;
  IF v_before IS NULL THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ROAD_NOT_FOUND'; END IF;
- UPDATE road_edges e JOIN JSON_TABLE(p_data,'$' COLUMNS(direction VARCHAR(10) PATH '$.direction',status VARCHAR(10) PATH '$.status',
- slope DECIMAL(5,2) PATH '$.slope_percent',surface VARCHAR(10) PATH '$.surface',shade INT PATH '$.shade_level',lighting INT PATH '$.lighting_level',
- traffic VARCHAR(20) PATH '$.traffic_mix',risk INT PATH '$.intersection_risk')) d
- SET e.direction=d.direction,e.status=d.status,e.slope_percent=d.slope,e.surface=d.surface,e.shade_level=d.shade,e.lighting_level=d.lighting,
- e.traffic_mix=d.traffic,e.intersection_risk=d.risk WHERE e.id=v_id;
+ UPDATE road_edges SET direction=v_direction,status=v_status,slope_percent=v_slope,surface=v_surface,
+ shade_level=v_shade,lighting_level=v_lighting,traffic_mix=v_traffic,intersection_risk=v_risk,
+ attribute_source=IF(v_changed,'SIMULATED_COURSE_DATA',attribute_source) WHERE id=v_id;
+ SELECT JSON_OBJECT('id',id,'from_node_id',from_node_id,'to_node_id',to_node_id,'distance_m',distance_m,
+ 'safety_cost',safety_cost,'comfort_cost',comfort_cost,'direction',direction,'status',status,'slope_percent',slope_percent,
+ 'surface',surface,'shade_level',shade_level,'lighting_level',lighting_level,'traffic_mix',traffic_mix,'intersection_risk',intersection_risk,
+ 'attribute_source',attribute_source) INTO v_after FROM road_edges WHERE id=v_id;
  INSERT INTO audit_logs(actor_id,action,entity_type,entity_id,detail)
- VALUES(p_actor,'ROAD_UPDATE','road_edges',v_id,JSON_OBJECT('before',v_before,'after',p_data));
+ VALUES(p_actor,'ROAD_UPDATE','road_edges',v_id,JSON_OBJECT('before',v_before,'after',v_after,'requested',p_data));
  SELECT v_id AS id;
 END$$
 DELIMITER ;

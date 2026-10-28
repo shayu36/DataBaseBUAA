@@ -337,6 +337,52 @@ const regressionDashboard = {
     open_tickets: 0,
   },
 };
+test("道路编辑保留两位坡度并允许仅修改通行状态", async ({ page }) => {
+  let saved: { slope_percent: number; status: string } | undefined;
+  await page.route("**/api/admin/roads", async (route) => {
+    if (route.request().method() === "POST") {
+      saved = route.request().postDataJSON();
+      return route.fulfill({ json: { id: 1 } });
+    }
+    return route.fulfill({
+      json: {
+        roads: [
+          {
+            id: 1,
+            from_name: "测试起点",
+            to_name: "测试终点",
+            direction: "BOTH",
+            status: "OPEN",
+            slope_percent: 1.23,
+            surface: "SMOOTH",
+            shade_level: 3,
+            lighting_level: 3,
+            traffic_mix: "MIXED",
+            intersection_risk: 1,
+            attribute_source: "MEASURED",
+          },
+        ],
+      },
+    });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "管理员 · 贾鑫洋" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  await page.getByRole("button", { name: "基础资料", exact: true }).click();
+  const roads = page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "校园路网属性维护" }) });
+  const row = roads.getByRole("row").filter({ hasText: "测试起点" });
+  await expect(row).toContainText("1.23%");
+  await row.getByRole("button", { name: "编辑" }).click();
+  await expect(roads.getByLabel("坡度 %")).toHaveValue("1.23");
+  await roads.getByLabel("通行状态").selectOption("CLOSED");
+  await roads.getByRole("button", { name: "保存路网属性" }).click();
+  await expect
+    .poll(() => saved)
+    .toMatchObject({ slope_percent: 1.23, status: "CLOSED" });
+});
+
 test("admin draft survives rejection; edited bike date and blank staff password are normalized", async ({
   page,
 }) => {

@@ -26,7 +26,7 @@
 - POST /risks/:id/:action {note} -> {id,status,maintenance_ticket_id}；action 为 acknowledge、create_ticket、resolve 或 dismiss；管理员或在岗维修岗位运维员可处理。
 - GET /return-attempts?scope=own|all&before=编号 -> {attempts,next_before}；管理员默认查看全部，也可选 own 查看本人记录；其他用户只能查看本人记录。每页按编号倒序最多 100 条，使用 next_before 获取更早记录，null 表示结束。POST /returns/:id/review {action:'RESOLVE'|'DISMISS',note} -> {id,review_status}，仅管理员可复核。
 - GET /admin/orders/review -> {orders}；POST /orders/:id/qualification {decision:'VALID'|'EXCLUDED',reason} -> {id,qualification_status}。均需管理员权限。
-- GET /admin/roads -> {roads}；POST /admin/roads {id,direction,status,slope_percent,surface,shade_level,lighting_level,traffic_mix,intersection_risk} -> {id}，均需管理员权限。方向为 BOTH/FORWARD/REVERSE，状态为 OPEN/CLOSED/NO_RIDE。
+- GET /admin/roads -> {roads}；POST /admin/roads {id,direction,status,slope_percent,surface,shade_level,lighting_level,traffic_mix,intersection_risk} -> {id}，均需管理员权限。方向为 BOTH/FORWARD/REVERSE，状态为 OPEN/CLOSED/NO_RIDE。坡度入库保留两位小数；修改坡度、路面、遮阴、照明、混行或风险属性后，来源标为课程模拟，只有方向或状态变化时保留原来源。审计同时保存修改前、实际入库结果和校验后的请求。
 - POST /profile/leaderboard {alias,visible} -> {leaderboard_alias,leaderboard_visible}；昵称为 2–20 字符，visible 为布尔值。
 - GET /routes?from=1&to=2&mode=shortest|safe|comfortable -> {nodes:[{id,name,x,y}],edges:[{id,from_node_id,to_node_id,distance_m,safety_cost,comfort_cost}],path:number[],distance_m,duration_minutes,mode}; 同站返回零里程。
 - GET /leaderboard?period=week|month&metric=points|distance|rides -> {period,metric,rows:[{rank,user_id,name,rides,distance_m,points,carbon_kg}],me,window}；me 为个人结果，没有有效记录时 rank 为 null；rows 只包含自愿公开的参与者。

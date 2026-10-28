@@ -129,6 +129,68 @@ test("road updates persist attributes and before/after audit in MySQL", async ()
     code: "NOT_FOUND",
   });
 });
+test("road edits preserve measured provenance only when stored attributes are unchanged", async () => {
+  const data = {
+    id: 1,
+    direction: "FORWARD",
+    status: "CLOSED",
+    slope_percent: 1.234,
+    surface: "SMOOTH",
+    shade_level: 3,
+    lighting_level: 3,
+    traffic_mix: "MIXED",
+    intersection_risk: 1,
+  };
+  await pool.query(
+    "UPDATE road_edges SET slope_percent=1.23,attribute_source='MEASURED' WHERE id=1",
+  );
+  await saveRoad(pool, admin, data);
+  const [[unchanged]] = await pool.query(
+    "SELECT slope_percent,attribute_source FROM road_edges WHERE id=1",
+  );
+  assert.deepEqual(unchanged, {
+    slope_percent: 1.23,
+    attribute_source: "MEASURED",
+  });
+  const [[sameAudit]] = await pool.query(
+    "SELECT detail FROM audit_logs WHERE action='ROAD_UPDATE' ORDER BY id DESC LIMIT 1",
+  );
+  const same =
+    typeof sameAudit.detail === "string"
+      ? JSON.parse(sameAudit.detail)
+      : sameAudit.detail;
+  assert.equal(same.after.slope_percent, 1.23);
+  assert.equal(same.requested.slope_percent, 1.234);
+  assert.equal(same.after.attribute_source, "MEASURED");
+  for (const change of [
+    { slope_percent: 1.235 },
+    { surface: "ROUGH" },
+    { shade_level: 4 },
+    { lighting_level: 4 },
+    { traffic_mix: "BIKE_ONLY" },
+    { intersection_risk: 2 },
+  ]) {
+    await pool.query(
+      "UPDATE road_edges SET slope_percent=1.23,surface='SMOOTH',shade_level=3,lighting_level=3,traffic_mix='MIXED',intersection_risk=1,attribute_source='MEASURED' WHERE id=1",
+    );
+    await saveRoad(pool, admin, { ...data, ...change });
+    const [[stored]] = await pool.query(
+      "SELECT slope_percent,surface,shade_level,lighting_level,traffic_mix,intersection_risk,attribute_source FROM road_edges WHERE id=1",
+    );
+    assert.equal(stored.attribute_source, "SIMULATED_COURSE_DATA");
+    const [[audit]] = await pool.query(
+      "SELECT detail FROM audit_logs WHERE action='ROAD_UPDATE' ORDER BY id DESC LIMIT 1",
+    );
+    const detail =
+      typeof audit.detail === "string"
+        ? JSON.parse(audit.detail)
+        : audit.detail;
+    assert.equal(detail.before.attribute_source, "MEASURED");
+    for (const [key, value] of Object.entries(stored))
+      assert.equal(detail.after[key], value, key);
+  }
+});
+
 test("zone capacity, closing and geometry protect occupied bikes and reservations", async () => {
   await assert.rejects(saveZone(pool, admin, zone({ capacity: 1 })), {
     code: "ZONE_FULL",
