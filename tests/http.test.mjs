@@ -128,6 +128,36 @@ test("invalid carbon configuration reports a clear service error", async () => {
   }
 });
 
+test("carbon award overflow returns a useful payment error", async () => {
+  const [original] = await pool.query(
+    "SELECT value FROM system_settings WHERE name='carbon'",
+  );
+  const [order] = await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
+  );
+  try {
+    await pool.query(
+      "INSERT INTO system_settings(name,value) VALUES('carbon',JSON_OBJECT('points_per_km','2147483648')) ON DUPLICATE KEY UPDATE value=VALUES(value)",
+    );
+    const response = await request(
+      `/api/rides/${order.insertId}/pay`,
+      { idempotency_key: "http-overflow" },
+      studentCookie,
+    );
+    assert.equal(response.status, 503);
+    assert.equal(response.data.code, "CARBON_AWARD_OUT_OF_RANGE");
+    assert.match(response.data.error, /超出系统范围/);
+  } finally {
+    await pool.query("DELETE FROM ride_orders WHERE id=?", [order.insertId]);
+    if (original.length)
+      await pool.query(
+        "UPDATE system_settings SET value=? WHERE name='carbon'",
+        [JSON.stringify(original[0].value)],
+      );
+    else await pool.query("DELETE FROM system_settings WHERE name='carbon'");
+  }
+});
+
 test("health identifies campus bike and protected routes need login", async () => {
   assert.equal((await request("/api/health")).data.system, "campus-bike");
   assert.equal((await request("/api/dashboard")).status, 401);

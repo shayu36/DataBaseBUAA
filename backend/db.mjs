@@ -178,6 +178,15 @@ export function translateDatabaseError(error) {
       "INVALID_CARBON_RULE",
       503,
     );
+  if (
+    error?.code === "ER_SIGNAL_EXCEPTION" &&
+    error.sqlMessage === "CARBON_AWARD_OUT_OF_RANGE"
+  )
+    return new AppError(
+      "该行程按当前碳积分规则计算的结果超出系统范围，请联系管理员",
+      "CARBON_AWARD_OUT_OF_RANGE",
+      503,
+    );
   return error;
 }
 

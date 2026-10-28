@@ -1085,6 +1085,84 @@ test("invalid carbon rules reject payment without writing and valid defaults rem
   assert.equal(paid.credit.carbon_kg, 0.21);
 });
 
+test("carbon award overflow rolls back payment and qualification review", async () => {
+  const [order] = await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
+  );
+  for (const [factor, rate] of [
+    ["0.21", "2147483648"],
+    ["99999999.99995", "10"],
+    ["999999999999.99999999", "999999999999.99999999"],
+  ]) {
+    await pool.query(
+      "UPDATE system_settings SET value=JSON_OBJECT('kg_per_km',?,'points_per_km',?) WHERE name='carbon'",
+      [factor, rate],
+    );
+    await assert.rejects(
+      business.payRide(pool, student, order.insertId, {
+        idempotency_key: "overflow-payment",
+      }),
+      { code: "CARBON_AWARD_OUT_OF_RANGE", status: 503 },
+    );
+    const [[state]] = await pool.query(
+      "SELECT status,(SELECT COUNT(*) FROM payments) payments,(SELECT COUNT(*) FROM carbon_transactions) entries,(SELECT COUNT(*) FROM audit_logs WHERE action='SIMULATED_PAYMENT') audits FROM ride_orders WHERE id=?",
+      [order.insertId],
+    );
+    assert.deepEqual(state, {
+      status: "UNPAID",
+      payments: 0,
+      entries: 0,
+      audits: 0,
+    });
+  }
+  await pool.query(
+    "UPDATE system_settings SET value=JSON_OBJECT('kg_per_km','99999999.9999','points_per_km','2147483647.99999999') WHERE name='carbon'",
+  );
+  const paid = await business.payRide(pool, student, order.insertId, {
+    idempotency_key: "overflow-payment",
+  });
+  assert.equal(paid.credit.points, 2147483647);
+  const [[award]] = await pool.query(
+    "SELECT CAST(carbon_kg_change AS CHAR) carbon FROM carbon_transactions WHERE order_id=?",
+    [order.insertId],
+  );
+  assert.equal(award.carbon, "99999999.9999");
+
+  const [pending] = await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status,qualification_status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID','UNDER_REVIEW')",
+  );
+  await pool.query(
+    "UPDATE system_settings SET value=JSON_OBJECT('kg_per_km',0.21,'points_per_km','2147483648') WHERE name='carbon'",
+  );
+  await business.payRide(pool, student, pending.insertId, {
+    idempotency_key: "pending-overflow",
+  });
+  await assert.rejects(
+    reviewOrderQualification(pool, admin, pending.insertId, {
+      decision: "VALID",
+      reason: "复核通过",
+    }),
+    { code: "CARBON_AWARD_OUT_OF_RANGE", status: 503 },
+  );
+  const [[state]] = await pool.query(
+    "SELECT qualification_status,reviewed_by,(SELECT COUNT(*) FROM carbon_transactions WHERE order_id=?) entries,(SELECT COUNT(*) FROM audit_logs WHERE action='ORDER_QUALIFICATION' AND entity_id=?) audits FROM ride_orders WHERE id=?",
+    [pending.insertId, pending.insertId, pending.insertId],
+  );
+  assert.deepEqual(state, {
+    qualification_status: "UNDER_REVIEW",
+    reviewed_by: null,
+    entries: 0,
+    audits: 0,
+  });
+  const [zero] = await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),0,100,'UNPAID')",
+  );
+  const zeroPaid = await business.payRide(pool, student, zero.insertId, {
+    idempotency_key: "zero-distance",
+  });
+  assert.deepEqual(zeroPaid.credit, { awarded: true, points: 0, carbon_kg: 0 });
+});
+
 test("carbon awards retain precise historical factors and validate their own rule", async () => {
   await pool.query(
     "UPDATE system_settings SET value=JSON_OBJECT('kg_per_km',0.21019,'points_per_km',12.345678,'rule_version','precise-v1') WHERE name='carbon'",

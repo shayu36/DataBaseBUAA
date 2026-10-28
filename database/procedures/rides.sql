@@ -108,12 +108,18 @@ award: BEGIN
  DECLARE v_factor DECIMAL(20,8) DEFAULT 0.21;
  DECLARE v_rate DECIMAL(20,8) DEFAULT 10;
  DECLARE v_version VARCHAR(30) DEFAULT 'carbon-v1';
+ DECLARE v_calculated_points DECIMAL(30,0);
+ DECLARE v_calculated_carbon DECIMAL(30,4);
  SELECT status,qualification_status,distance_m INTO v_status,v_qualification,v_distance FROM ride_orders WHERE id=p_order_id FOR UPDATE;
  IF v_status IS NULL THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ORDER_NOT_FOUND'; END IF;
  SET p_awarded=FALSE,p_points=NULL,p_carbon=NULL,p_reason=v_qualification;
  IF v_status<>'PAID' OR v_qualification<>'VALID' THEN LEAVE award; END IF;
  CALL sp_get_carbon_rule(v_factor,v_rate,v_version);
- SET p_points=FLOOR(v_distance*v_rate/1000),p_carbon=ROUND(v_distance*v_factor/1000,4),p_reason=NULL;
+ SET v_calculated_points=FLOOR(v_distance*v_rate/1000),v_calculated_carbon=ROUND(v_distance*v_factor/1000,4);
+ IF v_calculated_points>2147483647 OR v_calculated_carbon>99999999.9999 THEN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='CARBON_AWARD_OUT_OF_RANGE';
+ END IF;
+ SET p_points=v_calculated_points,p_carbon=v_calculated_carbon,p_reason=NULL;
  IF EXISTS(SELECT 1 FROM carbon_transactions WHERE award_order_id=p_order_id) THEN LEAVE award; END IF;
  INSERT INTO carbon_transactions(order_id,entry_type,idempotency_key,distance_m,points_change,carbon_kg_change,factor_kg_per_km,points_per_km,rule_version,reason,actor_id)
  VALUES(p_order_id,'AWARD',CONCAT('auto:award-',p_order_id),v_distance,p_points,p_carbon,v_factor,v_rate,v_version,'有效已支付行程积分发放',p_actor_id);
