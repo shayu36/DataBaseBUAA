@@ -1164,7 +1164,7 @@ test("risk ticket creation preserves active ride and dispatch states", async () 
 test("device GPS requires a capture timestamp before any return writes", async () => {
   const ride = await business.startRide(pool, student, { bike_id: 1 });
   await assert.rejects(
-    pool.query("CALL sp_prepare_ride_return(?,?,?,?,?,?,?)", [
+    pool.query("CALL sp_prepare_ride_return(?,?,?,?,?,?,?,?)", [
       student.id,
       ride.id,
       2,
@@ -1172,6 +1172,7 @@ test("device GPS requires a capture timestamp before any return writes", async (
       100,
       null,
       "DEVICE_GPS",
+      campusDefinition,
     ]),
     { sqlMessage: "LOCATION_TIMESTAMP_REQUIRED" },
   );

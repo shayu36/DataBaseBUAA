@@ -100,7 +100,7 @@ export async function returnRide(pool, user, id, input) {
     }
     const prepared = await callProcedure(
       connection,
-      "CALL sp_prepare_ride_return(?,?,?,?,?,?,?)",
+      "CALL sp_prepare_ride_return(?,?,?,?,?,?,?,?)",
       [
         user.id,
         orderId,
@@ -109,12 +109,18 @@ export async function returnRide(pool, user, id, input) {
         y,
         d.captured_at || null,
         d.location_source,
+        campusDefinition,
       ],
       {
         ORDER_NOT_FOUND: ["记录不存在", "NOT_FOUND", 404],
         ZONE_NOT_FOUND: ["记录不存在", "NOT_FOUND", 404],
         RETURN_FORBIDDEN: ["不能操作他人订单", "FORBIDDEN", 403],
         RETURN_INVALID_STATE: ["该订单不在骑行中", "INVALID_STATE", 409],
+        ZONE_RESTRICTED: [
+          "目标停车点位于禁行区域，请选择其他停车点",
+          "ZONE_RESTRICTED",
+          409,
+        ],
         LOCATION_TIMESTAMP_REQUIRED: [
           "设备 GPS 定位必须提供采集时间",
           "LOCATION_TIMESTAMP_REQUIRED",

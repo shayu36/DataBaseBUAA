@@ -133,6 +133,11 @@ test("禁行站点显示实际可借数量并阻止选择车辆", async ({ page 
     name: `${stationName}（可借 0 辆，禁行区内）`,
   });
   await expect(option).toHaveAttribute("disabled", "");
+  await expect(
+    page.getByLabel("归还停车点").getByRole("option", {
+      name: new RegExp(`${stationName}（空位 .*，禁行区内）`),
+    }),
+  ).toHaveAttribute("disabled", "");
   await page
     .getByRole("button", {
       name: new RegExp(`${stationName}，可借 0 辆.*禁行区内`),
@@ -146,6 +151,51 @@ test("禁行站点显示实际可借数量并阻止选择车辆", async ({ page 
   await expect(
     page.locator(".bike-card").filter({ hasText: bikeCode }),
   ).toHaveCount(0);
+});
+
+test("禁行站点的历史行程仍可选择原出发点归还", async ({ page }) => {
+  let startName = "";
+  let otherName = "";
+  await page.route("**/api/dashboard", async (route) => {
+    const response = await route.fetch();
+    const data = await response.json();
+    const [start, other] = data.zones;
+    start.restricted = other.restricted = 1;
+    start.borrowable = other.borrowable = 0;
+    startName = start.name;
+    otherName = other.name;
+    data.actionable_rides = [
+      {
+        id: 987654,
+        status: "RUNNING",
+        start_zone_id: start.id,
+        bike_code: "QX-OLD",
+        started_at: new Date().toISOString(),
+      },
+    ];
+    await route.fulfill({ response, json: data });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  await page.getByRole("button", { name: "借车与归还", exact: true }).click();
+  const select = page.getByLabel("归还停车点");
+  await expect(select.locator("option:checked")).toContainText(startName);
+  await expect(
+    select.getByRole("option", {
+      name: new RegExp(`${otherName}（空位 .*，禁行区内）`),
+    }),
+  ).toHaveAttribute("disabled", "");
+  await expect(page.getByRole("button", { name: "确认归还" })).toBeEnabled();
+  await page
+    .getByRole("button", {
+      name: new RegExp(`${otherName}，可借 0 辆.*禁行区内`),
+    })
+    .click();
+  await expect(page.getByRole("button", { name: "确认归还" })).toBeDisabled();
+  await expect(
+    page.getByText("该停车点不可归还，请选择其他停车点。"),
+  ).toBeVisible();
 });
 test("生产服务的校园底图重复加载使用浏览器缓存", async ({ page }) => {
   test.skip(!process.env.QINGXING_E2E_URL, "开发服务的缓存策略由 Vite 控制");

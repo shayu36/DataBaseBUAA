@@ -164,22 +164,30 @@ export function Overview({ d, user }: Props) {
   );
 }
 export function Rides({ d, run }: Props) {
+  const active = d.actionable_rides.find((r) => r.status === "RUNNING");
+  const canReturnTo = (zone: Row) =>
+    zone.status === "ACTIVE" &&
+    (!Number(zone.restricted) ||
+      Number(zone.id) === Number(active?.start_zone_id));
   const [borrowZone, setBorrowZone] = useState(
       d.zones.find((z) => Number(z.borrowable) > 0)?.id || d.zones[0]?.id || 0,
     ),
     [returnZone, setReturnZone] = useState(
-      d.zones.find(
-        (z) =>
-          z.status === "ACTIVE" &&
-          Number(z.capacity) > Number(z.occupied) + Number(z.reserved),
-      )?.id ||
+      d.zones.find((z) => Number(z.restricted) && canReturnTo(z))?.id ||
+        d.zones.find(
+          (z) =>
+            canReturnTo(z) &&
+            Number(z.capacity) > Number(z.occupied) + Number(z.reserved),
+        )?.id ||
         d.zones[0]?.id ||
         0,
     ),
     [mode, setMode] = useState("shortest"),
     [capturedAt, setCapturedAt] = useState(() => new Date().toISOString());
   const capture = () => setCapturedAt(new Date().toISOString());
-  const active = d.actionable_rides.find((r) => r.status === "RUNNING");
+  const selectedReturnZone = d.zones.find(
+    (z) => Number(z.id) === Number(returnZone),
+  );
   const selectedBorrowZone = d.zones.find(
     (z) => Number(z.id) === Number(borrowZone),
   );
@@ -262,13 +270,10 @@ export function Rides({ d, run }: Props) {
               }}
             >
               {d.zones.map((z) => (
-                <option
-                  key={z.id}
-                  value={z.id}
-                  disabled={z.status !== "ACTIVE"}
-                >
+                <option key={z.id} value={z.id} disabled={!canReturnTo(z)}>
                   {z.name}（空位{" "}
-                  {Math.max(0, z.capacity - z.occupied - z.reserved)}）
+                  {Math.max(0, z.capacity - z.occupied - z.reserved)}
+                  {Number(z.restricted) ? "，禁行区内" : ""}）
                 </option>
               ))}
             </select>
@@ -284,11 +289,16 @@ export function Rides({ d, run }: Props) {
             模拟位置采集于 {date(capturedAt)}
             。选择停车点会重新采集；定位过期或车位已满时会记录尝试并保留骑行订单。
           </p>
+          {selectedReturnZone && !canReturnTo(selectedReturnZone) && (
+            <p className="muted">该停车点不可归还，请选择其他停车点。</p>
+          )}
           <button className="secondary" onClick={capture}>
             重新采集模拟位置
           </button>
           <button
-            disabled={!active}
+            disabled={
+              !active || !selectedReturnZone || !canReturnTo(selectedReturnZone)
+            }
             onClick={() =>
               active &&
               run("/rides/" + active.id + "/return", {

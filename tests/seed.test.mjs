@@ -381,8 +381,17 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
       ]);
       const orderId = started[0][0].id;
       const [prepared] = await connection.query(
-        "CALL sp_prepare_ride_return(?,?,?,?,?,?,?)",
-        [2, orderId, bike.zone_id, bike.x, bike.y, null, "MAP_SIMULATION"],
+        "CALL sp_prepare_ride_return(?,?,?,?,?,?,?,?)",
+        [
+          2,
+          orderId,
+          bike.zone_id,
+          bike.x,
+          bike.y,
+          null,
+          "MAP_SIMULATION",
+          JSON.stringify(campus),
+        ],
       );
       assert.equal(prepared[0][0].rejected, undefined);
       await connection.query(

@@ -15,6 +15,7 @@ import { upgradeCampusMap } from "../backend/campus.mjs";
 import {
   createDispatch,
   dispatchAction,
+  returnRide,
   routeGraph,
   startRide,
 } from "../backend/business.mjs";
@@ -309,6 +310,39 @@ test("legacy station inside a restricted area cannot start a ride", async () => 
   assert.deepEqual(bike, { status: "AVAILABLE", current_zone_id: 1 });
   const [[orders]] = await pool.query("SELECT COUNT(*) n FROM ride_orders");
   assert.equal(orders.n, 0);
+});
+test("a ride cannot be returned to a different restricted legacy station", async () => {
+  await loadVersionedCampus(campus);
+  const actor = { id: 1, role: "STUDENT", status: "ACTIVE" };
+  const order = await startRide(pool, actor, { bike_id: 1 });
+  await pool.query("UPDATE parking_zones SET x=700,y=200 WHERE id=2");
+  await assert.rejects(returnRide(pool, actor, order.id, { zone_id: 2 }), {
+    code: "ZONE_RESTRICTED",
+  });
+  const [[ride]] = await pool.query(
+    "SELECT status,end_zone_id FROM ride_orders WHERE id=?",
+    [order.id],
+  );
+  assert.deepEqual(ride, { status: "RUNNING", end_zone_id: null });
+  const [[bike]] = await pool.query(
+    "SELECT status,current_zone_id FROM bikes WHERE id=1",
+  );
+  assert.deepEqual(bike, { status: "RIDING", current_zone_id: null });
+  await returnRide(pool, actor, order.id, { zone_id: 3 });
+});
+test("a legacy ride from a restricted station can still return to its start", async () => {
+  await loadVersionedCampus(campus);
+  const actor = { id: 1, role: "STUDENT", status: "ACTIVE" };
+  const order = await startRide(pool, actor, { bike_id: 1 });
+  await pool.query("UPDATE parking_zones SET x=700,y=200 WHERE id=1");
+  await pool.query("UPDATE road_nodes SET x=700,y=200 WHERE zone_id=1");
+  const result = await returnRide(pool, actor, order.id, { zone_id: 1 });
+  assert.equal(result.distance_m, 0);
+  const [[ride]] = await pool.query(
+    "SELECT status,end_zone_id FROM ride_orders WHERE id=?",
+    [order.id],
+  );
+  assert.deepEqual(ride, { status: "UNPAID", end_zone_id: 1 });
 });
 test("dashboard separates physical inventory from bikes that can be borrowed", async () => {
   await loadVersionedCampus(campus);

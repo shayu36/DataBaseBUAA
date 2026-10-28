@@ -312,7 +312,7 @@ DELIMITER ;
 DROP PROCEDURE IF EXISTS sp_prepare_ride_return;
 DELIMITER $$
 CREATE PROCEDURE sp_prepare_ride_return(IN p_actor_id BIGINT UNSIGNED, IN p_order_id BIGINT UNSIGNED,
- IN p_zone_id BIGINT UNSIGNED, IN p_x DOUBLE, IN p_y DOUBLE, IN p_captured DATETIME(3), IN p_source VARCHAR(20))
+ IN p_zone_id BIGINT UNSIGNED, IN p_x DOUBLE, IN p_y DOUBLE, IN p_captured DATETIME(3), IN p_source VARCHAR(20), IN p_campus JSON)
 SQL SECURITY INVOKER
 prepare_return: BEGIN
  DECLARE v_user BIGINT UNSIGNED DEFAULT NULL;
@@ -326,6 +326,7 @@ prepare_return: BEGIN
  DECLARE v_now DATETIME(3) DEFAULT UTC_TIMESTAMP(3);
  DECLARE v_captured DATETIME(3);
  DECLARE v_reason VARCHAR(20) DEFAULT NULL;
+ DECLARE v_areas GEOMETRY DEFAULT NULL;
  SELECT user_id,bike_id,start_zone_id,started_at,status INTO v_user,v_bike,v_start_zone,v_started,v_status
  FROM ride_orders WHERE id=p_order_id FOR UPDATE;
  IF v_user IS NULL THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ORDER_NOT_FOUND'; END IF;
@@ -350,6 +351,12 @@ prepare_return: BEGIN
   VALUES(p_order_id,p_zone_id,p_x,p_y,v_reason,v_captured,p_source);
   SELECT v_reason AS rejected;
   LEAVE prepare_return;
+ END IF;
+ IF p_zone_id<>v_start_zone THEN
+  CALL sp_campus_restrictions(p_campus,v_areas);
+  IF v_areas IS NOT NULL AND ST_Intersects(POINT(v_x,v_y),v_areas) THEN
+   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ZONE_RESTRICTED';
+  END IF;
  END IF;
  SELECT v_start_zone AS start_zone_id,v_now AS return_time,v_captured AS captured_at;
 END$$
