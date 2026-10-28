@@ -33,7 +33,7 @@ node -e "require('fs').copyFileSync('.env.example','.env',require('fs').constant
 | `DB_ADMIN_USER`、`DB_ADMIN_PASSWORD` | 本机 MySQL 管理员账号和密码 |
 | `DB_USER`、`DB_PASSWORD` | 应用账号及密码；自动初始化时账号名固定为 `qingxing_app` |
 | `DB_NAME` | 业务库名，自动初始化时固定为 `campus_bike` |
-| `JWT_SECRET` | 至少 32 个字符的随机会话密钥 |
+| `JWT_SECRET` | 至少 32 个字符的随机会话密钥；须替换示例占位符，不能只填空白 |
 | `HOST`、`PORT` | 应用监听地址和端口，默认 `127.0.0.1:5188` |
 
 可以用下面的命令生成会话密钥，将输出复制到 `.env` 的 `JWT_SECRET` 中：
@@ -51,6 +51,8 @@ npm start
 ```
 
 初始化会创建业务库 `campus_bike`、测试库 `campus_bike_test` 和业务账号；已有同名应用账号的密码不会被修改，必须与 `.env` 中一致。演示数据只在空库首次写入，重复初始化不会重置已有业务数据。构建同时生成前端页面和课程报告。浏览器访问 `http://127.0.0.1:5188`；在运行终端按 `Ctrl+C` 停止应用。
+
+初始化和启动都会检查会话密钥；密钥缺失、过短、全为空白或仍是示例占位符时会直接报错。校验不能判断密钥是否随机，请使用上面的生成命令。
 
 ## 演示账号
 

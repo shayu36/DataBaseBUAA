@@ -5,11 +5,13 @@ import {
   withSchemaLock,
 } from "./db.mjs";
 import { createApp } from "./app.mjs";
+import { sessionSecret } from "./config.mjs";
 import { sql } from "./sql-statements.mjs";
 import {
   loadProcedureSources,
   procedureRevision,
 } from "./procedure-revision.mjs";
+sessionSecret();
 const pool = createPool();
 const versionError =
   "SCHEMA_VERSION_MISMATCH：数据库结构或存储过程版本不匹配，请先核对 README 中的初始化和迁移说明。";

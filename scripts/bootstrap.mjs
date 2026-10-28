@@ -3,6 +3,7 @@ import mysql from "mysql2/promise";
 import dotenv from "dotenv";
 import { sql } from "../backend/sql-statements.mjs";
 import { assertMysqlVersion } from "./mysql-version.mjs";
+import { sessionSecret } from "../backend/config.mjs";
 
 const envPath = new URL("../.env", import.meta.url);
 if (!existsSync(envPath)) {
@@ -29,8 +30,7 @@ if (
 ) {
   throw new Error("请在 .env 中填写完整的 MySQL 凭据和 JWT_SECRET。");
 }
-if (process.env.JWT_SECRET.length < 32)
-  throw new Error("JWT_SECRET 至少需要 32 个字符。");
+sessionSecret();
 if (
   !["127.0.0.1", "localhost"].includes(process.env.DB_HOST) ||
   process.env.DB_NAME !== "campus_bike" ||

@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createPool } from "../backend/db.mjs";
+import { sessionSecret } from "../backend/config.mjs";
 import { sql } from "../backend/sql-statements.mjs";
 import {
   loadProcedureSources,
@@ -19,6 +20,48 @@ test("procedure revision is stable across Linux and Windows line endings", () =>
     procedureRevision(linux),
     procedureRevision([{ name: "sample.sql", text: "SELECT 3;\n" }]),
   );
+});
+
+test("application rejects invalid session secrets before connecting or listening", () => {
+  for (const secret of [
+    "",
+    "short",
+    " ".repeat(40),
+    "replace-with-at-least-32-random-characters",
+  ]) {
+    const processResult = spawnSync(
+      process.execPath,
+      [fileURLToPath(new URL("../backend/index.mjs", import.meta.url))],
+      {
+        env: {
+          ...process.env,
+          JWT_SECRET: secret,
+          DB_PORT: "1",
+          HOST: "127.0.0.1",
+          PORT: "0",
+        },
+        encoding: "utf8",
+        timeout: 5000,
+      },
+    );
+    assert.equal(processResult.status, 1);
+    assert.match(processResult.stderr, /JWT_SECRET/);
+    assert.doesNotMatch(processResult.stderr, /ECONNREFUSED/);
+    assert.doesNotMatch(processResult.stdout, /Qingxing ready/);
+  }
+});
+
+test("session secret validation accepts the documented length boundary", () => {
+  const previous = process.env.JWT_SECRET;
+  try {
+    process.env.JWT_SECRET = "a".repeat(32);
+    assert.equal(sessionSecret(), "a".repeat(32));
+    process.env.JWT_SECRET = `  replace-with-${"x".repeat(32)}`;
+    assert.throws(sessionSecret, /JWT_SECRET/);
+  } finally {
+    if (previous === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = previous;
+  }
 });
 
 test("application refuses an incompatible or missing database version before listening", async () => {

@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import { sql } from "./sql-statements.mjs";
 import { z } from "zod";
 import { AppError, ledgerTransaction, callProcedure } from "./db.mjs";
+import { sessionSecret } from "./config.mjs";
 const publicUser = ({
   id,
   name,
@@ -53,15 +54,10 @@ const cookieOptions = {
   secure: process.env.COOKIE_SECURE === "true",
   path: "/",
 };
-function secret() {
-  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32)
-    throw new Error("JWT_SECRET must contain at least 32 characters");
-  return process.env.JWT_SECRET;
-}
 export function issueCookie(res, user) {
   res.cookie(
     "qingxing_session",
-    jwt.sign({ sub: String(user.id) }, secret(), {
+    jwt.sign({ sub: String(user.id) }, sessionSecret(), {
       algorithm: "HS256",
       expiresIn: "8h",
       issuer: "qingxing-local",
@@ -76,11 +72,15 @@ export function logout(res) {
 export function authenticate(pool) {
   return async (req, res, next) => {
     try {
-      const p = jwt.verify(req.cookies.qingxing_session || "", secret(), {
-        algorithms: ["HS256"],
-        issuer: "qingxing-local",
-        audience: "qingxing-browser",
-      });
+      const p = jwt.verify(
+        req.cookies.qingxing_session || "",
+        sessionSecret(),
+        {
+          algorithms: ["HS256"],
+          issuer: "qingxing-local",
+          audience: "qingxing-browser",
+        },
+      );
       const [[user]] = await pool.query(sql("session_user"), [p.sub]);
       if (!user)
         return res
