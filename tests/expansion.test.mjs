@@ -1011,6 +1011,36 @@ test("teaching hotspot query filters borrowing and return times independently", 
   }
 });
 
+test("teaching hotspot query respects millisecond boundaries", async () => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.query(
+      "SET timestamp=UNIX_TIMESTAMP('2026-10-07 01:30:00.500')",
+    );
+    await connection.query(`INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,status) VALUES
+      (2,1,1,1,'2026-09-30 01:30:00.499','2026-09-30 01:30:00.499','UNPAID'),
+      (2,1,1,1,'2026-09-30 01:30:00.500','2026-09-30 01:30:00.500','UNPAID'),
+      (2,1,2,2,'2026-10-07 01:30:00.500','2026-10-07 01:30:00.500','UNPAID'),
+      (2,1,2,2,'2026-10-07 01:30:00.501','2026-10-07 01:30:00.501','UNPAID')`);
+    const teaching = await readFile(
+      new URL("../database/queries.sql", import.meta.url),
+      "utf8",
+    );
+    const query = teaching
+      .split("-- Q26:")[1]
+      .split("-- Q27:")[0]
+      .replace(/^[^\n]*\n/, "");
+    const [rows] = await connection.query(query);
+    assert.deepEqual(rows, [
+      { name: "富余站", borrow_count: 1, return_count: 1 },
+      { name: "缺车站", borrow_count: 1, return_count: 1 },
+    ]);
+  } finally {
+    await connection.query("SET timestamp=0");
+    connection.release();
+  }
+});
+
 test("teaching recent queries exclude future events and include exact boundaries", async () => {
   const connection = await pool.getConnection();
   try {

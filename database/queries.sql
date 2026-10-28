@@ -81,10 +81,10 @@ FROM carbon_transactions ORDER BY order_id,id;
 -- Q26: 最近七天工作日北京时间 07:00–10:00 的借还热点。
 WITH events AS (
  SELECT start_zone_id AS zone_id,started_at AS event_at,1 AS borrowed,0 AS returned FROM ride_orders
- WHERE started_at>=UTC_TIMESTAMP()-INTERVAL 7 DAY AND started_at<=UTC_TIMESTAMP()
+ WHERE started_at>=UTC_TIMESTAMP(3)-INTERVAL 7 DAY AND started_at<=UTC_TIMESTAMP(3)
  UNION ALL
  SELECT end_zone_id,ended_at,0,1 FROM ride_orders
- WHERE ended_at>=UTC_TIMESTAMP()-INTERVAL 7 DAY AND ended_at<=UTC_TIMESTAMP()
+ WHERE ended_at>=UTC_TIMESTAMP(3)-INTERVAL 7 DAY AND ended_at<=UTC_TIMESTAMP(3)
 ), filtered AS (
  SELECT * FROM events WHERE WEEKDAY(event_at+INTERVAL 8 HOUR)<5
  AND HOUR(event_at+INTERVAL 8 HOUR)>=7 AND HOUR(event_at+INTERVAL 8 HOUR)<10
