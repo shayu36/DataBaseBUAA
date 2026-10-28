@@ -140,6 +140,73 @@ test("login form validates and demo account opens campus dashboard", async ({
     page.getByRole("heading", { name: "核心关系", exact: true }),
   ).toBeVisible();
 });
+test("登录和注册期间冻结表单并阻止重复提交，失败后可重试", async ({ page }) => {
+  let requests = 0;
+  let registrations = 0;
+  let release!: () => void;
+  let releaseRegistration!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const registrationGate = new Promise<void>(
+    (resolve) => (releaseRegistration = resolve),
+  );
+  await page.route("**/api/auth/me", (route) =>
+    route.fulfill({ status: 401, json: { error: "请登录" } }),
+  );
+  await page.route("**/api/auth/login", async (route) => {
+    requests++;
+    await gate;
+    await route.fulfill({ status: 401, json: { error: "模拟登录失败" } });
+  });
+  await page.route("**/api/auth/register", async (route) => {
+    registrations++;
+    await registrationGate;
+    await route.fulfill({ status: 409, json: { error: "模拟注册失败" } });
+  });
+  try {
+    await page.goto("/");
+    await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
+    await page.getByRole("button", { name: "登录青行", exact: true }).click();
+    await expect.poll(() => requests).toBe(1);
+    await expect(page.getByLabel("邮箱")).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "注册学生账户" }),
+    ).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "学生 · 王奕" }),
+    ).toBeDisabled();
+    await page.locator(".login-form form").dispatchEvent("submit");
+    await page.locator(".login-form form").dispatchEvent("submit");
+    expect(requests).toBe(1);
+    release();
+    await expect(page.getByRole("alert")).toContainText("模拟登录失败");
+    expect(requests).toBe(1);
+    await expect(page.getByLabel("邮箱")).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: "注册学生账户" }),
+    ).toBeEnabled();
+    await page.getByRole("button", { name: "注册学生账户" }).click();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await page.getByLabel("姓名").fill("测试用户");
+    await page.getByLabel("手机号码").fill("13900000001");
+    await page.getByRole("button", { name: "注册并进入校园" }).click();
+    await expect.poll(() => registrations).toBe(1);
+    await expect(page.getByLabel("姓名")).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "登录", exact: true }),
+    ).toBeDisabled();
+    await page.locator(".login-form form").dispatchEvent("submit");
+    await page.locator(".login-form form").dispatchEvent("submit");
+    expect(registrations).toBe(1);
+    releaseRegistration();
+    await expect(page.getByRole("alert")).toContainText("模拟注册失败");
+    expect(registrations).toBe(1);
+    await expect(page.getByLabel("姓名")).toBeEnabled();
+  } finally {
+    release();
+    releaseRegistration();
+  }
+});
+
 test("管理员通过表单提交四位精度的碳积分调整", async ({ page }) => {
   const studentLogin = await page.request.post("/api/auth/login", {
     data: { email: "ouyang@qingxing.local", password: "Qingxing2026!" },

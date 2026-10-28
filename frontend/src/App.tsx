@@ -94,6 +94,7 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
     [phone, setPhone] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
   return (
     <div className="login-page">
       <section className="login-story">
@@ -127,109 +128,121 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
           <span className="eyebrow">WELCOME TO QINGXING</span>
           <h2>{register ? "加入青行" : "欢迎回来"}</h2>
           <p className="muted">登录，开启你的绿色校园生活。</p>
-          <div className="tabs">
-            <button
-              className={!register ? "" : "secondary"}
-              onClick={() => setRegister(false)}
-            >
-              登录
-            </button>
-            <button
-              className={register ? "" : "secondary"}
-              onClick={() => setRegister(true)}
-            >
-              注册学生账户
-            </button>
-          </div>
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              setBusy(true);
-              setError("");
-              try {
-                const v = await api(
-                  register ? "/auth/register" : "/auth/login",
-                  { email, password, ...(register ? { name, phone } : {}) },
-                );
-                onLogin(v.user);
-              } catch (e) {
-                setError((e as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            {register && (
-              <>
-                <Field label="姓名">
-                  <input
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    autoComplete="name"
-                  />
-                </Field>
-                <Field label="手机号码">
-                  <input
-                    required
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    autoComplete="tel"
-                  />
-                </Field>
-              </>
-            )}
-            <Field label="邮箱">
-              <input
-                required
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="username"
-                placeholder="你的校园邮箱"
-              />
-            </Field>
-            <Field label="密码">
-              <input
-                required
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete={register ? "new-password" : "current-password"}
-                minLength={8}
-              />
-            </Field>
-            {error && (
-              <div role="alert" className="error">
-                {error}
-              </div>
-            )}
-            <button className="login-submit" disabled={busy}>
-              {busy ? "正在连接…" : register ? "注册并进入校园" : "登录青行"}
-              <ArrowRight size={18} />
-            </button>
-          </form>
-          <div className="demo">
-            <span>课堂演示 · 选择身份后点击登录</span>
-            {[
-              ["jia", "管理员 · 贾鑫洋"],
-              ["ouyang", "学生 · 欧阳晨"],
-              ["zheng", "运营员 · 郑一凡"],
-              ["wang", "学生 · 王奕"],
-            ].map(([id, label]) => (
+          <fieldset className="login-controls" disabled={busy} aria-busy={busy}>
+            <div className="tabs">
               <button
-                className="secondary"
-                key={id}
+                className={!register ? "" : "secondary"}
                 onClick={() => {
-                  setEmail(id + "@qingxing.local");
-                  setPassword("Qingxing2026!");
                   setRegister(false);
+                  setError("");
                 }}
               >
-                {label}
+                登录
               </button>
-            ))}
-          </div>
+              <button
+                className={register ? "" : "secondary"}
+                onClick={() => {
+                  setRegister(true);
+                  setError("");
+                }}
+              >
+                注册学生账户
+              </button>
+            </div>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (inFlight.current) return;
+                inFlight.current = true;
+                setBusy(true);
+                setError("");
+                try {
+                  const v = await api(
+                    register ? "/auth/register" : "/auth/login",
+                    { email, password, ...(register ? { name, phone } : {}) },
+                  );
+                  onLogin(v.user);
+                } catch (e) {
+                  setError((e as Error).message);
+                } finally {
+                  inFlight.current = false;
+                  setBusy(false);
+                }
+              }}
+            >
+              {register && (
+                <>
+                  <Field label="姓名">
+                    <input
+                      required
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      autoComplete="name"
+                    />
+                  </Field>
+                  <Field label="手机号码">
+                    <input
+                      required
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      autoComplete="tel"
+                    />
+                  </Field>
+                </>
+              )}
+              <Field label="邮箱">
+                <input
+                  required
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="username"
+                  placeholder="你的校园邮箱"
+                />
+              </Field>
+              <Field label="密码">
+                <input
+                  required
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete={register ? "new-password" : "current-password"}
+                  minLength={8}
+                />
+              </Field>
+              {error && (
+                <div role="alert" className="error">
+                  {error}
+                </div>
+              )}
+              <button className="login-submit" disabled={busy}>
+                {busy ? "正在连接…" : register ? "注册并进入校园" : "登录青行"}
+                <ArrowRight size={18} />
+              </button>
+            </form>
+            <div className="demo">
+              <span>课堂演示 · 选择身份后点击登录</span>
+              {[
+                ["jia", "管理员 · 贾鑫洋"],
+                ["ouyang", "学生 · 欧阳晨"],
+                ["zheng", "运营员 · 郑一凡"],
+                ["wang", "学生 · 王奕"],
+              ].map(([id, label]) => (
+                <button
+                  className="secondary"
+                  key={id}
+                  onClick={() => {
+                    setEmail(id + "@qingxing.local");
+                    setPassword("Qingxing2026!");
+                    setRegister(false);
+                    setError("");
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </fieldset>
         </div>
       </section>
     </div>

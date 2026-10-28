@@ -900,6 +900,12 @@ footer {
   max-width: 430px;
   margin: auto;
 }
+.login-controls {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
 .login-form h2 {
   font-size: 28px;
   font-weight: 500;
