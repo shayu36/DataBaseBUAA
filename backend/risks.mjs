@@ -9,7 +9,7 @@ export function refreshRiskAlerts(pool, actor, now = new Date()) {
   if (actor.role !== "ADMIN")
     throw new AppError("仅管理员可运行风险规则", "FORBIDDEN", 403);
   return actorTransaction(pool, actor, async (c) => {
-    const { risks, evaluated } = await riskData(c, now);
+    const { risks, evaluated } = await riskData(c, now, true);
     const [result] = await c.query("CALL sp_refresh_risk_alerts(?,?,?,?,?)", [
       actor.id,
       evaluated,

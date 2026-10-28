@@ -535,9 +535,18 @@ test("risk refresh retains candidates with no historical tickets", async () => {
 
 test("risk refresh handles an entirely low-risk fleet", async () => {
   await pool.query("UPDATE bikes SET last_service_at=UTC_TIMESTAMP(3)");
-  const result = await refreshRiskAlerts(pool, admin);
+  const now = new Date();
+  const candidates = await riskData(pool, now, true);
+  assert.deepEqual(candidates.risks, []);
+  assert.equal(candidates.evaluated, 9);
+  const result = await refreshRiskAlerts(pool, admin, now);
   assert.deepEqual(result.created, []);
   assert.equal(result.evaluated, 9);
+  await pool.query("UPDATE bikes SET status='RETIRED'");
+  assert.deepEqual(await riskData(pool, now, true), {
+    risks: [],
+    evaluated: 0,
+  });
 });
 
 test("SQL risk aggregation matches rule results and ordered ticket references", async () => {
@@ -567,6 +576,12 @@ test("SQL risk aggregation matches rule results and ordered ticket references", 
   const actual = await riskData(pool, now);
   const expectedRisks = bikeRisks(bikes, tickets, now);
   assert.deepEqual(actual.risks, expectedRisks);
+  const candidates = await riskData(pool, now, true);
+  assert.equal(candidates.evaluated, expectedRisks.length);
+  assert.deepEqual(
+    candidates.risks,
+    expectedRisks.filter((risk) => risk.score >= 30),
+  );
   const expectedIds = tickets
     .filter((ticket) => ticket.bike_id === 1 && ticket.created_at <= now)
     .map((ticket) => ticket.id);

@@ -149,7 +149,7 @@ DELIMITER ;
 
 DROP PROCEDURE IF EXISTS sp_risk_inputs;
 DELIMITER $$
-CREATE PROCEDURE sp_risk_inputs(IN p_now DATETIME(3))
+CREATE PROCEDURE sp_risk_inputs(IN p_now DATETIME(3), IN p_candidates BOOLEAN)
 SQL SECURITY INVOKER
 BEGIN
  WITH recent_groups AS (
@@ -173,20 +173,22 @@ BEGIN
  ), scored AS (
   SELECT *,LEAST(100,LEAST(40,recent_count*10)+repeated_types*20+
    CASE WHEN service_days IS NULL THEN 20 WHEN service_days>=90 THEN 30 WHEN service_days>=30 THEN 10 ELSE 0 END) AS score FROM service
+ ), eligible AS (
+  SELECT * FROM scored WHERE NOT p_candidates OR score>=30
  ), reasons AS (
   SELECT bike_id,1 AS priority,0 AS sequence,'RECENT_FAULTS' AS rule,
-   CONCAT('近30天报修 ',recent_count,' 次（+',LEAST(40,recent_count*10),'）') AS message FROM scored WHERE recent_count>0
+   CONCAT('近30天报修 ',recent_count,' 次（+',LEAST(40,recent_count*10),'）') AS message FROM eligible WHERE recent_count>0
   UNION ALL
-  SELECT bike_id,2,first_id,'REPEAT_FAULT',CONCAT(fault_type,' 同类型故障复发 ',fault_count,' 次（+20）')
-  FROM recent_groups WHERE fault_count>=2
+  SELECT g.bike_id,2,g.first_id,'REPEAT_FAULT',CONCAT(g.fault_type,' 同类型故障复发 ',g.fault_count,' 次（+20）')
+  FROM recent_groups g JOIN eligible e ON e.bike_id=g.bike_id WHERE g.fault_count>=2
   UNION ALL
   SELECT bike_id,3,0,'SERVICE_GAP',CASE WHEN service_days IS NULL THEN '无有效维修记录（+20）'
    WHEN service_days>=90 THEN CONCAT('距最近维修 ',service_days,' 天（+30）') ELSE CONCAT('距最近维修 ',service_days,' 天（+10）') END
-  FROM scored WHERE service_days IS NULL OR service_days>=30
+  FROM eligible WHERE service_days IS NULL OR service_days>=30
   UNION ALL
-  SELECT bike_id,4,0,'SHORT_RIDE',CONCAT('近30天异常短行程 ',short_count,' 次（辅助线索，不计分）') FROM scored WHERE short_count>0
+  SELECT bike_id,4,0,'SHORT_RIDE',CONCAT('近30天异常短行程 ',short_count,' 次（辅助线索，不计分）') FROM eligible WHERE short_count>0
   UNION ALL
-  SELECT bike_id,5,0,'NONE','近期无触发规则的风险因素' FROM scored
+  SELECT bike_id,5,0,'NONE','近期无触发规则的风险因素' FROM eligible
   WHERE recent_count=0 AND service_days IS NOT NULL AND service_days<30 AND short_count=0
  ), explanations AS (
   SELECT bike_id,
@@ -196,6 +198,9 @@ BEGIN
  )
  SELECT /*+ SET_VAR(group_concat_max_len=4294967295) */ s.bike_id,s.code,s.score,
   CASE WHEN s.score>=60 THEN 'HIGH' WHEN s.score>=30 THEN 'MEDIUM' ELSE 'LOW' END AS level,e.reasons,e.reason_details
- FROM scored s JOIN explanations e ON e.bike_id=s.bike_id ORDER BY s.score DESC,s.bike_id;
+ FROM eligible s JOIN explanations e ON e.bike_id=s.bike_id ORDER BY s.score DESC,s.bike_id;
+ IF p_candidates THEN
+  SELECT COUNT(*) AS evaluated FROM bikes WHERE status<>'RETIRED';
+ END IF;
 END$$
 DELIMITER ;
