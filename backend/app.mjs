@@ -361,7 +361,17 @@ export function createApp(pool) {
     res.sendFile(path.join(root, "docs", req.params.document));
   });
   app.use("/docs", (_req, res) => res.status(404).send("文件不存在"));
-  app.use(express.static(path.join(root, "dist")));
+  app.use(
+    express.static(path.join(root, "dist"), {
+      setHeaders(res, filename) {
+        if (
+          path.dirname(filename) === path.join(root, "dist", "assets") &&
+          /-[A-Za-z0-9_-]{8}\.[A-Za-z0-9]+$/.test(path.basename(filename))
+        )
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      },
+    }),
+  );
   app.get("/{*path}", (_req, res) =>
     res.sendFile(path.join(root, "dist", "index.html")),
   );

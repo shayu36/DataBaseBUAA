@@ -1,6 +1,9 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import bcrypt from "bcryptjs";
+import { randomBytes } from "node:crypto";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import { setTimeout as delay } from "node:timers/promises";
 import { createPool } from "../backend/db.mjs";
@@ -80,6 +83,40 @@ before(async () => {
 after(async () => {
   if (server) await new Promise((r) => server.close(r));
   await pool.end();
+});
+test("only fingerprinted build assets receive immutable caching", async () => {
+  const assets = new URL("../dist/assets/", import.meta.url);
+  await mkdir(assets, { recursive: true });
+  const prefix = `cache-test-${randomBytes(8).toString("hex")}`;
+  const hashed = `${prefix}-AbCd1234.js`;
+  const plain = `${prefix}.js`;
+  const files = [hashed, plain].map((name) =>
+    fileURLToPath(new URL(name, assets)),
+  );
+  const created = [];
+  try {
+    for (const file of files) {
+      await writeFile(file, "asset", { flag: "wx" });
+      created.push(file);
+    }
+    const stable = await fetch(`${base}/assets/${hashed}`, { method: "HEAD" });
+    assert.equal(stable.status, 200);
+    assert.match(stable.headers.get("cache-control"), /max-age=31536000/);
+    assert.match(stable.headers.get("cache-control"), /immutable/);
+    const ordinary = await fetch(`${base}/assets/${plain}`, { method: "HEAD" });
+    assert.equal(ordinary.status, 200);
+    assert.doesNotMatch(ordinary.headers.get("cache-control"), /immutable/);
+    const apiResponse = await fetch(`${base}/api/health`);
+    assert.equal(apiResponse.headers.get("cache-control"), "no-store");
+  } finally {
+    await Promise.all(
+      created.map((file) =>
+        unlink(file).catch((error) => {
+          if (error.code !== "ENOENT") throw error;
+        }),
+      ),
+    );
+  }
 });
 test("encoded Chinese documentation URLs serve the intended generated files", async () => {
   await import("../scripts/render-report.mjs");

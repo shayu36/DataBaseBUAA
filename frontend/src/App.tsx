@@ -14,6 +14,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { api } from "./api";
+import campusPhoto from "./assets/buaa-xueyuan-main-building.jpg";
 import { Field } from "./components";
 import {
   Overview,
@@ -120,7 +121,7 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
       <section className="login-story">
         <img
           className="login-photo"
-          src="/buaa-xueyuan-main-building.jpg"
+          src={campusPhoto}
           alt="北航学院路校区主楼实景"
         />
         <a className="brand" href="/">

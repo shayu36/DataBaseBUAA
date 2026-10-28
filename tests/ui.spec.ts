@@ -94,7 +94,7 @@ test("Beihang official map names landmarks and selects parking zones after zoom"
   ).toHaveAttribute("href", "https://www.buaa.edu.cn/xygk/xydt1/xylxq.htm");
   await expect(map.locator("svg image")).toHaveAttribute(
     "href",
-    "/buaa-xueyuan-campus-map.jpg",
+    /buaa-xueyuan-campus-map(?:-[A-Za-z0-9_-]{8})?\.jpg/,
   );
   await expect(map.locator(".map-image-status")).toHaveCount(0);
   await page.getByRole("button", { name: "借车与归还", exact: true }).click();
@@ -106,6 +106,29 @@ test("Beihang official map names landmarks and selects parking zones after zoom"
   await expect(page.getByLabel("借车停车点")).toHaveValue("1");
   await expect(page.getByLabel("归还横坐标（米）")).toHaveCount(0);
 });
+test("生产服务的校园底图重复加载使用浏览器缓存", async ({ page }) => {
+  test.skip(!process.env.QINGXING_E2E_URL, "开发服务的缓存策略由 Vite 控制");
+  await page.goto("/");
+  await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  await expect(page.locator(".map-shell")).toBeVisible();
+  await expect(page.locator(".map-image-status")).toHaveCount(0);
+  const transfer = () =>
+    page.evaluate(() =>
+      performance
+        .getEntriesByType("resource")
+        .filter((entry) => entry.name.includes("buaa-xueyuan-campus-map"))
+        .map((entry) => (entry as PerformanceResourceTiming).transferSize),
+    );
+  const first = await transfer();
+  expect(first).toHaveLength(1);
+  expect(first[0]).toBeGreaterThan(0);
+  await page.reload();
+  await expect(page.locator(".map-shell")).toBeVisible();
+  await expect(page.locator(".map-image-status")).toHaveCount(0);
+  expect(await transfer()).toEqual([0]);
+});
+
 test("模拟路网按需读取数据库状态，失败可重试并随数据刷新", async ({ page }) => {
   let calls = 0;
   await page.route("**/api/road-graph", async (route) => {
@@ -253,7 +276,7 @@ test("login cover uses the official Beihang Xueyuan campus photograph", async ({
   ).toBeVisible();
   await expect(page.locator(".login-photo")).toHaveAttribute(
     "src",
-    "/buaa-xueyuan-main-building.jpg",
+    /buaa-xueyuan-main-building(?:-[A-Za-z0-9_-]{8})?\.jpg/,
   );
   await expect(
     page.getByRole("link", { name: /北航招生网.*主楼盛夏/ }),

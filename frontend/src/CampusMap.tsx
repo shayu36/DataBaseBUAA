@@ -8,6 +8,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import campus from "../../database/campus-map.json";
+import campusMap from "./assets/buaa-xueyuan-campus-map.jpg";
 import { api } from "./api";
 import type { Row, User } from "./types";
 
@@ -233,7 +234,7 @@ export function CampusMap({
           </defs>
           <rect width={maxX} height={maxY} fill="#f2f7f7" />
           <image
-            href="/buaa-xueyuan-campus-map.jpg"
+            href={campusMap}
             x="-100"
             y="-150"
             width="2048"
