@@ -30,16 +30,26 @@ upgrade_map: BEGIN
  END IF;
  IF (SELECT COUNT(*) FROM parking_zones)<>6 OR (SELECT COUNT(*) FROM road_nodes)<>8 OR (SELECT COUNT(*) FROM road_edges)<>13
  OR (SELECT COUNT(*) FROM parking_zones z JOIN JSON_TABLE(
-  '[[1,"东门驿站",160,440],[2,"图书馆",450,180],[3,"教学楼",760,210],[4,"学生公寓",210,750],[5,"中心食堂",530,550],[6,"运动场",850,700]]', '$[*]'
-  COLUMNS(id INT PATH '$[0]',name VARCHAR(60) PATH '$[1]',x INT PATH '$[2]',y INT PATH '$[3]')) e
-  ON z.id=e.id AND BINARY z.name=BINARY e.name AND z.x=e.x AND z.y=e.y)<>6
+  '[[1,"东门驿站","校园东门 · 主入口",160,440],[2,"图书馆","图书馆南侧 · 知行广场",450,180],[3,"教学楼","第一教学楼 · 东侧",760,210],[4,"学生公寓","学生生活区 · 榕树路",210,750],[5,"中心食堂","中心食堂 · 北广场",530,550],[6,"运动场","体育中心 · 西门",850,700]]', '$[*]'
+  COLUMNS(id INT PATH '$[0]',name VARCHAR(60) PATH '$[1]',location VARCHAR(160) PATH '$[2]',x INT PATH '$[3]',y INT PATH '$[4]')) e
+  ON z.id=e.id AND BINARY z.name=BINARY e.name AND BINARY z.location=BINARY e.location AND z.x=e.x AND z.y=e.y AND z.radius=45)<>6
  OR (SELECT COUNT(*) FROM road_nodes n JOIN JSON_TABLE(
   '[[1,"东门驿站",160,440,1],[2,"图书馆",450,180,2],[3,"教学楼",760,210,3],[4,"学生公寓",210,750,4],[5,"中心食堂",530,550,5],[6,"运动场",850,700,6],[7,"银杏路口",420,400,null],[8,"湖畔绿道",730,460,null]]', '$[*]'
   COLUMNS(id INT PATH '$[0]',name VARCHAR(60) PATH '$[1]',x INT PATH '$[2]',y INT PATH '$[3]',zone_id INT PATH '$[4]')) e
   ON n.id=e.id AND BINARY n.name=BINARY e.name AND n.x=e.x AND n.y=e.y AND n.zone_id <=> e.zone_id)<>8
  OR (SELECT COUNT(*) FROM road_edges r JOIN JSON_TABLE(
-  '[[1,2],[1,4],[1,7],[2,3],[2,7],[3,8],[4,5],[4,7],[5,6],[5,7],[5,8],[6,8],[7,8]]', '$[*]'
-  COLUMNS(from_id INT PATH '$[0]',to_id INT PATH '$[1]')) e ON r.from_node_id=e.from_id AND r.to_node_id=e.to_id)<>13 THEN
+  '[[1,1,2,390,4,3],[2,1,4,320,1,2],[3,1,7,265,1,1],[4,2,3,320,3,2],[5,2,7,225,1,1],[6,3,8,255,1,1],[7,4,5,385,2,1],[8,4,7,410,1,2],[9,5,6,365,3,2],[10,5,7,190,1,1],[11,5,8,235,1,1],[12,6,8,275,1,1],[13,7,8,320,1,1]]', '$[*]'
+  COLUMNS(id INT PATH '$[0]',from_id INT PATH '$[1]',to_id INT PATH '$[2]',distance_m INT PATH '$[3]',safety INT PATH '$[4]',comfort INT PATH '$[5]')) e
+  ON r.id=e.id AND r.from_node_id=e.from_id AND r.to_node_id=e.to_id AND r.distance_m=e.distance_m
+   AND r.safety_cost=e.safety AND r.comfort_cost=e.comfort AND r.direction='BOTH' AND r.status='OPEN'
+   AND r.attribute_source='SIMULATED_COURSE_DATA' AND (
+    (r.slope_percent=0 AND r.surface='SMOOTH' AND r.shade_level=3 AND r.lighting_level=3 AND r.traffic_mix='MIXED' AND r.intersection_risk=1)
+    OR (r.slope_percent=(CAST(MOD(r.id,5) AS SIGNED)-2)*1.5
+     AND r.surface=CASE WHEN MOD(r.id,5)=0 THEN 'ROUGH' WHEN MOD(r.id,2)=0 THEN 'AVERAGE' ELSE 'SMOOTH' END
+     AND r.shade_level=LEAST(5,2+MOD(r.id,4)) AND r.lighting_level=5-MOD(r.id,3)
+     AND r.traffic_mix=CASE WHEN MOD(r.id,7)=0 THEN 'MOTOR_HEAVY' WHEN MOD(r.id,3)=0 THEN 'BIKE_ONLY' ELSE 'MIXED' END
+     AND r.intersection_risk=MOD(r.id,4))))<>13
+ OR EXISTS(SELECT 1 FROM audit_logs WHERE entity_type='road_edges') THEN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Refusing to overwrite a customized map; explicit mapping required.';
  END IF;
  UPDATE parking_zones z JOIN JSON_TABLE(campus,'$.zones[*]' COLUMNS(
