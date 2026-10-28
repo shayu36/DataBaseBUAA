@@ -4,7 +4,7 @@
 
 压缩请求内容损坏时返回 HTTP 400 和 `INVALID_COMPRESSED_BODY`；不支持的内容编码或字符编码分别返回 HTTP 415 和 `UNSUPPORTED_CONTENT_ENCODING`、`UNSUPPORTED_CHARSET`。
 
-碳规则配置无效时，读取该规则的请求返回 HTTP 503 和 `INVALID_CARBON_RULE`；涉及写入的事务回滚。已完成支付的幂等重试仍返回原支付结果。配置范围和缺省值见 README。
+碳规则配置无效时，需要读取该规则的请求返回 HTTP 503 和 `INVALID_CARBON_RULE`；涉及写入的事务回滚。已完成支付的幂等重试仍返回原支付结果；复核历史订单时若已有发放流水，直接保留该流水，无需读取当前规则。配置范围和缺省值见 README。
 
 行程按当前规则计算出的积分或减排量超出流水字段范围时，支付或确认有效行程返回 HTTP 503 和 `CARBON_AWARD_OUT_OF_RANGE`，事务回滚；具体范围和处理方法见 README。
 

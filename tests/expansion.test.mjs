@@ -1729,6 +1729,62 @@ test("teaching carbon history returns complete ordered entries without concatena
   }
 });
 
+test("existing carbon awards survive rule changes during qualification review", async () => {
+  const [order] = await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
+  );
+  await business.payRide(pool, student, order.insertId, {
+    idempotency_key: "existing-award-payment",
+  });
+  await pool.query(
+    "UPDATE system_settings SET value=JSON_ARRAY() WHERE name='carbon'",
+  );
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query(
+      "CALL sp_award_carbon(?,?,@awarded,@points,@carbon,@reason)",
+      [order.insertId, admin.id],
+    );
+    const [[result]] = await connection.query(
+      "SELECT @awarded awarded,@points points,@carbon carbon,@reason reason",
+    );
+    assert.deepEqual(
+      [
+        Number(result.awarded),
+        Number(result.points),
+        Number(result.carbon),
+        result.reason,
+      ],
+      [0, 10, 0.21, null],
+    );
+    await connection.rollback();
+  } finally {
+    connection.release();
+  }
+  await pool.query(
+    "UPDATE ride_orders SET qualification_status='UNDER_REVIEW',qualification_reason='历史记录重新复核' WHERE id=?",
+    [order.insertId],
+  );
+  await reviewOrderQualification(pool, admin, order.insertId, {
+    decision: "VALID",
+    reason: "确认历史行程有效",
+  });
+  const [[state]] = await pool.query(
+    "SELECT r.qualification_status,COUNT(c.id) entries,SUM(c.points_change) points,SUM(c.carbon_kg_change) carbon FROM ride_orders r JOIN carbon_transactions c ON c.order_id=r.id WHERE r.id=? GROUP BY r.id",
+    [order.insertId],
+  );
+  assert.deepEqual(
+    [
+      state.qualification_status,
+      state.entries,
+      Number(state.points),
+      Number(state.carbon),
+    ],
+    ["VALID", 1, 10, 0.21],
+  );
+});
+
 test("excluded historical award is reversed without failing invariant checks", async () => {
   const [order] = await pool.query(
     "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
