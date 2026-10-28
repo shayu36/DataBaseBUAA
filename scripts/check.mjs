@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { createPool } from "../backend/db.mjs";
 import { sql } from "../backend/sql-statements.mjs";
-import campus from "../database/campus-map.json" with { type: "json" };
+import { campus, campusDefinition } from "../backend/campus-data.mjs";
 const pool = createPool(
   process.argv[2]
     ? {
@@ -34,7 +34,7 @@ try {
   const [[map]] = await c.query(sql("campus_map_compatible"), [campus.version]);
   if (map.compatible) {
     const [differences] = await c.query(sql("campus_restriction_differences"), [
-      JSON.stringify(campus),
+      campusDefinition,
     ]);
     if (differences.length) {
       console.warn(

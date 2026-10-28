@@ -9,6 +9,35 @@ BEGIN
 END$$
 DELIMITER ;
 
+DROP PROCEDURE IF EXISTS sp_campus_restrictions;
+DELIMITER $$
+CREATE PROCEDURE sp_campus_restrictions(IN p_campus JSON, OUT p_areas GEOMETRY)
+SQL SECURITY INVOKER
+BEGIN
+ DECLARE v_geometries JSON;
+ SET p_areas=NULL;
+ IF NOT (JSON_TYPE(JSON_EXTRACT(p_campus,'$.version')) <=> 'STRING') THEN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Invalid campus version data.';
+ END IF;
+ IF EXISTS(SELECT 1 FROM system_settings WHERE name='campus_map'
+  AND BINARY JSON_UNQUOTE(JSON_EXTRACT(value,'$.version'))=BINARY JSON_UNQUOTE(JSON_EXTRACT(p_campus,'$.version'))) THEN
+  IF NOT (JSON_TYPE(JSON_EXTRACT(p_campus,'$.restricted_areas')) <=> 'ARRAY') THEN
+   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Invalid campus restriction data.';
+  END IF;
+  SELECT JSON_ARRAYAGG(JSON_OBJECT('type','Polygon','coordinates',
+   JSON_ARRAY(JSON_ARRAY_APPEND(area.points,'$',JSON_EXTRACT(area.points,'$[0]'))))) INTO v_geometries
+  FROM JSON_TABLE(p_campus,'$.restricted_areas[*]' COLUMNS(points JSON PATH '$.points',rule VARCHAR(20) PATH '$.rule')) area
+  WHERE area.rule='NO_RIDE';
+  IF v_geometries IS NOT NULL THEN
+   SET p_areas=ST_GeomFromGeoJSON(JSON_OBJECT('type','GeometryCollection','geometries',v_geometries),1,0);
+   IF p_areas IS NULL OR NOT ST_IsValid(p_areas) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Invalid campus restriction geometry.';
+   END IF;
+  END IF;
+ END IF;
+END$$
+DELIMITER ;
+
 -- Upgrade only the known original demo graph. The caller owns the transaction
 -- and serializes ledger changes; a customized graph is never overwritten.
 DROP PROCEDURE IF EXISTS sp_upgrade_campus_map;

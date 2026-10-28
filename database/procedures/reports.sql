@@ -289,10 +289,18 @@ DELIMITER ;
 
 DROP PROCEDURE IF EXISTS sp_route_graph;
 DELIMITER $$
-CREATE PROCEDURE sp_route_graph()
+CREATE PROCEDURE sp_route_graph(IN p_campus JSON)
 SQL SECURITY INVOKER
 BEGIN
+ DECLARE v_areas GEOMETRY DEFAULT NULL;
+ CALL sp_campus_restrictions(p_campus,v_areas);
  SELECT * FROM road_nodes ORDER BY id;
- SELECT * FROM road_edges ORDER BY id;
+ SELECT e.id,e.from_node_id,e.to_node_id,e.distance_m,e.safety_cost,e.comfort_cost,e.direction,
+  CASE WHEN v_areas IS NOT NULL AND e.status='OPEN' AND ST_Intersects(
+   IF(a.x=b.x AND a.y=b.y,POINT(a.x,a.y),LINESTRING(POINT(a.x,a.y),POINT(b.x,b.y))),v_areas)
+  THEN 'NO_RIDE' ELSE e.status END AS status,
+  e.slope_percent,e.surface,e.shade_level,e.lighting_level,e.traffic_mix,e.intersection_risk,e.attribute_source,
+  e.status AS stored_status
+ FROM road_edges e JOIN road_nodes a ON a.id=e.from_node_id JOIN road_nodes b ON b.id=e.to_node_id ORDER BY e.id;
 END$$
 DELIMITER ;

@@ -2,6 +2,7 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { AppError, actorTransaction, callProcedure } from "./db.mjs";
 import { requireAdmin, idSchema } from "./business.mjs";
+import { campusDefinition } from "./campus-data.mjs";
 const need = (ok, message, code = "INVALID_STATE", status = 409) => {
   if (!ok) throw new AppError(message, code, status);
 };
@@ -87,6 +88,17 @@ const zoneBikeErrors = {
     "INVALID_STATE",
     409,
   ],
+  ZONE_RESTRICTED: ["停车点不能位于禁行区域内或边界上", "ZONE_RESTRICTED", 409],
+  ZONE_NO_CONNECTION: [
+    "没有可避开禁行区域的连接道路",
+    "ZONE_NO_CONNECTION",
+    409,
+  ],
+  ZONE_RESTRICTED_ROAD: [
+    "移动后开放路段将穿过禁行区域，请先调整道路状态",
+    "ZONE_RESTRICTED_ROAD",
+    409,
+  ],
   BIKE_ACTIVE: ["骑行、维修或调度中的车辆不能编辑", "INVALID_STATE", 409],
   BIKE_TARGET_CLOSED: ["车辆必须投放到开放停车区", "INVALID_STATE", 409],
   BIKE_TARGET_FULL: ["目标停车区已满或车位已预留", "ZONE_FULL", 409],
@@ -97,8 +109,8 @@ export async function saveZone(pool, user, input) {
   return transaction(pool, user, (connection) =>
     callProcedure(
       connection,
-      "CALL sp_save_zone(?,?)",
-      [user.id, JSON.stringify(data)],
+      "CALL sp_save_zone(?,?,?)",
+      [user.id, JSON.stringify(data), campusDefinition],
       zoneBikeErrors,
     ),
   );

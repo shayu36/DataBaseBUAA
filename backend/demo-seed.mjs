@@ -4,14 +4,9 @@ import bcrypt from "bcryptjs";
 import { findRoute } from "./analytics.mjs";
 import { withSchemaLock, ledgerTransaction } from "./db.mjs";
 import { sql } from "./sql-statements.mjs";
+import { campus, campusDefinition } from "./campus-data.mjs";
 
 export async function seedDemo(pool, adminPool) {
-  const campus = JSON.parse(
-    await readFile(
-      new URL("../database/campus-map.json", import.meta.url),
-      "utf8",
-    ),
-  );
   const seedSql = await readFile(
     new URL("../database/demo-seed.sql", import.meta.url),
     "utf8",
@@ -38,7 +33,7 @@ export async function seedDemo(pool, adminPool) {
       return await ledgerTransaction(pool, async (connection) => {
         const [result] = await connection.query(sql("call_seed_procedure"), [
           name,
-          JSON.stringify(campus),
+          campusDefinition,
           JSON.stringify(distances),
           hash,
         ]);

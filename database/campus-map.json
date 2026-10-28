@@ -418,7 +418,7 @@
       "distance_m": 380,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "OPEN"
+      "status": "NO_RIDE"
     },
     {
       "id": 10,
@@ -481,7 +481,7 @@
       "distance_m": 178,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "OPEN"
+      "status": "NO_RIDE"
     },
     {
       "id": 17,
@@ -508,7 +508,7 @@
       "distance_m": 90,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "OPEN"
+      "status": "NO_RIDE"
     },
     {
       "id": 20,
@@ -517,7 +517,7 @@
       "distance_m": 180,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "OPEN"
+      "status": "NO_RIDE"
     },
     {
       "id": 21,

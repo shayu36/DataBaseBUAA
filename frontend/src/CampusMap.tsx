@@ -195,7 +195,7 @@ export function CampusMap({
             {label}
           </button>
         ))}
-        <span>路网状态来自数据库；线条不表示行驶方向</span>
+        <span>路网状态结合数据库和禁行区域；线条不表示行驶方向</span>
       </div>
       {layers.roads && !route && !graph && (
         <p className="muted" role="status">

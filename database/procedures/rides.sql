@@ -3,12 +3,14 @@
 -- The application supplies an already authorized actor and owns the transaction.
 DROP PROCEDURE IF EXISTS sp_start_ride;
 DELIMITER $$
-CREATE PROCEDURE sp_start_ride(IN actor_id BIGINT UNSIGNED, IN requested_bike_id BIGINT UNSIGNED)
+CREATE PROCEDURE sp_start_ride(IN actor_id BIGINT UNSIGNED, IN requested_bike_id BIGINT UNSIGNED, IN p_campus JSON)
 SQL SECURITY INVOKER
 BEGIN
  DECLARE bike_status VARCHAR(20) DEFAULT NULL;
  DECLARE bike_zone BIGINT UNSIGNED DEFAULT NULL;
  DECLARE zone_status VARCHAR(20) DEFAULT NULL;
+ DECLARE zone_x,zone_y DECIMAL(10,2);
+ DECLARE v_areas GEOMETRY DEFAULT NULL;
  DECLARE new_order_id BIGINT UNSIGNED;
  IF EXISTS(SELECT 1 FROM ride_orders WHERE active_user=actor_id) THEN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ACTIVE_RIDE';
@@ -23,12 +25,16 @@ BEGIN
  IF bike_status<>'AVAILABLE' THEN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='BIKE_UNAVAILABLE';
  END IF;
- SELECT status INTO zone_status FROM parking_zones WHERE id=bike_zone FOR UPDATE;
+ SELECT status,x,y INTO zone_status,zone_x,zone_y FROM parking_zones WHERE id=bike_zone FOR UPDATE;
  IF zone_status IS NULL THEN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ZONE_NOT_FOUND';
  END IF;
  IF zone_status<>'ACTIVE' THEN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ZONE_CLOSED';
+ END IF;
+ CALL sp_campus_restrictions(p_campus,v_areas);
+ IF v_areas IS NOT NULL AND ST_Intersects(POINT(zone_x,zone_y),v_areas) THEN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ZONE_RESTRICTED';
  END IF;
  INSERT INTO ride_orders(user_id,bike_id,start_zone_id) VALUES(actor_id,requested_bike_id,bike_zone);
  SET new_order_id=LAST_INSERT_ID();

@@ -14,7 +14,7 @@ DELIMITER ;
 
 DROP PROCEDURE IF EXISTS sp_save_zone;
 DELIMITER $$
-CREATE PROCEDURE sp_save_zone(IN p_actor BIGINT UNSIGNED, IN p_data JSON)
+CREATE PROCEDURE sp_save_zone(IN p_actor BIGINT UNSIGNED, IN p_data JSON, IN p_campus JSON)
 SQL SECURITY INVOKER
 BEGIN
  DECLARE v_id,v_node,v_nearest BIGINT UNSIGNED DEFAULT NULL;
@@ -25,7 +25,9 @@ BEGIN
  DECLARE v_capacity,v_occupied,v_reserved INT;
  DECLARE v_status,v_old_status VARCHAR(20);
  DECLARE v_changed,v_geometry BOOLEAN DEFAULT FALSE;
+ DECLARE v_areas GEOMETRY DEFAULT NULL;
  DECLARE v_distance INT;
+ CALL sp_campus_restrictions(p_campus,v_areas);
  SELECT id,name,location,x,y,radius,capacity,status INTO v_id,v_name,v_location,v_x,v_y,v_radius,v_capacity,v_status
  FROM JSON_TABLE(p_data,'$' COLUMNS(id BIGINT UNSIGNED PATH '$.id' NULL ON EMPTY,name VARCHAR(60) PATH '$.name',location VARCHAR(160) PATH '$.location',
  x DECIMAL(10,2) PATH '$.x',y DECIMAL(10,2) PATH '$.y',radius DECIMAL(8,2) PATH '$.radius',capacity INT PATH '$.capacity',status VARCHAR(20) PATH '$.status')) input_data;
@@ -42,6 +44,19 @@ BEGIN
   IF v_geometry AND EXISTS(SELECT 1 FROM ride_orders WHERE start_zone_id=v_id AND status='RUNNING') THEN
    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ZONE_ACTIVE_RIDE';
   END IF;
+ END IF;
+ IF v_areas IS NOT NULL AND (v_id IS NULL OR v_changed) AND ST_Intersects(POINT(v_x,v_y),v_areas) THEN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ZONE_RESTRICTED';
+ END IF;
+ IF v_id IS NOT NULL THEN
+  IF v_areas IS NOT NULL AND v_changed AND EXISTS(
+   SELECT 1 FROM road_nodes n JOIN road_edges e ON e.from_node_id=n.id OR e.to_node_id=n.id
+   JOIN road_nodes other ON other.id=IF(e.from_node_id=n.id,e.to_node_id,e.from_node_id)
+   WHERE n.zone_id=v_id AND e.status='OPEN'
+    AND ST_Intersects(IF(v_x=other.x AND v_y=other.y,POINT(v_x,v_y),LINESTRING(POINT(v_x,v_y),POINT(other.x,other.y))),v_areas)
+    AND NOT ST_Intersects(IF(v_old_x=other.x AND v_old_y=other.y,POINT(v_old_x,v_old_y),LINESTRING(POINT(v_old_x,v_old_y),POINT(other.x,other.y))),v_areas)) THEN
+   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ZONE_RESTRICTED_ROAD';
+  END IF;
   UPDATE parking_zones SET name=v_name,location=v_location,x=v_x,y=v_y,radius=v_radius,capacity=v_capacity,status=v_status WHERE id=v_id;
   UPDATE road_nodes SET name=v_name,x=v_x,y=v_y WHERE zone_id=v_id;
   IF v_changed THEN
@@ -49,8 +64,13 @@ BEGIN
    SET e.distance_m=GREATEST(1,ROUND(SQRT(POW(a.x-b.x,2)+POW(a.y-b.y,2)))) WHERE a.zone_id=v_id OR b.zone_id=v_id;
   END IF;
  ELSE
-  SELECT id,GREATEST(1,ROUND(SQRT(POW(x-v_x,2)+POW(y-v_y,2)))) INTO v_nearest,v_distance
-  FROM road_nodes ORDER BY POW(x-v_x,2)+POW(y-v_y,2),id LIMIT 1 FOR UPDATE;
+  SELECT n.id,GREATEST(1,ROUND(SQRT(POW(n.x-v_x,2)+POW(n.y-v_y,2)))) INTO v_nearest,v_distance
+  FROM road_nodes n WHERE v_areas IS NULL OR NOT ST_Intersects(
+   IF(v_x=n.x AND v_y=n.y,POINT(v_x,v_y),LINESTRING(POINT(v_x,v_y),POINT(n.x,n.y))),v_areas)
+  ORDER BY POW(n.x-v_x,2)+POW(n.y-v_y,2),n.id LIMIT 1 FOR UPDATE;
+  IF v_nearest IS NULL AND v_areas IS NOT NULL THEN
+   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ZONE_NO_CONNECTION';
+  END IF;
   INSERT INTO parking_zones(name,location,x,y,radius,capacity,status) VALUES(v_name,v_location,v_x,v_y,v_radius,v_capacity,v_status);
   SET v_id=LAST_INSERT_ID();
   INSERT INTO road_nodes(name,x,y,zone_id) VALUES(v_name,v_x,v_y,v_id);

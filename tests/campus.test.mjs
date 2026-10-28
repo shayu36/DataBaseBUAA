@@ -12,6 +12,8 @@ import {
 import { applySchema } from "../scripts/sql.mjs";
 import { findRoute } from "../backend/analytics.mjs";
 import { upgradeCampusMap } from "../backend/campus.mjs";
+import { routeGraph, startRide } from "../backend/business.mjs";
+import { saveZone } from "../backend/admin.mjs";
 
 const pool = createPool({
   database: "campus_bike_test",
@@ -185,6 +187,153 @@ async function loadVersionedCampus(map) {
     [map.version],
   );
 }
+test("campus routing and station creation respect restricted areas", async () => {
+  await loadVersionedCampus(campus);
+  await pool.query("UPDATE users SET role='ADMIN' WHERE id=1");
+  await pool.query(
+    "UPDATE road_edges SET status='OPEN' WHERE (from_node_id,to_node_id) IN ((4,11),(8,11),(9,19),(9,23))",
+  );
+  const [nodes, roads] = await routeGraph(pool);
+  for (const [from, to] of [
+    [4, 11],
+    [8, 11],
+    [9, 19],
+    [9, 23],
+  ]) {
+    const crossing = roads.find(
+      (road) => road.from_node_id === from && road.to_node_id === to,
+    );
+    assert.equal(crossing.status, "NO_RIDE");
+    assert.equal(crossing.stored_status, "OPEN");
+  }
+  const [[stored]] = await pool.query(
+    "SELECT status FROM road_edges WHERE from_node_id=4 AND to_node_id=11",
+  );
+  assert.equal(stored.status, "OPEN");
+  await pool.query(
+    "UPDATE road_edges SET status='CLOSED' WHERE from_node_id=4 AND to_node_id=11",
+  );
+  const [, closedRoads] = await routeGraph(pool);
+  const closed = closedRoads.find(
+    (road) => road.from_node_id === 4 && road.to_node_id === 11,
+  );
+  assert.equal(closed.status, "CLOSED");
+  assert.equal(closed.stored_status, "CLOSED");
+  await pool.query(
+    "UPDATE road_edges SET status='OPEN' WHERE from_node_id=4 AND to_node_id=11",
+  );
+  for (const from of campus.zones)
+    for (const to of campus.zones) {
+      const route = findRoute(nodes, roads, from.id, to.id);
+      assert.ok(route.segments.every((edge) => edge.status === "OPEN"));
+    }
+  const admin = { id: 1, role: "ADMIN", status: "ACTIVE" };
+  const station = {
+    name: "新增站",
+    location: "测试",
+    x: 700,
+    y: 200,
+    radius: 10,
+    capacity: 10,
+    status: "ACTIVE",
+  };
+  await assert.rejects(saveZone(pool, admin, station), {
+    code: "ZONE_RESTRICTED",
+  });
+  await assert.rejects(saveZone(pool, admin, { ...station, x: 642 }), {
+    code: "ZONE_RESTRICTED",
+  });
+  const { id } = await saveZone(pool, admin, { ...station, x: 640, y: 190 });
+  const [updatedNodes, updatedRoads] = await routeGraph(pool);
+  const node = updatedNodes.find((item) => item.zone_id === id);
+  const attached = updatedRoads.filter(
+    (edge) => edge.from_node_id === node.id || edge.to_node_id === node.id,
+  );
+  assert.equal(attached.length, 1);
+  assert.equal(attached[0].status, "OPEN");
+  await assert.rejects(
+    saveZone(pool, admin, { ...station, id, x: 320, y: 180 }),
+    { code: "ZONE_RESTRICTED_ROAD" },
+  );
+  const [[unchanged]] = await pool.query(
+    "SELECT x,y FROM parking_zones WHERE id=?",
+    [id],
+  );
+  assert.deepEqual(unchanged, { x: 640, y: 190 });
+  const same = await saveZone(pool, admin, {
+    ...station,
+    name: "同点站",
+    x: 540,
+    y: 190,
+  });
+  const [sameNodes, sameRoads] = await routeGraph(pool);
+  const sameNode = sameNodes.find((item) => item.zone_id === same.id);
+  const sameEdge = sameRoads.find(
+    (edge) =>
+      edge.from_node_id === sameNode.id || edge.to_node_id === sameNode.id,
+  );
+  assert.equal(sameEdge.status, "OPEN");
+  assert.equal(sameEdge.distance_m, 1);
+  const [empty] = await pool.query("CALL sp_route_graph(?)", [
+    JSON.stringify({ version: campus.version, restricted_areas: [] }),
+  ]);
+  assert.equal(
+    empty[1].find((road) => road.from_node_id === 4 && road.to_node_id === 11)
+      .status,
+    "OPEN",
+  );
+  await assert.rejects(
+    pool.query("CALL sp_route_graph(?)", [
+      JSON.stringify({ version: campus.version, restricted_areas: null }),
+    ]),
+    /Invalid campus restriction data/,
+  );
+});
+test("legacy station inside a restricted area cannot start a ride", async () => {
+  await loadVersionedCampus(campus);
+  await pool.query("UPDATE parking_zones SET x=700,y=200 WHERE id=1");
+  const actor = { id: 1, role: "STUDENT", status: "ACTIVE" };
+  await assert.rejects(startRide(pool, actor, { bike_id: 1 }), {
+    code: "ZONE_RESTRICTED",
+  });
+  const [[bike]] = await pool.query(
+    "SELECT status,current_zone_id FROM bikes WHERE id=1",
+  );
+  assert.deepEqual(bike, { status: "AVAILABLE", current_zone_id: 1 });
+  const [[orders]] = await pool.query("SELECT COUNT(*) n FROM ride_orders");
+  assert.equal(orders.n, 0);
+});
+test("new station is not created when every connection crosses a restricted area", async () => {
+  await pool.query("UPDATE users SET role='ADMIN' WHERE id=1");
+  await pool.query("DELETE FROM road_edges");
+  await pool.query("DELETE FROM road_nodes");
+  await pool.query(
+    "INSERT INTO road_nodes(id,name,x,y) VALUES(1,'禁行区内节点',700,200)",
+  );
+  await pool.query(
+    "INSERT INTO system_settings(name,value) VALUES('campus_map',JSON_OBJECT('version',?))",
+    [campus.version],
+  );
+  const [[before]] = await pool.query("SELECT COUNT(*) n FROM parking_zones");
+  await assert.rejects(
+    saveZone(
+      pool,
+      { id: 1, role: "ADMIN", status: "ACTIVE" },
+      {
+        name: "不可连通站",
+        location: "测试",
+        x: 600,
+        y: 200,
+        radius: 10,
+        capacity: 10,
+        status: "ACTIVE",
+      },
+    ),
+    { code: "ZONE_NO_CONNECTION" },
+  );
+  const [[after]] = await pool.query("SELECT COUNT(*) n FROM parking_zones");
+  assert.equal(after.n, before.n);
+});
 for (const prior of [firstCampus, previousCampus]) {
   test(`campus map upgrades the unmodified ${prior.version} graph without changing rides`, async () => {
     await loadVersionedCampus(prior);

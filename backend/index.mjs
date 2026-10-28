@@ -7,7 +7,7 @@ import {
 import { createApp } from "./app.mjs";
 import { sessionSecret } from "./config.mjs";
 import { sql } from "./sql-statements.mjs";
-import campus from "../database/campus-map.json" with { type: "json" };
+import { campus, campusDefinition } from "./campus-data.mjs";
 import {
   loadProcedureSources,
   procedureRevision,
@@ -32,7 +32,7 @@ try {
       );
     const [differences] = await connection.query(
       sql("campus_restriction_differences"),
-      [JSON.stringify(campus)],
+      [campusDefinition],
     );
     if (differences.length)
       console.warn(

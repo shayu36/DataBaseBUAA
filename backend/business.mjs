@@ -2,6 +2,7 @@ import { z } from "zod";
 import { AppError, actorTransaction, callProcedure } from "./db.mjs";
 import { findRoute, findRoutes } from "./analytics.mjs";
 import { sql } from "./sql-statements.mjs";
+import { campusDefinition } from "./campus-data.mjs";
 export const idSchema = z.coerce.number().int().positive().safe();
 // Reject values that cannot be represented in return_attempts before writing evidence.
 const coord = z.number().finite().min(-99999999.99).max(99999999.99);
@@ -12,7 +13,7 @@ export function requireAdmin(user) {
   need(user.role === "ADMIN", "仅管理员可执行此操作", "FORBIDDEN", 403);
 }
 export async function routeGraph(c) {
-  const [result] = await c.query("CALL sp_route_graph()");
+  const [result] = await c.query("CALL sp_route_graph(?)", [campusDefinition]);
   return result;
 }
 export function routesForGraph(result, from, to, mode = "shortest") {
@@ -42,14 +43,19 @@ const startRideErrors = {
   ZONE_NOT_FOUND: ["记录不存在", "NOT_FOUND", 404],
   BIKE_UNAVAILABLE: ["车辆当前不可借用", "BIKE_UNAVAILABLE", 409],
   ZONE_CLOSED: ["停车区已关闭", "INVALID_STATE", 409],
+  ZONE_RESTRICTED: [
+    "停车点位于禁行区域，暂不能借车，请联系管理员",
+    "ZONE_RESTRICTED",
+    409,
+  ],
 };
 export async function startRide(pool, user, input) {
   const { bike_id } = z.object({ bike_id: idSchema }).parse(input);
   return actorTransaction(pool, user, async (connection) => {
     const row = await callProcedure(
       connection,
-      "CALL sp_start_ride(?,?)",
-      [user.id, bike_id],
+      "CALL sp_start_ride(?,?,?)",
+      [user.id, bike_id, campusDefinition],
       startRideErrors,
     );
     return { id: row.id };

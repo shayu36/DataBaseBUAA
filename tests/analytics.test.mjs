@@ -47,7 +47,7 @@ test("route options reuse one graph read and match single-mode results", async (
   let reads = 0;
   const db = {
     query: async (statement) => {
-      assert.equal(statement, "CALL sp_route_graph()");
+      assert.equal(statement, "CALL sp_route_graph(?)");
       reads++;
       return [[nodes, edges]];
     },

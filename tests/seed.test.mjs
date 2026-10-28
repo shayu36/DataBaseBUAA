@@ -243,7 +243,9 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
         `路段 ${edge.from_node_id}-${edge.to_node_id}`,
       );
     }
-    const [graph] = await pool.query("CALL sp_route_graph()");
+    const [graph] = await pool.query("CALL sp_route_graph(?)", [
+      JSON.stringify(campus),
+    ]);
     const expectedRoute = findRoute(campus.nodes, campus.edges, 1, 4);
     const seededRoute = findRoute(graph[0], graph[1], 1, 4);
     assert.deepEqual(seededRoute.path, expectedRoute.path);
@@ -372,9 +374,10 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
       const [[bike]] =
         await connection.query(`SELECT b.id,z.id AS zone_id,z.x,z.y FROM bikes b
         JOIN parking_zones z ON z.id=b.current_zone_id WHERE b.status='AVAILABLE' ORDER BY b.id LIMIT 1`);
-      const [started] = await connection.query("CALL sp_start_ride(?,?)", [
+      const [started] = await connection.query("CALL sp_start_ride(?,?,?)", [
         2,
         bike.id,
+        JSON.stringify(campus),
       ]);
       const orderId = started[0][0].id;
       const [prepared] = await connection.query(
