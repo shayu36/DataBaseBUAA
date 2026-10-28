@@ -1,5 +1,6 @@
 import { test, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import bcrypt from "bcryptjs";
 import { createPool } from "../backend/db.mjs";
@@ -564,7 +565,8 @@ test("SQL risk aggregation matches rule results and ordered ticket references", 
     "SELECT * FROM maintenance_tickets ORDER BY id",
   );
   const actual = await riskData(pool, now);
-  assert.deepEqual(actual.risks, bikeRisks(bikes, tickets, now));
+  const expectedRisks = bikeRisks(bikes, tickets, now);
+  assert.deepEqual(actual.risks, expectedRisks);
   const expectedIds = tickets
     .filter((ticket) => ticket.bike_id === 1 && ticket.created_at <= now)
     .map((ticket) => ticket.id);
@@ -572,13 +574,23 @@ test("SQL risk aggregation matches rule results and ordered ticket references", 
   assert.equal(first.created.length, 1);
   assert.deepEqual((await refreshRiskAlerts(pool, admin, now)).created, []);
   const [[saved]] = await pool.query(
-    "SELECT ticket_ids FROM risk_alerts WHERE bike_id=1",
+    "SELECT ticket_ids,fingerprint FROM risk_alerts WHERE bike_id=1",
   );
   const savedIds =
     typeof saved.ticket_ids === "string"
       ? JSON.parse(saved.ticket_ids)
       : saved.ticket_ids;
   assert.deepEqual(savedIds, expectedIds);
+  const expectedFingerprint = createHash("sha256")
+    .update(
+      JSON.stringify({
+        bike_id: 1,
+        version: "risk-v1",
+        reasons: expectedRisks.find((risk) => risk.bike_id === 1).reasons,
+      }),
+    )
+    .digest("hex");
+  assert.equal(saved.fingerprint, expectedFingerprint);
 });
 
 test("risk ticket references remain complete with a small session aggregation limit", async () => {
@@ -591,6 +603,13 @@ test("risk ticket references remain complete with a small session aggregation li
   const connection = await pool.getConnection();
   try {
     await connection.query("SET SESSION group_concat_max_len=4");
+    const { risks } = await riskData(
+      connection,
+      new Date("2026-10-27T12:00:00Z"),
+    );
+    const risk = risks.find(({ bike_id }) => bike_id === 1);
+    assert.ok(risk.reasons.some((message) => message.includes("200 次")));
+    assert.equal(risk.reasons.length, risk.reason_details.length);
     await connection.query("CALL sp_refresh_risk_alerts(?,?,?,?,?)", [
       admin.id,
       1,
