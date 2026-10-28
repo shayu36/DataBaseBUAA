@@ -1016,6 +1016,14 @@ test("carbon awards retain precise historical factors and validate their own rul
     points_per_km: 20,
     rule_version: "next-v1",
   });
+  await pool.query(
+    "UPDATE system_settings SET value=JSON_OBJECT('kg_per_km',0.3,'points_per_km',20,'rule_version',NULL) WHERE name='carbon'",
+  );
+  assert.deepEqual((await dashboard(pool, student)).carbon.rule, {
+    kg_per_km: 0.3,
+    points_per_km: 20,
+    rule_version: "carbon-v1",
+  });
   await pool.query("DELETE FROM system_settings WHERE name='carbon'");
   assert.deepEqual((await dashboard(pool, student)).carbon.rule, {
     kg_per_km: 0.21,

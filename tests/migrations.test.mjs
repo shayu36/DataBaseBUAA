@@ -63,6 +63,12 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
       "CREATE TABLE system_settings(name VARCHAR(50) PRIMARY KEY,value JSON)",
     );
     await pool.query(
+      "INSERT INTO system_settings(name,value) VALUES('carbon',JSON_OBJECT('kg_per_km',0.33,'points_per_km',12,'rule_version','legacy-rule-v7','extra',JSON_OBJECT('source','history')))",
+    );
+    const [[originalRule]] = await pool.query(
+      "SELECT value FROM system_settings WHERE name='carbon'",
+    );
+    await pool.query(
       "INSERT INTO users VALUES(1,'学生','s@test','13800000000','hash','STUDENT','ACTIVE',UTC_TIMESTAMP(3)),(10000,'学生二','s2@test','13800000001','hash','STUDENT','ACTIVE',UTC_TIMESTAMP(3)),(10001,'学生三','s3@test','13800000002','hash','STUDENT','ACTIVE',UTC_TIMESTAMP(3))",
     );
     await pool.query(
@@ -107,6 +113,46 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
     const second = await applyFeatureMigrations(pool);
     assert.ok(first.applied.length > 0);
     assert.deepEqual(second.applied, []);
+    const [[migratedRule]] = await pool.query(
+      "SELECT value FROM system_settings WHERE name='carbon'",
+    );
+    assert.deepEqual(migratedRule, originalRule);
+    for (const [legacyRule, expected] of [
+      [
+        { kg_per_km: 0.42, points_per_km: 8, extra: "保留" },
+        {
+          kg_per_km: 0.42,
+          points_per_km: 8,
+          extra: "保留",
+          rule_version: "carbon-v1",
+        },
+      ],
+      [
+        { kg_per_km: 0.42, points_per_km: 8, rule_version: null },
+        { kg_per_km: 0.42, points_per_km: 8, rule_version: null },
+      ],
+      [null, { kg_per_km: 0.21, points_per_km: 10, rule_version: "carbon-v1" }],
+    ]) {
+      await pool.query("DELETE FROM system_settings WHERE name='carbon'");
+      if (legacyRule !== null)
+        await pool.query(
+          "INSERT INTO system_settings(name,value) VALUES('carbon',?)",
+          [JSON.stringify(legacyRule)],
+        );
+      await pool.query(
+        "UPDATE system_settings SET value=JSON_OBJECT('version',0) WHERE name='pdf_expansion'",
+      );
+      assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
+        "pdf_expansion@13",
+      ]);
+      const [[actualRule]] = await pool.query(
+        "SELECT value FROM system_settings WHERE name='carbon'",
+      );
+      assert.deepEqual(actualRule.value, expected);
+    }
+    await pool.query("UPDATE system_settings SET value=? WHERE name='carbon'", [
+      JSON.stringify(originalRule.value),
+    ]);
     const [historicalPayments] = await pool.query(
       "SELECT id,idempotency_key FROM payments ORDER BY id",
     );
