@@ -201,7 +201,7 @@ DELIMITER ;
 DROP PROCEDURE IF EXISTS sp_adjust_carbon;
 DELIMITER $$
 CREATE PROCEDURE sp_adjust_carbon(IN p_actor_id BIGINT UNSIGNED, IN p_order_id BIGINT UNSIGNED,
- IN p_points INT, IN p_carbon DECIMAL(12,4), IN p_reason VARCHAR(300), IN p_key TEXT, IN p_detail JSON)
+ IN p_points INT, IN p_carbon_input TEXT, IN p_reason VARCHAR(300), IN p_key TEXT, IN p_detail JSON)
 SQL SECURITY INVOKER
 adjustment: BEGIN
  DECLARE v_status VARCHAR(20) DEFAULT NULL;
@@ -216,9 +216,35 @@ adjustment: BEGIN
  DECLARE v_factor DECIMAL(20,8);
  DECLARE v_rate DECIMAL(20,8);
  DECLARE v_version VARCHAR(30);
+ DECLARE p_carbon DECIMAL(12,4);
+ DECLARE v_precise DECIMAL(65,30);
+ DECLARE v_mantissa,v_digits,v_significant LONGTEXT;
+ DECLARE v_exponent,v_fraction_digits BIGINT DEFAULT 0;
  IF p_key IS NULL OR CHAR_LENGTH(p_key) NOT BETWEEN 8 AND 80 OR REGEXP_LIKE(p_key,'[^a-zA-Z0-9_-]','c') THEN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_ADJUSTMENT';
  END IF;
+ BEGIN
+  DECLARE EXIT HANDLER FOR SQLSTATE '22003', SQLSTATE '22007'
+   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_ADJUSTMENT_AMOUNT';
+  IF p_carbon_input IS NULL OR CHAR_LENGTH(p_carbon_input)>1024
+   OR REGEXP_LIKE(p_carbon_input,'[^0-9eE+.-]','c')
+   OR NOT REGEXP_LIKE(p_carbon_input,'^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?$','c') THEN
+   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_ADJUSTMENT_AMOUNT';
+  END IF;
+  SET v_mantissa=SUBSTRING_INDEX(LOWER(p_carbon_input),'e',1);
+  SET v_exponent=IF(LOCATE('e',LOWER(p_carbon_input))=0,0,CAST(SUBSTRING_INDEX(LOWER(p_carbon_input),'e',-1) AS SIGNED));
+  SET v_fraction_digits=IF(LOCATE('.',v_mantissa)=0,0,CHAR_LENGTH(v_mantissa)-LOCATE('.',v_mantissa));
+  SET v_digits=REPLACE(REPLACE(REPLACE(v_mantissa,'+',''),'-',''),'.','');
+  SET v_significant=TRIM(TRAILING '0' FROM v_digits);
+  IF v_significant<>'' AND v_fraction_digits-v_exponent-(CHAR_LENGTH(v_digits)-CHAR_LENGTH(v_significant))>4 THEN
+   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_ADJUSTMENT_AMOUNT';
+  END IF;
+  SET v_precise=CAST(p_carbon_input AS DECIMAL(65,30));
+  IF ABS(v_precise)>99999999.9999 OR v_precise<>ROUND(v_precise,4) THEN
+   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_ADJUSTMENT_AMOUNT';
+  END IF;
+  SET p_carbon=v_precise;
+ END;
  SELECT status,user_id INTO v_status,v_user_id FROM ride_orders WHERE id=p_order_id FOR UPDATE;
  IF v_status IS NULL OR v_status<>'PAID' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_ADJUSTMENT'; END IF;
  SELECT id,order_id,entry_type,points_change,carbon_kg_change,reason

@@ -158,6 +158,48 @@ test("carbon award overflow returns a useful payment error", async () => {
   }
 });
 
+test("carbon adjustment rejects excess precision through the API", async () => {
+  const [order] = await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
+  );
+  try {
+    const payment = await request(
+      `/api/rides/${order.insertId}/pay`,
+      { idempotency_key: "precision-http-payment" },
+      studentCookie,
+    );
+    assert.equal(payment.status, 200);
+    const response = await request(
+      "/api/carbon/adjustments",
+      {
+        order_id: order.insertId,
+        points_change: 1,
+        carbon_kg_change: 0.00001,
+        reason: "精度校验",
+        idempotency_key: "precision-http-adjust",
+      },
+      adminCookie,
+    );
+    assert.equal(response.status, 400);
+    assert.equal(response.data.code, "INVALID_ADJUSTMENT_AMOUNT");
+    const [[{ count }]] = await pool.query(
+      "SELECT COUNT(*) AS count FROM carbon_transactions WHERE order_id=? AND entry_type='ADJUSTMENT'",
+      [order.insertId],
+    );
+    assert.equal(count, 0);
+  } finally {
+    await pool.query(
+      "DELETE FROM audit_logs WHERE entity_type='ride_orders' AND entity_id=?",
+      [order.insertId],
+    );
+    await pool.query("DELETE FROM carbon_transactions WHERE order_id=?", [
+      order.insertId,
+    ]);
+    await pool.query("DELETE FROM payments WHERE order_id=?", [order.insertId]);
+    await pool.query("DELETE FROM ride_orders WHERE id=?", [order.insertId]);
+  }
+});
+
 test("health identifies campus bike and protected routes need login", async () => {
   assert.equal((await request("/api/health")).data.system, "campus-bike");
   assert.equal((await request("/api/dashboard")).status, 401);

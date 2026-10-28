@@ -140,6 +140,36 @@ test("login form validates and demo account opens campus dashboard", async ({
     page.getByRole("heading", { name: "核心关系", exact: true }),
   ).toBeVisible();
 });
+test("管理员通过表单提交四位精度的碳积分调整", async ({ page }) => {
+  const studentLogin = await page.request.post("/api/auth/login", {
+    data: { email: "ouyang@qingxing.local", password: "Qingxing2026!" },
+  });
+  expect(studentLogin.ok()).toBeTruthy();
+  const history = await page.request.get("/api/rides?status=PAID");
+  expect(history.ok()).toBeTruthy();
+  const { rides } = await history.json();
+  expect(rides.length).toBeGreaterThan(0);
+  await page.request.post("/api/auth/logout");
+  await page.goto("/");
+  await page.getByRole("button", { name: "管理员 · 贾鑫洋" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  await page.getByRole("button", { name: "基础资料", exact: true }).click();
+  await page.getByLabel("已支付订单 ID").fill(String(rides[0].id));
+  await page.getByLabel("积分变动").fill("1");
+  await page.getByLabel("减排变动 kg").fill("0.0001");
+  await page.getByLabel("调整原因").fill("浏览器精度验证");
+  const [response] = await Promise.all([
+    page.waitForResponse(
+      (r) =>
+        r.url().endsWith("/api/carbon/adjustments") &&
+        r.request().method() === "POST",
+    ),
+    page.getByRole("button", { name: "新增调整流水" }).click(),
+  ]);
+  expect(response.status()).toBe(201);
+  expect((await response.json()).duplicate).toBe(false);
+});
+
 test("数据库设计页面打开实体关系图和完整报告", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();

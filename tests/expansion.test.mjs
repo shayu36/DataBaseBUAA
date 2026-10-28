@@ -1557,7 +1557,7 @@ test("SQL payment keeps qualification and idempotency consistent despite manual 
   const input = {
     order_id: first.insertId,
     points_change: 1,
-    carbon_kg_change: -0.00005,
+    carbon_kg_change: -0.0001,
     reason: "测试重复键",
     idempotency_key: `award-${second.insertId}`,
   };
@@ -1808,6 +1808,72 @@ test("native carbon adjustment rejects control characters in idempotency keys", 
   assert.equal(result[0][0].duplicate, 0);
 });
 
+test("carbon adjustments reject excess precision before idempotency and writes", async () => {
+  const [order] = await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
+  );
+  await business.payRide(pool, student, order.insertId, {
+    idempotency_key: "precision-payment",
+  });
+  const input = {
+    order_id: order.insertId,
+    points_change: 1,
+    carbon_kg_change: 0.00001,
+    reason: "精度校验",
+    idempotency_key: "precision-adjustment",
+  };
+  await assert.rejects(adjustCarbon(pool, admin, input), {
+    code: "INVALID_ADJUSTMENT_AMOUNT",
+    status: 400,
+  });
+  const [[before]] = await pool.query(
+    "SELECT (SELECT COUNT(*) FROM carbon_transactions WHERE entry_type='ADJUSTMENT') entries,(SELECT COUNT(*) FROM audit_logs WHERE action='CARBON_ADJUST') audits",
+  );
+  assert.deepEqual(before, { entries: 0, audits: 0 });
+  const valid = { ...input, carbon_kg_change: 0.0001 };
+  const created = await adjustCarbon(pool, admin, valid);
+  assert.equal(created.duplicate, false);
+  assert.equal((await adjustCarbon(pool, admin, valid)).duplicate, true);
+  await assert.rejects(
+    adjustCarbon(pool, admin, { ...input, carbon_kg_change: 0.00009 }),
+    {
+      code: "INVALID_ADJUSTMENT_AMOUNT",
+      status: 400,
+    },
+  );
+  for (const value of [
+    null,
+    "1abc",
+    "1\n",
+    "1e-20",
+    "0.0001000000000000000000000000000000001",
+    "100000000",
+  ]) {
+    await assert.rejects(
+      pool.query("CALL sp_adjust_carbon(?,?,?,?,?,?,?)", [
+        admin.id,
+        order.insertId,
+        1,
+        value,
+        "测试调整",
+        "native-precision",
+        "{}",
+      ]),
+      { sqlMessage: "INVALID_ADJUSTMENT_AMOUNT" },
+    );
+  }
+  const [same] = await pool.query("CALL sp_adjust_carbon(?,?,?,?,?,?,?)", [
+    admin.id,
+    order.insertId,
+    1,
+    "1e-4",
+    "精度校验",
+    "precision-adjustment",
+    "{}",
+  ]);
+  assert.equal(same[0][0].duplicate, 1);
+});
+
 test("carbon adjustments enforce account balances and exact idempotency", async () => {
   const orders = [];
   for (const distance of [1000, 400]) {
@@ -1867,7 +1933,7 @@ test("carbon adjustments enforce account balances and exact idempotency", async 
       points_change: 0,
       carbon_kg_change: 0.00001,
     }),
-    { code: "INVALID_ADJUSTMENT" },
+    { code: "INVALID_ADJUSTMENT_AMOUNT" },
   );
   const [[balance]] = await pool.query(
     "SELECT points,carbon_kg FROM v_user_carbon WHERE user_id=2",

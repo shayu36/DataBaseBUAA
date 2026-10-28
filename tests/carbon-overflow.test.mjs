@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { createPool } from "../backend/db.mjs";
 import { applyProcedures, applySchema } from "../scripts/sql.mjs";
 
-test("native award limits and rounding hold with non-strict SQL mode and low division precision", async () => {
+test("native carbon precision and limits hold with non-strict SQL mode", async () => {
   const name = `campus_bike_carbon_test_${randomBytes(4).toString("hex")}`;
   const credentials = {
     user: process.env.DB_ADMIN_USER,
@@ -80,6 +80,26 @@ test("native award limits and rounding hold with non-strict SQL mode and low div
     } finally {
       await connection.rollback();
     }
+    await connection.query("CALL sp_pay_ride(1,1,'precision-payment')");
+    for (const value of [
+      "0.00001",
+      "-0.00001",
+      "1e100",
+      "1e-100",
+      "0.00010000000000000000000000000000001",
+    ]) {
+      await assert.rejects(
+        connection.query(
+          "CALL sp_adjust_carbon(1,1,1,?,'精度校验','native-adjustment',JSON_OBJECT())",
+          [value],
+        ),
+        { sqlMessage: "INVALID_ADJUSTMENT_AMOUNT" },
+      );
+    }
+    const [[{ adjustments }]] = await connection.query(
+      "SELECT COUNT(*) AS adjustments FROM carbon_transactions WHERE entry_type='ADJUSTMENT'",
+    );
+    assert.equal(adjustments, 0);
   } finally {
     if (connection) connection.release();
     if (pool) await pool.end();

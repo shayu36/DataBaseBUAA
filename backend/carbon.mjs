@@ -69,6 +69,11 @@ export function adjustCarbon(pool, actor, input) {
       ],
       {
         INVALID_ADJUSTMENT: ["只能调整已支付订单", "INVALID_ADJUSTMENT", 409],
+        INVALID_ADJUSTMENT_AMOUNT: [
+          "减排量调整须为最多四位小数的有效数字",
+          "INVALID_ADJUSTMENT_AMOUNT",
+          400,
+        ],
         ADJUSTMENT_ZERO: [
           "调整后的积分和减排量不能同时为零",
           "INVALID_ADJUSTMENT",

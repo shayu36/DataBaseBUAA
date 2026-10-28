@@ -14,7 +14,7 @@
 - GET /rides/export.csv?status=ALL|RUNNING|UNPAID|PAID 流式导出符合条件的全部本人订单，包含表头和 UTF-8 字节顺序标记，并处理电子表格公式前缀。
 - POST /rides/:id/return {zone_id,x,y,route_mode:'shortest'|'safe'|'comfortable'} -> {id,amount_cents,distance_m}; 坐标按米保留两位小数后用于围栏判断和记录；错误 OUTSIDE_FENCE/ZONE_FULL 保留尝试且订单不结束。
 - POST /rides/:id/pay {idempotency_key:string} -> {id,order_id,amount_cents,duplicate:boolean}；请求编号为 8–80 位英文字母、数字、下划线或连字符，区分字母大小写。
-- POST /carbon/adjustments {order_id,points_change,carbon_kg_change,reason,idempotency_key}；请求编号遵循相同字符、长度和大小写规则，人工扣减不得超过账户余额，相同请求编号内容不一致返回 `IDEMPOTENCY_CONFLICT`。
+- POST /carbon/adjustments {order_id,points_change,carbon_kg_change,reason,idempotency_key}；减排量在 -1000 至 1000 范围内且最多四位有效小数，精度无效返回 HTTP 400 和 `INVALID_ADJUSTMENT_AMOUNT`；请求编号遵循相同字符、长度和大小写规则，人工扣减不得超过账户余额，相同请求编号内容不一致返回 `IDEMPOTENCY_CONFLICT`。
 - GET /carbon/entries?before=编号 -> {entries,next_before}；仅返回当前用户的积分流水，按编号倒序每页最多 100 条，使用 next_before 获取更早记录，null 表示结束。
 - POST /maintenance {bike_id,fault_type:'BRAKE'|'TIRE'|'LOCK'|'CHAIN'|'OTHER',description} -> {id}
 - GET /maintenance?before=编号 -> {tickets,next_before}；返回已完成工单历史，学生仅查看本人报修，管理员和运维员可查看全部。按编号倒序每页最多 100 条，null 表示结束。
