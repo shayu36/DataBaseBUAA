@@ -182,14 +182,15 @@ report: BEGIN
  ), buckets AS (
   SELECT *,IF(zone_count<=1200,id,LEAST(299,FLOOR(300*TIMESTAMPDIFF(MICROSECOND,p_start,captured_at)/
    GREATEST(1,TIMESTAMPDIFF(MICROSECOND,p_start,p_end))))) AS bucket,
-   CONCAT(DATE_FORMAT(captured_at,'%Y%m%d%H%i%s%f'),LPAD(id,20,'0')) AS time_key
+   -- 10^20 covers every unsigned BIGINT id; the full time key stays below 10^40.
+   CAST(TIMESTAMPDIFF(MICROSECOND,'1000-01-01 00:00:00',captured_at) AS DECIMAL(40,0))*100000000000000000000+id AS time_key
   FROM segmented
  ), bucket_extremes AS (
   SELECT zone_id,bucket,
-   CAST(RIGHT(MIN(time_key),20) AS UNSIGNED) AS first_id,
-   CAST(RIGHT(MAX(time_key),20) AS UNSIGNED) AS last_id,
-   CAST(RIGHT(MIN(CONCAT(LPAD(available,10,'0'),time_key)),20) AS UNSIGNED) AS min_id,
-   CAST(RIGHT(MAX(CONCAT(LPAD(available,10,'0'),time_key)),20) AS UNSIGNED) AS max_id
+   CAST(MOD(MIN(time_key),100000000000000000000) AS UNSIGNED) AS first_id,
+   CAST(MOD(MAX(time_key),100000000000000000000) AS UNSIGNED) AS last_id,
+   CAST(MOD(MIN(available*10000000000000000000000000000000000000000+time_key),100000000000000000000) AS UNSIGNED) AS min_id,
+   CAST(MOD(MAX(available*10000000000000000000000000000000000000000+time_key),100000000000000000000) AS UNSIGNED) AS max_id
   FROM buckets GROUP BY zone_id,bucket
  ), selected AS (
   SELECT first_id AS id FROM bucket_extremes UNION SELECT last_id FROM bucket_extremes

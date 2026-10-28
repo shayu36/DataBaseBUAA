@@ -778,6 +778,62 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
       assert.equal(bucket.borrow_count, 0);
       assert.equal(bucket.return_count, 0);
     }
+    await pool.query(`INSERT INTO zone_snapshots(id,zone_id,available,occupied,capacity,captured_at,source)
+      WITH RECURSIVE digits AS (SELECT 0 AS n UNION ALL SELECT n+1 FROM digits WHERE n<9)
+      SELECT 18446744073709550314+MOD(n*97,1300),1,MOD(n,24),24,24,
+        TIMESTAMP('2099-01-01 00:00:00')+INTERVAL FLOOR(n/2) MINUTE,'DEMO'
+      FROM (SELECT a.n+b.n*10+c.n*100+d.n*1000 AS n FROM digits a CROSS JOIN digits b CROSS JOIN digits c CROSS JOIN digits d) numbers
+      WHERE n<1300`);
+    const [samples] =
+      await pool.query(`SELECT CAST(id AS CHAR) AS id,captured_at,available FROM zone_snapshots
+      WHERE zone_id=1 AND captured_at>='2099-01-01 00:00:00' AND captured_at<'2099-01-02 00:00:00' ORDER BY captured_at,id`);
+    const grouped = new Map();
+    const startMs = Date.parse("2099-01-01T00:00:00Z");
+    for (const sample of samples) {
+      const bucket = Math.floor(
+        ((sample.captured_at.getTime() - startMs) * 300) / 86400000,
+      );
+      if (!grouped.has(bucket)) grouped.set(bucket, []);
+      grouped.get(bucket).push(sample);
+    }
+    const byValueThenTime = (a, b) =>
+      a.available - b.available ||
+      a.captured_at - b.captured_at ||
+      (BigInt(a.id) < BigInt(b.id) ? -1 : BigInt(a.id) > BigInt(b.id) ? 1 : 0);
+    const selected = new Set();
+    for (const group of grouped.values()) {
+      const extremes = [...group].sort(byValueThenTime);
+      for (const sample of [
+        group[0],
+        group.at(-1),
+        extremes[0],
+        extremes.at(-1),
+      ])
+        selected.add(sample.id);
+    }
+    const [sampled] = await pool.query(
+      "CALL sp_hotspot_report(?,?,?,?,?,?,?,?)",
+      [
+        "2099-01-01 00:00:00",
+        "2099-01-02 00:00:00",
+        "ALL",
+        0,
+        24,
+        1,
+        true,
+        "2099-01-02 00:00:00",
+      ],
+    );
+    assert.equal(sampled[4][0].snapshot_count, 1300);
+    assert.deepEqual(
+      sampled[5].map((sample) => [
+        sample.captured_at.toISOString(),
+        sample.available,
+      ]),
+      samples
+        .filter((sample) => selected.has(sample.id))
+        .map((sample) => [sample.captured_at.toISOString(), sample.available]),
+    );
     await pool.query("DELETE FROM system_settings WHERE name='seed_version'");
     await assert.rejects(seedDemo(appPool, pool), /Nonempty unmarked database/);
     const [[afterFailure]] = await pool.query(
