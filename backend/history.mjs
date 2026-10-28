@@ -23,20 +23,9 @@ export async function paymentHistory(pool, actor, before = null) {
   return pageById(rows, "payments");
 }
 
-export function normalizeDispatches(rows) {
-  for (const row of rows) {
-    const bikes =
-      typeof row.bike_ids === "string"
-        ? JSON.parse(row.bike_ids)
-        : row.bike_ids;
-    row.bike_ids = (bikes ?? []).map(Number).sort((a, b) => a - b);
-  }
-  return rows;
-}
-
 export async function dispatchHistory(pool, before = null) {
   const [rows] = await pool.query(sql("dispatch_history"), [before, before]);
-  return pageById(normalizeDispatches(rows), "dispatches");
+  return pageById(rows, "dispatches");
 }
 
 export async function ticketHistory(pool, actor, before = null) {

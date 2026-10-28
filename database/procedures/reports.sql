@@ -189,8 +189,11 @@ BEGIN
    SELECT id FROM dispatch_tasks WHERE status IN ('PENDING','IN_PROGRESS')
    UNION ALL SELECT id FROM (SELECT id FROM dispatch_tasks WHERE status IN ('COMPLETED','CANCELLED') ORDER BY id DESC LIMIT 101) recent
   )
-  SELECT t.*,u.name staff_name,a.name source_name,b.name target_name,
-   COALESCE((SELECT JSON_ARRAYAGG(d.bike_id) FROM dispatch_bikes d WHERE d.task_id=t.id),JSON_ARRAY()) AS bike_ids
+  SELECT /*+ SET_VAR(group_concat_max_len=4294967295) */ t.*,u.name staff_name,a.name source_name,b.name target_name,
+   (SELECT CAST(CASE WHEN COUNT(*)=0 THEN '[]'
+    WHEN OCTET_LENGTH(GROUP_CONCAT(d.bike_id ORDER BY d.bike_id SEPARATOR ','))=SUM(CHAR_LENGTH(d.bike_id))+COUNT(*)-1
+    THEN CONCAT('[',GROUP_CONCAT(d.bike_id ORDER BY d.bike_id SEPARATOR ','),']') ELSE 'TRUNCATED' END AS JSON)
+    FROM dispatch_bikes d WHERE d.task_id=t.id) AS bike_ids
   FROM selected chosen JOIN dispatch_tasks t ON t.id=chosen.id LEFT JOIN staff s ON s.id=t.staff_id LEFT JOIN users u ON u.id=s.user_id
   JOIN parking_zones a ON a.id=t.source_zone_id JOIN parking_zones b ON b.id=t.target_zone_id
   ORDER BY (t.status IN ('COMPLETED','CANCELLED')),t.id DESC;

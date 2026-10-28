@@ -497,6 +497,58 @@ test("dispatch suggestions can be dismissed with a recorded reason", async () =>
   );
 });
 
+test("dispatch bike lists are ordered and complete with a small session aggregation limit", async () => {
+  await pool.query(`INSERT INTO bikes(id,code,deployed_at,current_zone_id)
+    WITH RECURSIVE n AS (SELECT 10 value UNION ALL SELECT value+1 FROM n WHERE value<200)
+    SELECT value,CONCAT('HISTORY-',value),'2026-01-01',1 FROM n`);
+  await pool.query(`INSERT INTO dispatch_tasks(id,staff_id,source_zone_id,target_zone_id,status,completed_at) VALUES
+    (1,1,1,2,'PENDING',NULL),(2,1,1,2,'COMPLETED',UTC_TIMESTAMP(3)),(3,1,1,2,'CANCELLED',UTC_TIMESTAMP(3))`);
+  await pool.query(
+    "INSERT INTO dispatch_bikes(task_id,bike_id) SELECT 1,id FROM bikes ORDER BY id DESC",
+  );
+  await pool.query(
+    "INSERT INTO dispatch_bikes(task_id,bike_id) SELECT 2,id FROM bikes ORDER BY id DESC",
+  );
+  const single = createPool({
+    database: "campus_bike_test",
+    user: process.env.DB_ADMIN_USER,
+    password: process.env.DB_ADMIN_PASSWORD,
+    connectionLimit: 1,
+  });
+  try {
+    await single.query("SET SESSION group_concat_max_len=4");
+    const expected = Array.from({ length: 200 }, (_, index) => index + 1);
+    const data = await dashboard(single, admin);
+    assert.deepEqual(
+      data.dispatches.find((task) => task.id === 1).bike_ids,
+      expected,
+    );
+    assert.deepEqual(
+      data.dispatches.find((task) => task.id === 2).bike_ids,
+      expected,
+    );
+    assert.deepEqual(
+      data.dispatches.find((task) => task.id === 3).bike_ids,
+      [],
+    );
+    const history = await dispatchHistory(single);
+    assert.deepEqual(
+      history.dispatches.find((task) => task.id === 2).bike_ids,
+      expected,
+    );
+    assert.deepEqual(
+      history.dispatches.find((task) => task.id === 3).bike_ids,
+      [],
+    );
+    const [[limit]] = await single.query(
+      "SELECT @@SESSION.group_concat_max_len AS value",
+    );
+    assert.equal(limit.value, 4);
+  } finally {
+    await single.end();
+  }
+});
+
 test("risk rule produces a versioned alert and operator can link a ticket", async () => {
   await pool.query(
     "INSERT INTO maintenance_tickets(bike_id,reporter_id,fault_type,description) VALUES(1,2,'BRAKE','近期刹车异常')",

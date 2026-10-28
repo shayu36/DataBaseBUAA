@@ -5,7 +5,6 @@ import { dispatchSuggestions } from "./dispatch-suggestions.mjs";
 import { listDispatchSuggestions } from "./operations.mjs";
 import { listRiskAlerts } from "./risks.mjs";
 import { pageById } from "./pagination.mjs";
-import { normalizeDispatches } from "./history.mjs";
 export async function dashboard(pool, user) {
   return readSnapshot(pool, async (c) => {
     const [result] = await c.query("CALL sp_dashboard(?,?)", [
@@ -27,7 +26,6 @@ export async function dashboard(pool, user) {
       actionableRides,
       carbonRuleRows,
     ] = result;
-    normalizeDispatches(dispatches);
     const activeDispatches = dispatches.filter((row) =>
       ["PENDING", "IN_PROGRESS"].includes(row.status),
     );

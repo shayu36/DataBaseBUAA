@@ -44,8 +44,11 @@ SELECT p.* FROM payments p JOIN ride_orders r ON r.id=p.order_id WHERE r.user_id
 SELECT id,bike_code,start_zone_name,end_zone_name,status,distance_m,amount_cents FROM v_ride_details
 WHERE user_id=? AND (?='ALL' OR status=?) ORDER BY id DESC;
 -- name: dispatch_history
-SELECT t.*,u.name staff_name,a.name source_name,b.name target_name,
- COALESCE((SELECT JSON_ARRAYAGG(d.bike_id) FROM dispatch_bikes d WHERE d.task_id=t.id),JSON_ARRAY()) AS bike_ids
+SELECT /*+ SET_VAR(group_concat_max_len=4294967295) */ t.*,u.name staff_name,a.name source_name,b.name target_name,
+ (SELECT CAST(CASE WHEN COUNT(*)=0 THEN '[]'
+  WHEN OCTET_LENGTH(GROUP_CONCAT(d.bike_id ORDER BY d.bike_id SEPARATOR ','))=SUM(CHAR_LENGTH(d.bike_id))+COUNT(*)-1
+  THEN CONCAT('[',GROUP_CONCAT(d.bike_id ORDER BY d.bike_id SEPARATOR ','),']') ELSE 'TRUNCATED' END AS JSON)
+  FROM dispatch_bikes d WHERE d.task_id=t.id) AS bike_ids
 FROM (SELECT * FROM dispatch_tasks WHERE status IN ('COMPLETED','CANCELLED') AND (? IS NULL OR id<?) ORDER BY id DESC LIMIT 101) t
 LEFT JOIN staff s ON s.id=t.staff_id LEFT JOIN users u ON u.id=s.user_id JOIN parking_zones a ON a.id=t.source_zone_id JOIN parking_zones b ON b.id=t.target_zone_id ORDER BY t.id DESC;
 -- name: ticket_history_all
