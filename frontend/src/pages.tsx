@@ -100,7 +100,9 @@ export function Rides({ d, run }: Props) {
   const [zone, setZone] = useState(d.zones[0]?.id || 0),
     [x, setX] = useState(d.zones[0]?.x || 0),
     [y, setY] = useState(d.zones[0]?.y || 0),
+    [capturedAt, setCapturedAt] = useState(() => new Date().toISOString()),
     [mode, setMode] = useState("shortest");
+  const capture = () => setCapturedAt(new Date().toISOString());
   const active = d.actionable_rides.find((r) => r.status === "RUNNING");
   return (
     <>
@@ -120,7 +122,10 @@ export function Rides({ d, run }: Props) {
                   <small>{b.zone_name}</small>
                   <button
                     disabled={!!active}
-                    onClick={() => run("/rides/start", { bike_id: b.id })}
+                    onClick={async () => {
+                      if (await run("/rides/start", { bike_id: b.id }))
+                        capture();
+                    }}
                   >
                     借用自行车 ↗
                   </button>
@@ -148,6 +153,7 @@ export function Rides({ d, run }: Props) {
                   setZone(z.id);
                   setX(z.x);
                   setY(z.y);
+                  capture();
                 }
               }}
             >
@@ -164,14 +170,20 @@ export function Rides({ d, run }: Props) {
               <input
                 type="number"
                 value={x}
-                onChange={(e) => setX(Number(e.target.value))}
+                onChange={(e) => {
+                  setX(Number(e.target.value));
+                  capture();
+                }}
               />
             </Field>
             <Field label="归还纵坐标（米）">
               <input
                 type="number"
                 value={y}
-                onChange={(e) => setY(Number(e.target.value))}
+                onChange={(e) => {
+                  setY(Number(e.target.value));
+                  capture();
+                }}
               />
             </Field>
           </div>
@@ -183,8 +195,12 @@ export function Rides({ d, run }: Props) {
             </select>
           </Field>
           <p className="muted">
-            系统会同时提交定位采集时间和来源。圈外、定位过期或车位已满时会记录尝试并保留骑行订单。
+            模拟位置采集于 {date(capturedAt)}
+            。选点或修改坐标会重新采集；圈外、定位过期或车位已满时会记录尝试并保留骑行订单。
           </p>
+          <button className="secondary" onClick={capture}>
+            重新采集模拟位置
+          </button>
           <button
             disabled={!active}
             onClick={() =>
@@ -194,7 +210,7 @@ export function Rides({ d, run }: Props) {
                 x,
                 y,
                 route_mode: mode,
-                captured_at: new Date().toISOString(),
+                captured_at: capturedAt,
                 location_source: "MAP_SIMULATION",
               })
             }
@@ -210,10 +226,12 @@ export function Rides({ d, run }: Props) {
           setZone(z.id);
           setX(z.x);
           setY(z.y);
+          capture();
         }}
         onPoint={(a, b) => {
           setX(a);
           setY(b);
+          capture();
         }}
       />
       <section className="panel">

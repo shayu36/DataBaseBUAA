@@ -314,6 +314,54 @@ test("ride preserves running order outside fence, then returns and pays once", a
     page.getByText("OUTSIDE_FENCE", { exact: true }).last(),
   ).toBeVisible();
 });
+test("还车使用实际选点时间并允许重新采集模拟位置", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "学生 · 王奕" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  const oldTime = new Date(Date.now() - 10 * 60_000);
+  await page.clock.setFixedTime(oldTime);
+  await page.getByRole("button", { name: "骑行与归还", exact: true }).click();
+  const capturedLabel = page.getByText(/模拟位置采集于/);
+  const previousLabel = await capturedLabel.textContent();
+  await page.clock.setFixedTime(new Date());
+  const borrow = page.getByRole("button", { name: "借用自行车 ↗" }).first();
+  if (await borrow.isEnabled()) {
+    await borrow.click();
+    await expect(capturedLabel).not.toHaveText(previousLabel!);
+  }
+  await expect(page.getByText(/正在骑行/).first()).toBeVisible();
+
+  await page.clock.setFixedTime(oldTime);
+  await page.getByRole("button", { name: /东门.*可借/ }).click();
+  await page.clock.setFixedTime(new Date());
+  const [rejected] = await Promise.all([
+    page.waitForResponse((response) =>
+      /\/api\/rides\/\d+\/return$/.test(response.url()),
+    ),
+    page.getByRole("button", { name: "确认归还", exact: true }).click(),
+  ]);
+  expect(rejected.status()).toBe(409);
+  expect((await rejected.json()).code).toBe("LOCATION_STALE");
+  expect(rejected.request().postDataJSON().captured_at).toBe(
+    oldTime.toISOString(),
+  );
+  await expect(page.getByText(/正在骑行/).first()).toBeVisible();
+  const attempts = await page.request.get("/api/return-attempts?scope=own");
+  const { attempts: records } = await attempts.json();
+  expect(records[0].reason).toBe("LOCATION_STALE");
+  expect(new Date(records[0].location_captured_at).toISOString()).toBe(
+    oldTime.toISOString(),
+  );
+
+  await page.getByRole("button", { name: "重新采集模拟位置" }).click();
+  await page.getByRole("button", { name: "确认归还", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "模拟支付", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "模拟支付", exact: true }).click();
+  await expect(page.getByText("没有待支付订单")).toBeVisible();
+});
+
 test("admin can create and finish maintenance and dispatch tasks", async ({
   page,
 }) => {
