@@ -26,7 +26,12 @@ BEGIN
  DECLARE v_occupied,v_reserved,v_capacity,v_found,v_available,v_distinct INT;
  DECLARE v_staff_user,v_task BIGINT UNSIGNED;
  DECLARE v_inventory JSON;
- IF p_source=p_target OR JSON_LENGTH(p_bikes)=0 OR JSON_LENGTH(p_bikes)>100 THEN
+ IF p_source=p_target OR p_bikes IS NULL OR JSON_TYPE(p_bikes)<>'ARRAY' OR JSON_LENGTH(p_bikes) NOT BETWEEN 1 AND 100 THEN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_DISPATCH_INPUT';
+ END IF;
+ IF EXISTS(SELECT 1 FROM JSON_TABLE(p_bikes,'$[*]' COLUMNS(bike_id JSON PATH '$')) requested
+  WHERE CASE WHEN JSON_TYPE(bike_id) IN ('INTEGER','UNSIGNED INTEGER')
+    THEN CAST(JSON_UNQUOTE(bike_id) AS DECIMAL(20,0))<1 ELSE TRUE END) THEN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_DISPATCH_INPUT';
  END IF;
  SELECT status INTO v_source_status FROM parking_zones WHERE id=p_source FOR UPDATE;

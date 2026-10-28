@@ -196,6 +196,65 @@ test("unpaid orders block further borrowing", async () => {
     code: "UNPAID_ORDER",
   });
 });
+test("native dispatch rejects malformed bike lists and identifiers without writes", async () => {
+  for (const bikes of [
+    null,
+    "null",
+    "{}",
+    "1",
+    '"1"',
+    "false",
+    "[]",
+    "[1.5]",
+    "[1,1.5]",
+    "[18446744073709551616]",
+    "[true]",
+    '["1"]',
+    "[null]",
+    "[{}]",
+    "[0]",
+    "[-1]",
+    JSON.stringify(Array.from({ length: 101 }, () => 1)),
+  ]) {
+    await assert.rejects(
+      pool.query("CALL sp_create_dispatch(?,?,?,?,?,?)", [
+        admin.id,
+        1,
+        2,
+        bikes,
+        null,
+        "{}",
+      ]),
+      { sqlMessage: "INVALID_DISPATCH_INPUT" },
+    );
+  }
+  await assert.rejects(
+    pool.query("CALL sp_create_dispatch(?,?,?,?,?,?)", [
+      admin.id,
+      1,
+      2,
+      "[18446744073709551615]",
+      null,
+      "{}",
+    ]),
+    { sqlMessage: "BIKE_NOT_FOUND" },
+  );
+  const [[state]] = await pool.query(
+    "SELECT (SELECT COUNT(*) FROM dispatch_tasks) tasks,(SELECT COUNT(*) FROM dispatch_bikes) bikes,(SELECT COUNT(*) FROM audit_logs WHERE action='DISPATCH_CREATE') audits,(SELECT COUNT(*) FROM bikes WHERE status='DISPATCHING') dispatched",
+  );
+  assert.deepEqual(state, { tasks: 0, bikes: 0, audits: 0, dispatched: 0 });
+  const task = await business.createDispatch(pool, admin, {
+    source_zone_id: 1,
+    target_zone_id: 2,
+    bike_ids: [1],
+  });
+  const [[record]] = await pool.query(
+    "SELECT COUNT(*) AS bikes FROM dispatch_bikes WHERE task_id=?",
+    [task.id],
+  );
+  assert.equal(record.bikes, 1);
+});
+
 test("dispatch reserves vehicles and destination slots, progresses atomically", async () => {
   const { id } = await business.createDispatch(pool, admin, {
     source_zone_id: 1,
