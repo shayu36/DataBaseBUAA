@@ -367,6 +367,37 @@ const regressionDashboard = {
     open_tickets: 0,
   },
 };
+
+for (const timezoneId of ["UTC", "America/Los_Angeles", "Asia/Shanghai"]) {
+  test.describe(`首页日期（${timezoneId}）`, () => {
+    test.use({ timezoneId });
+
+    test("北京时间午夜前后显示正确日期", async ({ page }) => {
+      await page.route("**/api/**", async (route) => {
+        const path = new URL(route.request().url()).pathname;
+        if (path === "/api/auth/me")
+          return route.fulfill({
+            json: {
+              user: {
+                id: 1,
+                name: "测试管理员",
+                email: "admin@test.local",
+                role: "ADMIN",
+                status: "ACTIVE",
+              },
+            },
+          });
+        return route.fulfill({ json: regressionDashboard });
+      });
+      await page.clock.setFixedTime(new Date("2026-10-27T15:59:00Z"));
+      await page.goto("/");
+      await expect(page.locator("header .date")).toHaveText(/10月27日.*星期二/);
+      await page.clock.setFixedTime(new Date("2026-10-27T16:00:00Z"));
+      await page.reload();
+      await expect(page.locator("header .date")).toHaveText(/10月28日.*星期三/);
+    });
+  });
+}
 test("道路编辑保留两位坡度并允许仅修改通行状态", async ({ page }) => {
   let saved: { slope_percent: number; status: string } | undefined;
   await page.route("**/api/admin/roads", async (route) => {

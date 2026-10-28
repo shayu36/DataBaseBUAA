@@ -370,6 +370,7 @@ export default function App() {
           <div className="header-right">
             <span className="date">
               {new Date().toLocaleDateString("zh-CN", {
+                timeZone: "Asia/Shanghai",
                 month: "long",
                 day: "numeric",
                 weekday: "long",
