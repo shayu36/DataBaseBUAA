@@ -409,6 +409,47 @@ test("return attempts paginate without exposing other users and older records re
   assert.equal(reviewed.attempts.at(-1).review_status, "RESOLVED");
 });
 
+test("return history pages preserve ordering and ownership across interleaved rides", async () => {
+  await pool.query(`INSERT INTO ride_orders(id,user_id,bike_id,start_zone_id,end_zone_id,ended_at,status) VALUES
+    (1,2,1,1,1,UTC_TIMESTAMP(3),'UNPAID'),(2,2,1,1,1,UTC_TIMESTAMP(3),'UNPAID'),
+    (3,3,1,1,1,UTC_TIMESTAMP(3),'UNPAID'),(4,3,1,1,1,UTC_TIMESTAMP(3),'UNPAID')`);
+  await pool.query(`INSERT INTO return_attempts(order_id,zone_id,x,y,reason,location_captured_at,location_source)
+    WITH RECURSIVE n AS (SELECT 1 AS value UNION ALL SELECT value+1 FROM n WHERE value<500)
+    SELECT MOD(value-1,4)+1,1,10,10,'OUTSIDE_FENCE',UTC_TIMESTAMP(3),'MAP_SIMULATION' FROM n`);
+  const [fixture] = await pool.query(
+    "SELECT id,order_id FROM return_attempts ORDER BY id DESC",
+  );
+  for (const [actor, scope, orders] of [
+    [student, undefined, [1, 2]],
+    [operator, undefined, [3, 4]],
+    [admin, undefined, [1, 2, 3, 4]],
+  ]) {
+    for (const firstBefore of [null, 281]) {
+      const expected = fixture.filter(
+        (row) =>
+          orders.includes(row.order_id) &&
+          (firstBefore === null || row.id < firstBefore),
+      );
+      const actual = [];
+      let cursor = firstBefore;
+      do {
+        const page = await listReturnAttempts(pool, actor, cursor, scope);
+        assert.ok(page.attempts.length <= 100);
+        assert.ok(
+          page.attempts.every(
+            (row) => row.bike_code === "EX-01" && row.zone_name === "富余站",
+          ),
+        );
+        actual.push(
+          ...page.attempts.map(({ id, order_id }) => ({ id, order_id })),
+        );
+        cursor = page.next_before;
+      } while (cursor !== null);
+      assert.deepEqual(actual, expected);
+    }
+  }
+});
+
 test("risk alerts paginate and older alerts remain actionable", async () => {
   await pool.query(`INSERT INTO risk_alerts(bike_id,score,level,reasons,ticket_ids,fingerprint,rule_version,recommendation)
     WITH RECURSIVE n AS (SELECT 1 AS value UNION ALL SELECT value+1 FROM n WHERE value<105)

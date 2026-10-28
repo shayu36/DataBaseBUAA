@@ -25,14 +25,17 @@ FROM dispatch_suggestions s JOIN parking_zones a ON a.id=s.source_zone_id JOIN p
 WHERE (? IS NULL OR s.id<?) ORDER BY s.id DESC LIMIT 101;
 -- name: return_attempts_all
 SELECT a.*,r.user_id,b.code bike_code,z.name zone_name,u.name reviewer_name
-FROM return_attempts a JOIN ride_orders r ON r.id=a.order_id JOIN bikes b ON b.id=r.bike_id
+FROM (SELECT id FROM return_attempts WHERE (? IS NULL OR id<?) ORDER BY id DESC LIMIT 101) selected
+JOIN return_attempts a ON a.id=selected.id JOIN ride_orders r ON r.id=a.order_id JOIN bikes b ON b.id=r.bike_id
 JOIN parking_zones z ON z.id=a.zone_id LEFT JOIN users u ON u.id=a.reviewer_id
-WHERE (? IS NULL OR a.id<?) ORDER BY a.id DESC LIMIT 101;
+ORDER BY a.id DESC;
 -- name: return_attempts_own
 SELECT a.*,r.user_id,b.code bike_code,z.name zone_name,u.name reviewer_name
-FROM return_attempts a JOIN ride_orders r ON r.id=a.order_id JOIN bikes b ON b.id=r.bike_id
+FROM (SELECT a.id FROM return_attempts a JOIN ride_orders r ON r.id=a.order_id
+ WHERE r.user_id=? AND (? IS NULL OR a.id<?) ORDER BY a.id DESC LIMIT 101) selected
+JOIN return_attempts a ON a.id=selected.id JOIN ride_orders r ON r.id=a.order_id JOIN bikes b ON b.id=r.bike_id
 JOIN parking_zones z ON z.id=a.zone_id LEFT JOIN users u ON u.id=a.reviewer_id
-WHERE r.user_id=? AND (? IS NULL OR a.id<?) ORDER BY a.id DESC LIMIT 101;
+ORDER BY a.id DESC;
 -- name: carbon_entries_own
 SELECT c.id,c.order_id,c.entry_type,c.award_order_id,c.idempotency_key,c.distance_m,c.points_change,c.carbon_kg_change,
  CAST(c.factor_kg_per_km AS CHAR) AS factor_kg_per_km,CAST(c.points_per_km AS CHAR) AS points_per_km,
