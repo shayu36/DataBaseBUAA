@@ -10,17 +10,34 @@ const need = (ok, message, code = "INVALID_STATE", status = 409) => {
 export function requireAdmin(user) {
   need(user.role === "ADMIN", "仅管理员可执行此操作", "FORBIDDEN", 403);
 }
-export async function routeForZones(c, from, to, mode = "shortest") {
+export async function routeGraph(c) {
   const [result] = await c.query("CALL sp_route_graph()");
+  return result;
+}
+export function routesForGraph(result, from, to, mode = "shortest") {
   const [nodes, edges] = result;
   const start = nodes.find((n) => Number(n.zone_id) === Number(from)),
     end = nodes.find((n) => Number(n.zone_id) === Number(to));
   need(start && end, "该停车区尚未连接路网", "NO_ROUTE", 400);
   try {
+    if (mode === "all")
+      return {
+        nodes,
+        edges,
+        routes: Object.fromEntries(
+          ["shortest", "safe", "comfortable"].map((name) => [
+            name,
+            findRoute(nodes, edges, start.id, end.id, name),
+          ]),
+        ),
+      };
     return { ...findRoute(nodes, edges, start.id, end.id, mode), nodes, edges };
   } catch {
     throw new AppError("两处停车区之间没有可用路线", "NO_ROUTE", 409);
   }
+}
+export async function routeForZones(c, from, to, mode = "shortest") {
+  return routesForGraph(await routeGraph(c), from, to, mode);
 }
 const startRideErrors = {
   ACTIVE_RIDE: ["请先结束当前骑行", "ACTIVE_RIDE", 409],

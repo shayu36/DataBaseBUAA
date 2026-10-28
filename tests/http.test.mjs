@@ -898,6 +898,53 @@ test("route API returns travel-oriented segments for reverse roads", async () =>
     );
   }
 });
+
+test("route API returns all three alternatives consistently with single modes", async () => {
+  const all = await request(
+    "/api/routes?from=2&to=1&mode=all",
+    undefined,
+    studentCookie,
+  );
+  assert.equal(all.status, 200);
+  for (const mode of ["shortest", "safe", "comfortable"]) {
+    const single = await request(
+      `/api/routes?from=2&to=1&mode=${mode}`,
+      undefined,
+      studentCookie,
+    );
+    assert.equal(single.status, 200);
+    const { nodes, edges, ...details } = single.data;
+    assert.deepEqual(all.data.nodes, nodes);
+    assert.deepEqual(all.data.edges, edges);
+    assert.deepEqual(all.data.routes[mode], details);
+  }
+  const same = await request(
+    "/api/routes?from=1&to=1&mode=all",
+    undefined,
+    studentCookie,
+  );
+  for (const mode of ["shortest", "safe", "comfortable"]) {
+    assert.deepEqual(same.data.routes[mode].path, [1]);
+    assert.equal(same.data.routes[mode].distance_m, 0);
+  }
+  const [[original]] = await pool.query(
+    "SELECT status FROM road_edges WHERE id=1",
+  );
+  try {
+    await pool.query("UPDATE road_edges SET status='CLOSED' WHERE id=1");
+    const unavailable = await request(
+      "/api/routes?from=1&to=2&mode=all",
+      undefined,
+      studentCookie,
+    );
+    assert.equal(unavailable.status, 409);
+    assert.equal(unavailable.data.code, "NO_ROUTE");
+  } finally {
+    await pool.query("UPDATE road_edges SET status=? WHERE id=1", [
+      original.status,
+    ]);
+  }
+});
 test("SQL constraints enforce foreign keys, active ride uniqueness and payment amount", async () => {
   await assert.rejects(
     pool.query(

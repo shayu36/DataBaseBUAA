@@ -6,7 +6,12 @@ import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { AppError, errorCodes, translateDatabaseError } from "./db.mjs";
+import {
+  AppError,
+  errorCodes,
+  readSnapshot,
+  translateDatabaseError,
+} from "./db.mjs";
 import { authenticate, login, register, issueCookie, logout } from "./auth.mjs";
 import {
   startRide,
@@ -16,7 +21,8 @@ import {
   maintenanceAction,
   createDispatch,
   dispatchAction,
-  routeForZones,
+  routeGraph,
+  routesForGraph,
   requireAdmin,
   idSchema,
 } from "./business.mjs";
@@ -318,17 +324,13 @@ export function createApp(pool) {
   );
   app.get("/api/routes", async (req, res) => {
     const mode = z
-      .enum(["shortest", "safe", "comfortable"])
+      .enum(["shortest", "safe", "comfortable", "all"])
       .default("shortest")
       .parse(req.query.mode);
-    res.json(
-      await routeForZones(
-        pool,
-        idSchema.parse(req.query.from),
-        idSchema.parse(req.query.to),
-        mode,
-      ),
-    );
+    const from = idSchema.parse(req.query.from);
+    const to = idSchema.parse(req.query.to);
+    const graph = await readSnapshot(pool, routeGraph);
+    res.json(routesForGraph(graph, from, to, mode));
   });
   app.get("/api/leaderboard", async (req, res) =>
     res.json(

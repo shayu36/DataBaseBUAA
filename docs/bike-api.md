@@ -37,6 +37,7 @@
 - GET /admin/roads -> {roads}；POST /admin/roads {id,direction,status,slope_percent,surface,shade_level,lighting_level,traffic_mix,intersection_risk} -> {id}，均需管理员权限。方向为 BOTH/FORWARD/REVERSE，状态为 OPEN/CLOSED/NO_RIDE。坡度以道路的 from_node_id 至 to_node_id 为正向，入库保留两位小数；修改坡度、路面、遮阴、照明、混行或风险属性后，来源标为课程模拟，只有方向或状态变化时保留原来源。审计同时保存修改前、实际入库结果和校验后的请求。
 - POST /profile/leaderboard {alias,visible} -> {leaderboard_alias,leaderboard_visible}；昵称为 2–20 字符，visible 为布尔值。
 - GET /routes?from=1&to=2&mode=shortest|safe|comfortable -> {nodes:[{id,name,x,y}],edges:[{id,from_node_id,to_node_id,distance_m,safety_cost,comfort_cost}],path:number[],segments,distance_m,duration_minutes,mode}；同站返回零里程和空路段。`segments` 的 `from_node_id`、`to_node_id` 按实际行驶顺序排列，`slope_percent` 按该行驶方向表示；`road_from_node_id`、`road_to_node_id` 是数据库中的道路原始起终点，`direction` 是相对于这两个原始端点的通行规则。反向行驶时路段坡度与原始道路坡度符号相反。
+- GET /routes?from=1&to=2&mode=all -> {nodes,edges,routes:{shortest,safe,comfortable}}；三个结果与单模式接口的路线字段一致，共用同一份 MySQL 一致性快照读取的路网。无可通行路线返回 `NO_ROUTE`，同站三个结果均为零里程。
 - GET /leaderboard?period=week|month&metric=points|distance|rides -> {period,metric,rows:[{rank,user_id,name,rides,distance_m,points,carbon_kg}],me,window}；me 为个人结果，没有有效记录时 rank 为 null；rows 只包含自愿公开的参与者。
 - GET /schema -> {entities:[{table,name,description,columns:[{name,type,key,nullable}],count}],relationships:[{name,from,to,cardinality,description}],objects:{views:string[],triggers:string[],procedures:string[]}}
 - GET /report -> 报告 HTML；生成报告后也可直接访问不带 /api 前缀的 /docs/ER图.svg 和 /docs/数据库课程设计报告.html；其他文档路径返回 404。

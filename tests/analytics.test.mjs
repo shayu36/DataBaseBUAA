@@ -5,6 +5,63 @@ import { bikeRisks } from "./risk-reference.mjs";
 import { dispatchSuggestions } from "./dispatch-reference.mjs";
 import assert from "node:assert/strict";
 import { findRoute, reportFilter } from "../backend/analytics.mjs";
+import { routeForZones } from "../backend/business.mjs";
+
+test("route options reuse one graph read and match single-mode results", async () => {
+  const nodes = [{ id: 1, zone_id: 1 }, { id: 2, zone_id: 2 }, { id: 3 }];
+  const edges = [
+    {
+      id: 1,
+      from_node_id: 1,
+      to_node_id: 2,
+      distance_m: 10,
+      safety_cost: 10,
+      comfort_cost: 10,
+      direction: "BOTH",
+      status: "OPEN",
+      slope_percent: 0,
+    },
+    {
+      id: 2,
+      from_node_id: 1,
+      to_node_id: 3,
+      distance_m: 8,
+      safety_cost: 1,
+      comfort_cost: 1,
+      direction: "BOTH",
+      status: "OPEN",
+      slope_percent: 0,
+    },
+    {
+      id: 3,
+      from_node_id: 2,
+      to_node_id: 3,
+      distance_m: 8,
+      safety_cost: 1,
+      comfort_cost: 1,
+      direction: "BOTH",
+      status: "OPEN",
+      slope_percent: 0,
+    },
+  ];
+  let reads = 0;
+  const db = {
+    query: async (statement) => {
+      assert.equal(statement, "CALL sp_route_graph()");
+      reads++;
+      return [[nodes, edges]];
+    },
+  };
+  const result = await routeForZones(db, 1, 2, "all");
+  assert.equal(reads, 1);
+  assert.deepEqual(result.nodes, nodes);
+  assert.deepEqual(result.edges, edges);
+  for (const mode of ["shortest", "safe", "comfortable"])
+    assert.deepEqual(result.routes[mode], findRoute(nodes, edges, 1, 2, mode));
+  assert.deepEqual(result.routes.shortest.path, [1, 2]);
+  assert.deepEqual(result.routes.safe.path, [1, 3, 2]);
+});
+
 test("route modes use weighted undirected paths and actual distance", () => {
   const nodes = [1, 2, 3].map((id) => ({ id }));
   const edges = [

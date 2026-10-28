@@ -1519,105 +1519,110 @@ export function Routes({ d }: Props) {
           </Field>
         </div>
       </section>
-      <div className="route-options">
-        {[
-          ["shortest", "最短路线", "以可通行距离为主要依据"],
-          ["safe", "安全优先", "综合交叉口、照明与机动车混行"],
-          ["comfortable", "舒适优先", "综合坡度、路面与遮阴"],
-        ].map(([key, title, detail]) => (
-          <Remote
-            key={key}
-            path={"/routes?from=" + from + "&to=" + to + "&mode=" + key}
-          >
-            {(route) => (
-              <button
-                className={
-                  mode === key ? "route-option active" : "route-option"
-                }
-                onClick={() => setMode(key)}
-              >
-                <span>{title}</span>
-                <strong>{(route.distance_m / 1000).toFixed(2)} km</strong>
-                <small>
-                  {route.duration_minutes} 分钟 · {detail}
-                </small>
-              </button>
-            )}
-          </Remote>
-        ))}
-      </div>
       <Remote
-        path={"/routes?from=" + from + "&to=" + to + "&mode=" + mode}
+        path={"/routes?from=" + from + "&to=" + to + "&mode=all"}
         refreshKey={d}
       >
-        {(v) => (
-          <>
-            <div className="route-result">
-              <strong>{(v.distance_m / 1000).toFixed(2)} km</strong>
-              <span>预计 {v.duration_minutes} 分钟 · Dijkstra 路网估算</span>
-            </div>
-            <CampusMap zones={d.zones} bikes={d.bikes} route={v} />
-            <section className="panel">
-              <h2>路线依据与途经道路</h2>
-              <p>{v.explanation}</p>
-              <div className="route-facts">
-                <span>
-                  交叉口风险合计{" "}
-                  <strong>{v.attribute_totals.intersection_risk}</strong>
-                </span>
-                <span>
-                  机动车较多路段{" "}
-                  <strong>{v.attribute_totals.motor_heavy_edges}</strong>
-                </span>
-                <span>
-                  较粗糙路段 <strong>{v.attribute_totals.rough_edges}</strong>
-                </span>
-                <span>
-                  高遮阴路段 <strong>{v.attribute_totals.shaded_edges}</strong>
-                </span>
+        {(result) => {
+          const v = {
+            ...result.routes[mode],
+            nodes: result.nodes,
+            edges: result.edges,
+          };
+          return (
+            <>
+              <div className="route-options">
+                {[
+                  ["shortest", "最短路线", "以可通行距离为主要依据"],
+                  ["safe", "安全优先", "综合交叉口、照明与机动车混行"],
+                  ["comfortable", "舒适优先", "综合坡度、路面与遮阴"],
+                ].map(([key, title, detail]) => {
+                  const route = result.routes[key];
+                  return (
+                    <button
+                      key={key}
+                      className={
+                        mode === key ? "route-option active" : "route-option"
+                      }
+                      onClick={() => setMode(key)}
+                    >
+                      <span>{title}</span>
+                      <strong>{(route.distance_m / 1000).toFixed(2)} km</strong>
+                      <small>
+                        {route.duration_minutes} 分钟 · {detail}
+                      </small>
+                    </button>
+                  );
+                })}
               </div>
-              <p>
-                {v.path
-                  .map(
-                    (id: number) =>
-                      v.nodes.find((n: Row) => n.id === id)?.name || id,
-                  )
-                  .join(" → ")}
-              </p>
-              <p className="muted">
-                道路属性来源：课程演示模拟数据；封闭和禁骑道路不会参与计算。
-              </p>
-              <Table
-                rows={v.segments}
-                columns={[
-                  {
-                    label: "路段",
-                    render: (r) =>
-                      `${v.nodes.find((n: Row) => n.id === r.from_node_id)?.name} → ${v.nodes.find((n: Row) => n.id === r.to_node_id)?.name}`,
-                  },
-                  {
-                    label: "方向 / 状态",
-                    render: (r) =>
-                      `${r.direction === "BOTH" ? "双向" : "单向"} / ${r.status === "OPEN" ? "开放" : r.status}`,
-                  },
-                  {
-                    label: "长度 / 坡度",
-                    render: (r) =>
-                      `${r.distance_m} m / ${Number(r.slope_percent).toFixed(2)}%`,
-                  },
-                  {
-                    label: "路面 / 交通",
-                    render: (r) => `${r.surface} / ${r.traffic_mix}`,
-                  },
-                  {
-                    label: "遮阴 / 照明",
-                    render: (r) => `${r.shade_level} / ${r.lighting_level}`,
-                  },
-                ]}
-              />
-            </section>
-          </>
-        )}
+              <div className="route-result">
+                <strong>{(v.distance_m / 1000).toFixed(2)} km</strong>
+                <span>预计 {v.duration_minutes} 分钟 · Dijkstra 路网估算</span>
+              </div>
+              <CampusMap zones={d.zones} bikes={d.bikes} route={v} />
+              <section className="panel">
+                <h2>路线依据与途经道路</h2>
+                <p>{v.explanation}</p>
+                <div className="route-facts">
+                  <span>
+                    交叉口风险合计{" "}
+                    <strong>{v.attribute_totals.intersection_risk}</strong>
+                  </span>
+                  <span>
+                    机动车较多路段{" "}
+                    <strong>{v.attribute_totals.motor_heavy_edges}</strong>
+                  </span>
+                  <span>
+                    较粗糙路段 <strong>{v.attribute_totals.rough_edges}</strong>
+                  </span>
+                  <span>
+                    高遮阴路段{" "}
+                    <strong>{v.attribute_totals.shaded_edges}</strong>
+                  </span>
+                </div>
+                <p>
+                  {v.path
+                    .map(
+                      (id: number) =>
+                        v.nodes.find((n: Row) => n.id === id)?.name || id,
+                    )
+                    .join(" → ")}
+                </p>
+                <p className="muted">
+                  道路属性来源：课程演示模拟数据；封闭和禁骑道路不会参与计算。
+                </p>
+                <Table
+                  rows={v.segments}
+                  columns={[
+                    {
+                      label: "路段",
+                      render: (r) =>
+                        `${v.nodes.find((n: Row) => n.id === r.from_node_id)?.name} → ${v.nodes.find((n: Row) => n.id === r.to_node_id)?.name}`,
+                    },
+                    {
+                      label: "方向 / 状态",
+                      render: (r) =>
+                        `${r.direction === "BOTH" ? "双向" : "单向"} / ${r.status === "OPEN" ? "开放" : r.status}`,
+                    },
+                    {
+                      label: "长度 / 坡度",
+                      render: (r) =>
+                        `${r.distance_m} m / ${Number(r.slope_percent).toFixed(2)}%`,
+                    },
+                    {
+                      label: "路面 / 交通",
+                      render: (r) => `${r.surface} / ${r.traffic_mix}`,
+                    },
+                    {
+                      label: "遮阴 / 照明",
+                      render: (r) => `${r.shade_level} / ${r.lighting_level}`,
+                    },
+                  ]}
+                />
+              </section>
+            </>
+          );
+        }}
       </Remote>
     </>
   );

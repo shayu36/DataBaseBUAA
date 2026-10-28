@@ -368,6 +368,19 @@ const regressionDashboard = {
   },
 };
 
+function routeBundle({ nodes, edges, ...details }: any) {
+  return {
+    nodes,
+    edges,
+    routes: Object.fromEntries(
+      ["shortest", "safe", "comfortable"].map((mode) => [
+        mode,
+        { ...details, mode },
+      ]),
+    ),
+  };
+}
+
 for (const timezoneId of ["UTC", "America/Los_Angeles", "Asia/Shanghai"]) {
   test.describe(`首页日期（${timezoneId}）`, () => {
     test.use({ timezoneId });
@@ -999,11 +1012,9 @@ test("PDF expansion controls expose traceable workflows", async ({ page }) => {
         },
       });
     if (path === "/api/routes") {
-      const mode = url.searchParams.get("mode") || "shortest";
       return route.fulfill({
-        json: {
-          mode,
-          distance_m: mode === "shortest" ? 400 : 430,
+        json: routeBundle({
+          distance_m: 400,
           duration_minutes: 2,
           path: [1, 2],
           nodes: [
@@ -1032,7 +1043,7 @@ test("PDF expansion controls expose traceable workflows", async ({ page }) => {
             shaded_edges: 1,
           },
           explanation: "避开封闭及禁骑路段",
-        },
+        }),
       });
     }
     if (path === "/api/leaderboard")
@@ -1137,6 +1148,83 @@ test("PDF expansion controls expose traceable workflows", async ({ page }) => {
   await expect(page.getByText("距离与时长组合异常")).toBeVisible();
 });
 
+test("路线方案共用一次查询并在刷新后同时更新", async ({ page }) => {
+  let dashboards = 0;
+  let requests = 0;
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: 1,
+            name: "测试学生",
+            email: "student@test.local",
+            role: "STUDENT",
+            status: "ACTIVE",
+          },
+        },
+      });
+    if (url.pathname === "/api/dashboard") {
+      dashboards++;
+      return route.fulfill({ json: regressionDashboard });
+    }
+    if (url.pathname === "/api/routes") {
+      requests++;
+      const version = dashboards > 1 ? 400 : 0;
+      const nodes = [
+        { id: 1, name: "测试源站", x: 100, y: 100 },
+        { id: 2, name: "测试目标站", x: 200, y: 200 },
+      ];
+      const edges = [];
+      const detail = (mode: string) => ({
+        mode,
+        distance_m: (mode === "shortest" ? 400 : 430) + version,
+        duration_minutes: 2,
+        path: [1, 2],
+        segments: [],
+        attribute_totals: {
+          intersection_risk: 0,
+          motor_heavy_edges: 0,
+          rough_edges: 0,
+          shaded_edges: 0,
+        },
+        explanation: "演示路线",
+      });
+      const mode = url.searchParams.get("mode") || "shortest";
+      const data =
+        mode === "all"
+          ? {
+              nodes,
+              edges,
+              routes: Object.fromEntries(
+                ["shortest", "safe", "comfortable"].map((name) => [
+                  name,
+                  detail(name),
+                ]),
+              ),
+            }
+          : { nodes, edges, ...detail(mode) };
+      return route.fulfill({ json: data });
+    }
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "路线规划", exact: true }).click();
+  const safe = page.getByRole("button", { name: /安全优先/ });
+  await expect(safe).toContainText("0.43 km");
+  await page.getByRole("button", { name: "刷新数据" }).click();
+  await expect(safe).toContainText("0.83 km");
+  await expect.poll(() => requests).toBe(2);
+  await safe.click();
+  await expect(page.locator(".route-result")).toContainText("0.83 km");
+  await page.getByRole("button", { name: /舒适优先/ }).click();
+  await expect(page.locator(".route-result")).toContainText("0.83 km");
+  expect(requests).toBe(2);
+  await page.getByLabel("目的停车区").selectOption("1");
+  await expect.poll(() => requests).toBe(3);
+});
+
 test("路线详情按实际行驶方向展示路段、通行规则和坡度", async ({ page }) => {
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
@@ -1159,8 +1247,7 @@ test("路线详情按实际行驶方向展示路段、通行规则和坡度", as
       const to = Number(url.searchParams.get("to"));
       const reverse = from === 2 && to === 1;
       return route.fulfill({
-        json: {
-          mode: url.searchParams.get("mode"),
+        json: routeBundle({
           distance_m: 400,
           duration_minutes: 2,
           nodes: [
@@ -1201,7 +1288,7 @@ test("路线详情按实际行驶方向展示路段、通行规则和坡度", as
             shaded_edges: 0,
           },
           explanation: "演示路线",
-        },
+        }),
       });
     }
     return route.fulfill({ json: {} });
