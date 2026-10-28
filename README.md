@@ -145,6 +145,20 @@ HAVING COUNT(*) > 1;
 
 若报 `MIGRATION_SUGGESTION_TASK_INDEX_CONFLICT`，请备份并检查同名索引的列和唯一性；调整索引时须保留外键所需索引，再重试迁移。
 
+确认建议时，数据库还会核对任务的状态、两站和车辆数量。检查命令发现历史建议与任务不一致时，可使用以下只读 SQL 查询明细，再依据备份和审计记录人工核对；系统不会自动改写历史。
+
+```sql
+SELECT s.id AS 建议编号, s.task_id AS 任务编号, s.quantity AS 建议数量,
+       s.source_zone_id AS 建议调出站, s.target_zone_id AS 建议调入站,
+       t.source_zone_id AS 任务调出站, t.target_zone_id AS 任务调入站,
+       (SELECT COUNT(*) FROM dispatch_bikes d WHERE d.task_id = s.task_id) AS 任务车辆数
+FROM dispatch_suggestions s LEFT JOIN dispatch_tasks t ON t.id = s.task_id
+WHERE s.status = 'CONFIRMED' AND s.task_id IS NOT NULL
+  AND (t.id IS NULL OR s.source_zone_id <> t.source_zone_id
+       OR s.target_zone_id <> t.target_zone_id
+       OR s.quantity <> (SELECT COUNT(*) FROM dispatch_bikes d WHERE d.task_id = s.task_id));
+```
+
 支付与积分流水的请求编号区分字母大小写；升级会保留历史编号。如果旧记录的编号为空，迁移报 `MIGRATION_INVALID_PAYMENT_KEYS` 或 `MIGRATION_INVALID_CARBON_KEYS` 并停止，应依据备份人工核对并补全后重试。员工姓名和电话统一保存在用户表；升级时若旧员工表中的姓名或电话与用户表不一致，迁移会报 `STAFF_NAME_MISMATCH` 或 `STAFF_PHONE_MISMATCH` 并停止。请先根据备份人工核对差异，再修正旧表或用户表后重新迁移。
 
 新版数据库使用 UTC 默认时间，不依赖 MySQL 服务器时区；迁移不修改历史时间，若旧库使用过非 UTC 服务器时区，应根据原始环境和备份核对历史记录。

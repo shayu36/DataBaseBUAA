@@ -144,6 +144,16 @@ export async function confirmDispatchSuggestion(pool, actor, id, staffId) {
       [suggestionId, task.id],
       {
         SUGGESTION_NOT_OPEN: ["调度建议已处理", "SUGGESTION_NOT_OPEN", 409],
+        SUGGESTION_TASK_MISMATCH: [
+          "调度任务与建议不一致，请刷新重试",
+          "SUGGESTION_TASK_MISMATCH",
+          409,
+        ],
+        SUGGESTION_TASK_LINKED: [
+          "调度任务已关联其他建议",
+          "SUGGESTION_TASK_LINKED",
+          409,
+        ],
       },
     );
   });

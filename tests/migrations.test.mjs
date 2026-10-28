@@ -30,6 +30,10 @@ test("suggestion task uniqueness migrates safely without discarding conflicting 
       "INSERT INTO dispatch_tasks(id,source_zone_id,target_zone_id) VALUES(1,1,2)",
     );
     await pool.query(
+      "INSERT INTO bikes(id,code,deployed_at,current_zone_id) VALUES(1,'MIGRATION-BIKE','2020-01-01',1)",
+    );
+    await pool.query("INSERT INTO dispatch_bikes(task_id,bike_id) VALUES(1,1)");
+    await pool.query(
       "ALTER TABLE dispatch_suggestions ADD INDEX legacy_task_index(task_id), DROP INDEX uq_dispatch_suggestion_task",
     );
     await pool.query(

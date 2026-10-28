@@ -193,8 +193,24 @@ DELIMITER $$
 CREATE PROCEDURE sp_finish_dispatch_suggestion(IN p_id BIGINT UNSIGNED, IN p_task BIGINT UNSIGNED)
 SQL SECURITY INVOKER
 BEGIN
+ DECLARE v_suggestion_status,v_task_status VARCHAR(20) DEFAULT NULL;
+ DECLARE v_source,v_target,v_task_source,v_task_target BIGINT UNSIGNED;
+ DECLARE v_quantity INT;
+ SELECT status,source_zone_id,target_zone_id,quantity INTO v_suggestion_status,v_source,v_target,v_quantity
+ FROM dispatch_suggestions WHERE id=p_id FOR UPDATE;
+ IF v_suggestion_status IS NULL OR v_suggestion_status<>'OPEN' THEN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='SUGGESTION_NOT_OPEN';
+ END IF;
+ SELECT status,source_zone_id,target_zone_id INTO v_task_status,v_task_source,v_task_target
+ FROM dispatch_tasks WHERE id=p_task FOR UPDATE;
+ IF v_task_status IS NULL OR v_task_status<>'PENDING' OR v_source<>v_task_source OR v_target<>v_task_target
+  OR v_quantity<>(SELECT COUNT(*) FROM dispatch_bikes WHERE task_id=p_task) THEN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='SUGGESTION_TASK_MISMATCH';
+ END IF;
+ IF EXISTS(SELECT 1 FROM dispatch_suggestions WHERE task_id=p_task) THEN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='SUGGESTION_TASK_LINKED';
+ END IF;
  UPDATE dispatch_suggestions SET status='CONFIRMED',task_id=p_task,resolved_at=UTC_TIMESTAMP(3) WHERE id=p_id AND status='OPEN';
- IF ROW_COUNT()<>1 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='SUGGESTION_NOT_OPEN'; END IF;
  SELECT p_task AS id,p_id AS suggestion_id;
 END$$
 DELIMITER ;

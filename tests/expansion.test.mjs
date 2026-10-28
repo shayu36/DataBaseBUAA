@@ -209,6 +209,118 @@ test("saved dispatch suggestions keep their basis and create a revalidated task"
   assert.equal(saved.return_count, 0);
 });
 
+test("native suggestion confirmation rejects unrelated or already linked tasks", async () => {
+  await pool.query(`INSERT INTO dispatch_suggestions(id,source_zone_id,target_zone_id,quantity,source_available,target_occupied,target_capacity,target_reserved,borrow_count,return_count,desired_inventory,window_start,window_end,reason,algorithm_version,created_by) VALUES
+    (1,1,2,2,8,1,12,0,0,0,5,'2026-01-01','2026-01-02','验证建议','v1',1),
+    (2,1,2,2,8,1,12,0,0,0,5,'2026-01-01','2026-01-02','重复关联','v1',1)`);
+  await pool.query(
+    "INSERT INTO parking_zones(id,name,location,x,y,radius,capacity) VALUES(3,'其他站','东区',800,100,40,12)",
+  );
+  await pool.query(`INSERT INTO dispatch_tasks(id,staff_id,source_zone_id,target_zone_id,status,started_at) VALUES
+    (1,NULL,2,1,'PENDING',NULL),
+    (2,NULL,1,2,'PENDING',NULL),
+    (3,1,1,2,'IN_PROGRESS',UTC_TIMESTAMP(3)),
+    (4,NULL,1,2,'PENDING',NULL),
+    (5,NULL,3,2,'PENDING',NULL),
+    (6,NULL,1,3,'PENDING',NULL)`);
+  await pool.query(
+    "INSERT INTO dispatch_bikes(task_id,bike_id) VALUES(1,1),(1,2),(2,3),(3,4),(3,5),(4,6),(4,7),(5,8),(5,9),(6,8),(6,9)",
+  );
+  for (const taskId of [1, 2, 3, 5, 6, 999, null]) {
+    await assert.rejects(
+      pool.query("CALL sp_finish_dispatch_suggestion(?,?)", [1, taskId]),
+      { sqlMessage: "SUGGESTION_TASK_MISMATCH" },
+    );
+    const [[row]] = await pool.query(
+      "SELECT status,task_id,resolved_at FROM dispatch_suggestions WHERE id=1",
+    );
+    assert.deepEqual(row, { status: "OPEN", task_id: null, resolved_at: null });
+  }
+  await pool.query("CALL sp_finish_dispatch_suggestion(?,?)", [1, 4]);
+  await assert.rejects(
+    pool.query("CALL sp_finish_dispatch_suggestion(?,?)", [2, 4]),
+    { sqlMessage: "SUGGESTION_TASK_LINKED" },
+  );
+  await assert.rejects(
+    pool.query("CALL sp_finish_dispatch_suggestion(?,?)", [1, 4]),
+    { sqlMessage: "SUGGESTION_NOT_OPEN" },
+  );
+  const [[linked]] = await pool.query(
+    "SELECT status,task_id FROM dispatch_suggestions WHERE id=1",
+  );
+  assert.deepEqual(linked, { status: "CONFIRMED", task_id: 4 });
+  const checks = await readFile(
+    new URL("../database/invariant-checks.sql", import.meta.url),
+    "utf8",
+  );
+  const count = async () =>
+    Number(
+      (await pool.query(checks))[0].find(
+        (row) => row.name === "确认的调度建议唯一关联正式任务",
+      ).errors,
+    );
+  assert.equal(await count(), 0);
+  await pool.query(
+    "UPDATE dispatch_suggestions SET source_zone_id=2,target_zone_id=1 WHERE id=1",
+  );
+  assert.equal(await count(), 1);
+  await pool.query(
+    "UPDATE dispatch_suggestions SET source_zone_id=1,target_zone_id=2 WHERE id=1",
+  );
+  await pool.query("DELETE FROM dispatch_bikes WHERE task_id=4 AND bike_id=7");
+  assert.equal(await count(), 1);
+});
+
+test("suggestion mismatch rolls back task creation and reservations", async () => {
+  const generated = await createDispatchSuggestions(pool, admin, { days: 7 });
+  assert.ok(generated.suggestions.length > 0);
+  const suggestion = generated.suggestions[0];
+  const [[beforeAudit]] = await pool.query(
+    "SELECT COUNT(*) AS count FROM audit_logs",
+  );
+  const guardedPool = {
+    async getConnection() {
+      const connection = await pool.getConnection();
+      return new Proxy(connection, {
+        get(target, property) {
+          if (property === "query")
+            return async (statement, ...args) => {
+              if (statement === "CALL sp_finish_dispatch_suggestion(?,?)")
+                await target.query(
+                  "DELETE FROM dispatch_bikes WHERE task_id=? LIMIT 1",
+                  [args[0][1]],
+                );
+              return target.query(statement, ...args);
+            };
+          const value = target[property];
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+    },
+  };
+  await assert.rejects(
+    confirmDispatchSuggestion(guardedPool, admin, suggestion.id),
+    {
+      code: "SUGGESTION_TASK_MISMATCH",
+      status: 409,
+    },
+  );
+  const [[row]] = await pool.query(
+    "SELECT status,task_id FROM dispatch_suggestions WHERE id=?",
+    [suggestion.id],
+  );
+  assert.deepEqual(row, { status: "OPEN", task_id: null });
+  const [[after]] = await pool.query(
+    "SELECT (SELECT COUNT(*) FROM dispatch_tasks) AS tasks,(SELECT COUNT(*) FROM dispatch_bikes) AS task_bikes,(SELECT COUNT(*) FROM bikes WHERE status='DISPATCHING') AS reserved_bikes,(SELECT COUNT(*) FROM audit_logs) AS audit_count",
+  );
+  assert.deepEqual(after, {
+    tasks: 0,
+    task_bikes: 0,
+    reserved_bikes: 0,
+    audit_count: beforeAudit.count,
+  });
+});
+
 test("large dispatch allocations are split into executable suggestions", async () => {
   await pool.query(
     "UPDATE parking_zones SET capacity=CASE id WHEN 1 THEN 500 ELSE 750 END",

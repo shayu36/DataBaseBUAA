@@ -24,7 +24,7 @@
 - GET /maintenance?before=编号 -> {tickets,next_before}；返回已完成工单历史，学生仅查看本人报修，管理员和运维员可查看全部。按编号倒序每页最多 100 条，null 表示结束。
 - POST /maintenance/:id/assign {staff_id}; POST /maintenance/:id/complete {result}; 都返回 {ok:true}
 - POST /analytics/suggestions {days? 或 start/end?,dayType?,startHour?,endHour?,zoneId?} -> {suggestions,filter}；GET /analytics/suggestions?before=编号 -> {suggestions,next_before}，按编号倒序返回最多 100 条，使用返回的 next_before 获取更早记录，null 表示结束；POST /analytics/suggestions/:id/dismiss {note} -> {id,status,resolution_note}。均需管理员权限；不执行建议须记录原因。每条建议包含 source_available、target_occupied、target_capacity、target_reserved、borrow_count、return_count 和 desired_inventory，记录生成时的库存与需求依据；超过 100 辆的分配拆成多条建议；确认升级前的超量建议会将其标记为过期，需重新生成。
-- POST /dispatches/from-suggestion/:id {staff_id?} -> {id,suggestion_id}；管理员确认建议时重新校验车辆和目标容量，失效返回 SUGGESTION_STALE。确认后任务与建议一对一关联，数据库约束阻止同一任务被多条建议引用。
+- POST /dispatches/from-suggestion/:id {staff_id?} -> {id,suggestion_id}；管理员确认建议时重新校验车辆和目标容量，失效返回 SUGGESTION_STALE。确认时 MySQL 核对任务待执行、调出站、调入站和车辆数量均与建议一致，异常分别返回 `SUGGESTION_TASK_MISMATCH` 或 `SUGGESTION_TASK_LINKED` 并回滚；确认后任务与建议一对一关联，数据库约束阻止同一任务被多条建议引用。
 - POST /dispatches {source_zone_id,target_zone_id,bike_ids:number[],staff_id?:number} -> {id}；bike_ids 须为 1–100 个不重复正整数车辆编号，数据库存储过程也会校验车辆列表及元素类型； POST /dispatches/:id/assign {staff_id}; POST /dispatches/:id/start {}; POST /dispatches/:id/complete {}; POST /dispatches/:id/cancel {} -> {ok:true}
 - GET /dispatches?before=编号 -> {dispatches,next_before}；管理员和运维员按编号倒序查看已完成或已取消任务，每页最多 100 条，null 表示结束。
 - POST /admin/zones {id?:number,name,location,x,y,radius,capacity,status:'ACTIVE'|'CLOSED'} -> {id}；坐标和半径按米保留两位小数，输入半径最小为 0.005 米；POST /admin/bikes {id?:number,code,zone_id,deployed_at?:string,status?:'AVAILABLE'|'RETIRED'} -> {id}
