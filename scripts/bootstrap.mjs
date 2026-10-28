@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import { sql } from "../backend/sql-statements.mjs";
 import { assertMysqlVersion } from "./mysql-version.mjs";
 import { sessionSecret } from "../backend/config.mjs";
+import { initializeAccount } from "./bootstrap-account.mjs";
 
 const envPath = new URL("../.env", import.meta.url);
 if (!existsSync(envPath)) {
@@ -51,10 +52,12 @@ try {
   for (const name of ["campus_bike", "campus_bike_test"]) {
     await connection.query(sql("create_application_database"), [name]);
   }
-  await connection.query(sql("create_application_user"), [
-    process.env.DB_PASSWORD,
-  ]);
-  await connection.query(sql("grant_application_user"));
+  await initializeAccount(connection, {
+    host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT),
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+  });
 } finally {
   await connection.end();
 }

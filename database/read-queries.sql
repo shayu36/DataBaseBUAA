@@ -8,6 +8,8 @@ SELECT GET_LOCK(CONCAT('campus-bike:schema:', DATABASE()),10) AS acquired;
 SELECT RELEASE_LOCK(CONCAT('campus-bike:schema:', DATABASE())) AS released;
 -- name: current_database
 SELECT DATABASE() AS name;
+-- name: current_account
+SELECT CURRENT_USER() AS account;
 -- name: actor_for_update
 SELECT role,status FROM users WHERE id=? FOR UPDATE;
 -- name: session_user
