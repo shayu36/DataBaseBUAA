@@ -88,6 +88,14 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
     );
     await pool.query("INSERT INTO road_edges VALUES(1,1,2,100,1,1)");
 
+    await pool.query("UPDATE payments SET idempotency_key=NULL WHERE id=1");
+    await assert.rejects(
+      applyFeatureMigrations(pool),
+      /MIGRATION_INVALID_PAYMENT_KEYS/,
+    );
+    await pool.query(
+      "UPDATE payments SET idempotency_key='legacy-pay' WHERE id=1",
+    );
     await pool.query(
       "INSERT INTO staff VALUES(1,1,'旧姓名','13800000000','BOTH','ACTIVE')",
     );
@@ -99,6 +107,65 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
     const second = await applyFeatureMigrations(pool);
     assert.ok(first.applied.length > 0);
     assert.deepEqual(second.applied, []);
+    const [historicalPayments] = await pool.query(
+      "SELECT id,idempotency_key FROM payments ORDER BY id",
+    );
+    const [historicalCredits] = await pool.query(
+      "SELECT id,idempotency_key FROM carbon_transactions ORDER BY id",
+    );
+    await pool.query(
+      "ALTER TABLE payments MODIFY idempotency_key VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+    );
+    await pool.query(
+      "ALTER TABLE carbon_transactions MODIFY idempotency_key VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL",
+    );
+    await pool.query(
+      "UPDATE system_settings SET value=JSON_OBJECT('version',11) WHERE name='pdf_expansion'",
+    );
+    await pool.query(
+      "UPDATE carbon_transactions SET idempotency_key=NULL WHERE id=?",
+      [historicalCredits[0].id],
+    );
+    await assert.rejects(
+      applyFeatureMigrations(pool),
+      /MIGRATION_INVALID_CARBON_KEYS/,
+    );
+    await pool.query(
+      "UPDATE carbon_transactions SET idempotency_key=? WHERE id=?",
+      [historicalCredits[0].idempotency_key, historicalCredits[0].id],
+    );
+    assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
+      "pdf_expansion@12",
+    ]);
+    assert.deepEqual(
+      (
+        await pool.query("SELECT id,idempotency_key FROM payments ORDER BY id")
+      )[0],
+      historicalPayments,
+    );
+    assert.deepEqual(
+      (
+        await pool.query(
+          "SELECT id,idempotency_key FROM carbon_transactions ORDER BY id",
+        )
+      )[0],
+      historicalCredits,
+    );
+    const [keyColumns] = await pool.query(
+      "SELECT table_name AS table_name,collation_name AS collation_name,is_nullable AS is_nullable FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name IN ('payments','carbon_transactions') AND column_name='idempotency_key' ORDER BY table_name",
+    );
+    assert.deepEqual(
+      keyColumns.map((column) => [
+        column.table_name,
+        column.collation_name,
+        column.is_nullable,
+      ]),
+      [
+        ["carbon_transactions", "utf8mb4_0900_bin", "NO"],
+        ["payments", "utf8mb4_0900_bin", "NO"],
+      ],
+    );
+    assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
     const [staffColumns] = await pool.query(
       "SELECT column_name FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='staff' AND column_name IN ('name','phone')",
     );
@@ -252,14 +319,14 @@ test("schema initialization rejects unknown or malformed migration versions befo
       "INSERT INTO users(id,name,email,phone,password_hash,role) VALUES(1,'测试用户','version@test.local','13700000001','hash','STUDENT')",
     );
     await pool.query(
-      "UPDATE system_settings SET value=JSON_OBJECT('version','11') WHERE name='pdf_expansion'",
+      "UPDATE system_settings SET value=JSON_OBJECT('version','12') WHERE name='pdf_expansion'",
     );
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
     const [[revisionBefore]] = await pool.query(
       "SELECT value FROM system_settings WHERE name='procedure_revision'",
     );
     const versions = [
-      ["JSON_OBJECT('version',12)", /UNSUPPORTED_SCHEMA_VERSION/],
+      ["JSON_OBJECT('version',13)", /UNSUPPORTED_SCHEMA_VERSION/],
       ["JSON_OBJECT('version',999999)", /UNSUPPORTED_SCHEMA_VERSION/],
       [
         "CAST('{\"version\":18446744073709551615}' AS JSON)",

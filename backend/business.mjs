@@ -135,6 +135,7 @@ export async function payRide(pool, user, id, input) {
       {
         ORDER_NOT_FOUND: ["记录不存在", "NOT_FOUND", 404],
         PAYMENT_FORBIDDEN: ["不能支付他人订单", "FORBIDDEN", 403],
+        INVALID_PAYMENT_KEY: ["支付请求编号格式无效", "INVALID_INPUT", 400],
         IDEMPOTENCY_CONFLICT: [
           "此支付请求编号已用于另一订单",
           "IDEMPOTENCY_CONFLICT",

@@ -1364,6 +1364,120 @@ test("automatic exclusion reversal does not collide with manual adjustment keys"
   );
 });
 
+test("payment and carbon idempotency keys distinguish letter case", async () => {
+  const ids = [];
+  for (let index = 0; index < 3; index++) {
+    const [order] = await pool.query(
+      "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
+    );
+    ids.push(order.insertId);
+  }
+  const first = await business.payRide(pool, student, ids[0], {
+    idempotency_key: "Pay_KeyA",
+  });
+  const second = await business.payRide(pool, student, ids[1], {
+    idempotency_key: "pay_keya",
+  });
+  assert.equal(first.duplicate, false);
+  assert.equal(second.duplicate, false);
+  await assert.rejects(
+    business.payRide(pool, student, ids[2], { idempotency_key: "Pay_KeyA" }),
+    { code: "IDEMPOTENCY_CONFLICT" },
+  );
+  const adjustment = {
+    order_id: ids[0],
+    points_change: 1,
+    carbon_kg_change: 0,
+    reason: "测试调整",
+  };
+  const upper = await adjustCarbon(pool, admin, {
+    ...adjustment,
+    idempotency_key: "Credit_KeyA",
+  });
+  const lower = await adjustCarbon(pool, admin, {
+    ...adjustment,
+    idempotency_key: "credit_keya",
+  });
+  assert.notEqual(upper.id, lower.id);
+  assert.equal(
+    (
+      await adjustCarbon(pool, admin, {
+        ...adjustment,
+        idempotency_key: "Credit_KeyA",
+      })
+    ).duplicate,
+    true,
+  );
+  const [[counts]] = await pool.query(
+    "SELECT (SELECT COUNT(*) FROM payments) payments,(SELECT COUNT(*) FROM carbon_transactions WHERE entry_type='ADJUSTMENT') adjustments",
+  );
+  assert.deepEqual(counts, { payments: 2, adjustments: 2 });
+});
+
+test("native payment rejects malformed idempotency keys without writing", async () => {
+  const [order] = await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
+  );
+  for (const key of [
+    null,
+    "valid_key\n",
+    "valid_key\r\n",
+    "valid_key\t",
+    "valid_key\0",
+    "valid_key🚲",
+    "1234567",
+    "A".repeat(81),
+  ]) {
+    await assert.rejects(
+      pool.query("CALL sp_pay_ride(?,?,?)", [student.id, order.insertId, key]),
+      { sqlMessage: "INVALID_PAYMENT_KEY" },
+    );
+  }
+  const [[state]] = await pool.query(
+    "SELECT status,(SELECT COUNT(*) FROM payments) payments,(SELECT COUNT(*) FROM carbon_transactions) credits,(SELECT COUNT(*) FROM audit_logs WHERE action='SIMULATED_PAYMENT') audits FROM ride_orders WHERE id=?",
+    [order.insertId],
+  );
+  assert.deepEqual(state, {
+    status: "UNPAID",
+    payments: 0,
+    credits: 0,
+    audits: 0,
+  });
+  const result = await business.payRide(pool, student, order.insertId, {
+    idempotency_key: "valid_key",
+  });
+  assert.equal(result.duplicate, false);
+});
+
+test("native procedures reject overlong keys in non-strict SQL mode", async () => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.query("SET SESSION sql_mode=''");
+    await assert.rejects(
+      connection.query("CALL sp_pay_ride(?,?,?)", [
+        student.id,
+        0,
+        "A".repeat(81),
+      ]),
+      { sqlMessage: "INVALID_PAYMENT_KEY" },
+    );
+    await assert.rejects(
+      connection.query("CALL sp_adjust_carbon(?,?,?,?,?,?,?)", [
+        admin.id,
+        0,
+        1,
+        0,
+        "测试调整",
+        "A".repeat(81),
+        "{}",
+      ]),
+      { sqlMessage: "INVALID_ADJUSTMENT" },
+    );
+  } finally {
+    connection.destroy();
+  }
+});
+
 test("native carbon adjustment rejects control characters in idempotency keys", async () => {
   const [order] = await pool.query(
     "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
@@ -1380,6 +1494,7 @@ test("native carbon adjustment rejects control characters in idempotency keys", 
     "valid_key🚲",
     "valid_keyé",
     "1234567",
+    "A".repeat(81),
   ]) {
     await assert.rejects(
       pool.query("CALL sp_adjust_carbon(?,?,?,?,?,?,?)", [

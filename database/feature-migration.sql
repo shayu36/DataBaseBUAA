@@ -21,16 +21,27 @@ migration: BEGIN
   END IF;
   IF EXISTS(SELECT 1 FROM system_settings WHERE name='pdf_expansion' AND
     CASE WHEN CHAR_LENGTH(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')))>2 THEN TRUE
-    ELSE CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)>11 END) THEN
+    ELSE CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)>12 END) THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='UNSUPPORTED_SCHEMA_VERSION: use the matching newer application version';
   END IF;
   SELECT COALESCE(MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)),0) INTO current_version FROM system_settings WHERE name='pdf_expansion';
-  IF p_preparing OR current_version<11 THEN
+  IF p_preparing OR current_version<12 THEN
     DELETE FROM system_settings WHERE name='procedure_revision';
   END IF;
-  IF current_version = 11 THEN
+  IF current_version = 12 THEN
     SELECT 0 AS migrated;
     LEAVE migration;
+  END IF;
+  -- Preserve historical keys; a missing key requires explicit reconciliation.
+  IF EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='payments' AND column_name='idempotency_key') THEN
+    IF EXISTS(SELECT 1 FROM payments WHERE idempotency_key IS NULL) THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='MIGRATION_INVALID_PAYMENT_KEYS';
+    END IF;
+  END IF;
+  IF EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='carbon_transactions' AND column_name='idempotency_key') THEN
+    IF EXISTS(SELECT 1 FROM carbon_transactions WHERE idempotency_key IS NULL) THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='MIGRATION_INVALID_CARBON_KEYS';
+    END IF;
   END IF;
   -- Do not discard conflicting legacy contact data: require explicit reconciliation.
   SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='staff' AND column_name='name'),
@@ -300,6 +311,10 @@ migration: BEGIN
   ELSEIF has_staff_phone THEN
     ALTER TABLE staff DROP COLUMN phone;
   END IF;
-  INSERT INTO system_settings(name,value) VALUES('pdf_expansion',JSON_OBJECT('version',11,'applied_at',UTC_TIMESTAMP(3))) ON DUPLICATE KEY UPDATE value=VALUES(value);
+  IF current_version < 12 THEN
+    ALTER TABLE payments MODIFY idempotency_key VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL;
+    ALTER TABLE carbon_transactions MODIFY idempotency_key VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL;
+  END IF;
+  INSERT INTO system_settings(name,value) VALUES('pdf_expansion',JSON_OBJECT('version',12,'applied_at',UTC_TIMESTAMP(3))) ON DUPLICATE KEY UPDATE value=VALUES(value);
   SELECT 1 AS migrated;
 END
