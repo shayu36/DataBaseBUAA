@@ -87,13 +87,14 @@ npm start
 | `npm run test:e2e` | 运行浏览器测试 |
 | `npm run format:check` | 检查代码格式 |
 | `npm run check` | 检查业务数据不变量 |
+| `node scripts/run-queries.mjs` | 执行 27 组教学查询，结果写入本机 `docs/evidence/` |
 | `npm run backup` | 备份当前业务数据库 |
 | `npm run snapshot` | 导出当前业务库到本机 `database/demo-snapshot.sql`，成功时替换旧快照 |
 | `npm run report` | 单独生成课程报告和实体关系图 |
 | `uv run python scripts/package-project.py` | 生成不含本机凭据和临时数据的交付包；先运行 `npm run build` |
 | `uv run python -m unittest discover -s tests -p package_project_test.py` | 验证交付包筛选和失败保护 |
 
-开发服务将接口代理到 `127.0.0.1:5188`，使用 `npm run dev` 前需另开终端运行后端。浏览器测试同样需要后端已经启动。测试会重建 `campus_bike_test` 的测试数据；浏览器测试会在演示库中创建测试行程、工单和任务。
+开发服务将接口代理到 `127.0.0.1:5188`，使用 `npm run dev` 前需另开终端运行后端。浏览器测试同样需要后端已经启动。测试会重建 `campus_bike_test` 的测试数据；浏览器测试会在演示库中创建测试行程、工单和任务。教学查询使用 `.env` 中的数据库名称和管理员凭据，执行前应核对目标；查询结果可能包含业务数据，不提交 Git。
 
 ## 备份与恢复
 

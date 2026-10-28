@@ -1011,6 +1011,104 @@ test("teaching hotspot query filters borrowing and return times independently", 
   }
 });
 
+test("teaching recent queries exclude future events and include exact boundaries", async () => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.query(
+      "SET timestamp=UNIX_TIMESTAMP('2026-10-08 04:00:00')",
+    );
+    await connection.query(`INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,status) VALUES
+      (2,1,1,2,'2026-10-01 04:00:00','2026-10-01 04:10:00','UNPAID'),
+      (2,1,1,2,'2026-10-08 04:00:00','2026-10-08 04:00:00','UNPAID'),
+      (2,1,1,2,'2026-10-08 04:00:00.001','2026-10-08 04:00:00.001','UNPAID'),
+      (2,1,1,2,'2026-09-30 23:59:00','2026-10-08 03:59:00','UNPAID')`);
+    await connection.query(`INSERT INTO maintenance_tickets(bike_id,reporter_id,staff_id,fault_type,description,status,result,created_at,completed_at) VALUES
+      (1,2,1,'TIRE','边界','COMPLETED','完成','2026-09-08 04:00:00','2026-09-08 04:00:00'),
+      (1,2,1,'TIRE','当前','COMPLETED','完成','2026-10-08 04:00:00','2026-10-08 04:00:00'),
+      (1,2,1,'TIRE','未来','COMPLETED','完成','2026-10-08 04:00:00.001','2026-10-08 04:00:00.001'),
+      (1,2,1,'BRAKE','当前','COMPLETED','完成','2026-10-08 04:00:00','2026-10-08 04:00:00'),
+      (1,2,1,'BRAKE','未来','COMPLETED','完成','2026-10-08 04:00:00.001','2026-10-08 04:00:00.001')`);
+    const teaching = await readFile(
+      new URL("../database/queries.sql", import.meta.url),
+      "utf8",
+    );
+    const query = (number, next) =>
+      teaching
+        .split(`-- Q${number}:`)[1]
+        .split(`-- Q${next}:`)[0]
+        .replace(/^[^\n]*\n/, "");
+    const [borrowed] = await connection.query(query("05", "06"));
+    const [returned] = await connection.query(query("06", "07"));
+    const [hours] = await connection.query(query("07", "08"));
+    const [faults] = await connection.query(query("08", "09"));
+    assert.equal(borrowed.find(({ id }) => id === 1).borrow_count, 2);
+    assert.equal(returned.find(({ id }) => id === 2).return_count, 3);
+    assert.deepEqual(hours, [
+      { local_hour: 7, borrow_count: 1 },
+      { local_hour: 12, borrow_count: 2 },
+    ]);
+    assert.deepEqual(faults, [
+      { bike_id: 1, fault_type: "TIRE", occurrences: 2 },
+    ]);
+  } finally {
+    await connection.query("SET timestamp=0");
+    connection.release();
+  }
+});
+
+test("teaching leaderboard excludes invalid and future credits while ranking private riders", async () => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.query(
+      "SET timestamp=UNIX_TIMESTAMP('2026-10-08 04:00:00')",
+    );
+    await connection.query(
+      "UPDATE users SET leaderboard_visible=1 WHERE id IN (2,3)",
+    );
+    await connection.query(`INSERT INTO ride_orders(id,user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES
+      (1,1,1,1,2,'2026-10-07 04:00:00','2026-10-07 04:10:00',2000,100,'UNPAID'),
+      (2,2,2,1,2,'2026-10-07 04:00:00','2026-10-07 04:10:00',1000,100,'UNPAID'),
+      (3,3,3,1,2,'2026-10-07 04:00:00','2026-10-07 04:10:00',1000,100,'UNPAID'),
+      (4,2,4,1,2,'2026-10-07 04:00:00','2026-10-07 04:10:00',1000,100,'UNPAID')`);
+    await connection.query(
+      "INSERT INTO payments(order_id,amount_cents,idempotency_key) SELECT id,100,CONCAT('teaching-',id) FROM ride_orders",
+    );
+    await connection.query("UPDATE ride_orders SET status='PAID'");
+    await connection.query(`INSERT INTO carbon_transactions(order_id,entry_type,idempotency_key,distance_m,points_change,carbon_kg_change,factor_kg_per_km,rule_version,reason,created_at)
+      VALUES(1,'AWARD','teach-1',2000,20,0.42,0.21,'carbon-v1','测试','2026-10-07 05:00:00'),
+      (2,'AWARD','teach-2',1000,10,0.21,0.21,'carbon-v1','测试','2026-10-07 05:00:00'),
+      (3,'AWARD','teach-3',1000,10,0.21,0.21,'carbon-v1','测试','2026-10-07 05:00:00'),
+      (4,'AWARD','teach-4',1000,100,0.21,0.21,'carbon-v1','测试','2026-10-07 05:00:00'),
+      (3,'ADJUSTMENT','teach-future',0,50,0,0.21,'carbon-v1','测试','2026-10-08 04:00:00.001')`);
+    await connection.query(
+      "UPDATE ride_orders SET qualification_status='EXCLUDED',reviewed_by=1,reviewed_at=UTC_TIMESTAMP(3) WHERE id=4",
+    );
+    const teaching = await readFile(
+      new URL("../database/queries.sql", import.meta.url),
+      "utf8",
+    );
+    const query = teaching
+      .split("-- Q12:")[1]
+      .split("-- Q13:")[0]
+      .replace(/^[^\n]*\n/, "");
+    const [rows] = await connection.query(query);
+    assert.deepEqual(
+      rows.map(({ user_id, points_rank, points }) => ({
+        user_id,
+        points_rank,
+        points: Number(points),
+      })),
+      [
+        { user_id: 2, points_rank: 2, points: 10 },
+        { user_id: 3, points_rank: 2, points: 10 },
+      ],
+    );
+  } finally {
+    await connection.query("SET timestamp=0");
+    connection.release();
+  }
+});
+
 test("excluded historical award is reversed without failing invariant checks", async () => {
   const [order] = await pool.query(
     "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
