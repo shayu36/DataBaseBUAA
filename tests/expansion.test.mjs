@@ -195,7 +195,7 @@ test("saved dispatch suggestions keep their basis and create a revalidated task"
   );
   assert.equal(saved.status, "CONFIRMED");
   assert.equal(saved.task_id, task.id);
-  assert.equal(saved.algorithm_version, "demand-balance-v1");
+  assert.equal(saved.algorithm_version, "demand-balance-v2");
   assert.ok(saved.source_available > saved.desired_inventory);
   for (const key of [
     "source_available",

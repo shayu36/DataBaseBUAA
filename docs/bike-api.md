@@ -29,6 +29,7 @@
 - POST /dispatches/from-suggestion/:id {staff_id?} -> {id,suggestion_id}；管理员确认建议时重新校验车辆和目标容量，失效返回 SUGGESTION_STALE。确认时 MySQL 核对任务待执行、调出站、调入站和车辆数量均与建议一致，异常分别返回 `SUGGESTION_TASK_MISMATCH` 或 `SUGGESTION_TASK_LINKED` 并回滚；确认后任务与建议一对一关联，数据库约束阻止同一任务被多条建议引用。
 - POST /dispatches {source_zone_id,target_zone_id,bike_ids:number[],staff_id?:number} -> {id}；bike_ids 须为 1–100 个不重复正整数车辆编号，数据库存储过程也会校验车辆列表及元素类型； POST /dispatches/:id/assign {staff_id}; POST /dispatches/:id/start {}; POST /dispatches/:id/complete {}; POST /dispatches/:id/cancel {} -> {ok:true}
 - 当前版本校园地图的禁行站点不能作为新调度任务或调度建议的调入目标；创建任务时返回 `ZONE_RESTRICTED`。禁行站点可以作为调出来源，升级前已在途的任务仍可完成。
+- 调度建议的 `demand-balance-v2` 将禁行站点全部可用车辆作为优先调出供给，分配仍受开放目标站点的需求和空位限制；已经保存的历史建议保留原算法版本。
 - GET /dispatches?before=编号 -> {dispatches,next_before}；管理员和运维员按编号倒序查看已完成或已取消任务，每页最多 100 条，null 表示结束。
 - POST /admin/zones {id?:number,name,location,x,y,radius,capacity,status:'ACTIVE'|'CLOSED'} -> {id}；坐标和半径按米保留两位小数，输入半径最小为 0.005 米。当前版本校园地图拒绝在禁行区域内或边界新增、移动站点（`ZONE_RESTRICTED`）；新增站点找不到不穿越禁行区的连接时返回 `ZONE_NO_CONNECTION`，移动使开放路段新穿越禁行区时返回 `ZONE_RESTRICTED_ROAD`。POST /admin/bikes {id?:number,code,zone_id,deployed_at?:string,status?:'AVAILABLE'|'RETIRED'} -> {id}
 - 当前版本校园地图的禁行站点不能投放新的可借车辆，返回 `ZONE_RESTRICTED`；已在该站的可借车辆可以编辑或调出。

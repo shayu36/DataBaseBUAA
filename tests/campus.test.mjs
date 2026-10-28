@@ -22,6 +22,10 @@ import {
 import { saveBike, saveZone } from "../backend/admin.mjs";
 import { dispatchSuggestions } from "../backend/dispatch-suggestions.mjs";
 import { dashboard } from "../backend/read-model.mjs";
+import {
+  createDispatchSuggestions,
+  confirmDispatchSuggestion,
+} from "../backend/operations.mjs";
 
 const pool = createPool({
   database: "campus_bike_test",
@@ -437,6 +441,77 @@ test("dispatch suggestions do not send vehicles to a restricted station", async 
       (row) => row.source_zone_id === 1 && row.target_zone_id === 2,
     ),
   );
+});
+test("dispatch allocation prioritizes every available bike in restricted stations", async () => {
+  await loadVersionedCampus(campus);
+  const zones = [
+    {
+      id: 1,
+      name: "禁行站",
+      x: 700,
+      y: 200,
+      capacity: 10,
+      available: 1,
+      occupied: 1,
+      reserved: 0,
+      status: "ACTIVE",
+    },
+    {
+      id: 2,
+      name: "普通供给站",
+      x: 540,
+      y: 190,
+      capacity: 10,
+      available: 9,
+      occupied: 9,
+      reserved: 0,
+      status: "ACTIVE",
+    },
+    {
+      id: 3,
+      name: "需求站",
+      x: 540,
+      y: 190,
+      capacity: 10,
+      available: 0,
+      occupied: 0,
+      reserved: 0,
+      status: "ACTIVE",
+    },
+  ];
+  const result = await dispatchSuggestions(pool, zones, []);
+  assert.deepEqual(
+    result.map((row) => [row.source_zone_id, row.target_zone_id, row.quantity]),
+    [
+      [1, 3, 1],
+      [2, 3, 3],
+    ],
+  );
+  assert.match(result[0].reason, /禁行/);
+});
+test("a restricted station evacuation suggestion can be saved and confirmed", async () => {
+  await loadVersionedCampus(campus);
+  await pool.query("UPDATE users SET role='ADMIN' WHERE id=1");
+  await pool.query("UPDATE parking_zones SET x=700,y=200 WHERE id=1");
+  const admin = { id: 1, role: "ADMIN", status: "ACTIVE" };
+  const generated = await createDispatchSuggestions(pool, admin, { days: 7 });
+  const suggestion = generated.suggestions.find(
+    (row) => row.source_zone_id === 1,
+  );
+  assert.ok(suggestion);
+  assert.equal(suggestion.quantity, 1);
+  const [[saved]] = await pool.query(
+    "SELECT algorithm_version,reason FROM dispatch_suggestions WHERE id=?",
+    [suggestion.id],
+  );
+  assert.equal(saved.algorithm_version, "demand-balance-v2");
+  assert.match(saved.reason, /禁行/);
+  const task = await confirmDispatchSuggestion(pool, admin, suggestion.id);
+  const [[bike]] = await pool.query(
+    "SELECT status,current_zone_id FROM bikes WHERE id=1",
+  );
+  assert.ok(task.id);
+  assert.deepEqual(bike, { status: "DISPATCHING", current_zone_id: 1 });
 });
 test("an existing in-transit dispatch can complete after a station becomes restricted", async () => {
   await loadVersionedCampus(campus);

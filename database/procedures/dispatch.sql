@@ -140,7 +140,7 @@ BEGIN
   FETCH suggestions INTO v_source,v_target,v_quantity,v_source_available,v_occupied,v_capacity,v_reserved,v_borrow,v_return,v_desired,v_reason;
   IF done THEN LEAVE suggestion_loop; END IF;
   INSERT INTO dispatch_suggestions(source_zone_id,target_zone_id,quantity,source_available,target_occupied,target_capacity,target_reserved,borrow_count,return_count,desired_inventory,window_start,window_end,reason,algorithm_version,created_by)
-  VALUES(v_source,v_target,v_quantity,v_source_available,v_occupied,v_capacity,v_reserved,v_borrow,v_return,v_desired,p_start,p_end,v_reason,'demand-balance-v1',p_actor);
+  VALUES(v_source,v_target,v_quantity,v_source_available,v_occupied,v_capacity,v_reserved,v_borrow,v_return,v_desired,p_start,p_end,v_reason,'demand-balance-v2',p_actor);
   SET v_ids=JSON_ARRAY_APPEND(v_ids,'$',LAST_INSERT_ID());
  END LOOP;
  CLOSE suggestions;
@@ -247,25 +247,25 @@ BEGIN
   LEFT JOIN demand_by_zone d ON d.zone_id=z.id
   WHERE z.status IS NULL OR z.status='ACTIVE'
  ), states AS (
-  SELECT *,GREATEST(0,available-desired) AS supply,GREATEST(0,desired-available) AS need,
+  SELECT *,IF(restricted,available,GREATEST(0,available-desired)) AS supply,GREATEST(0,desired-available) AS need,
    GREATEST(0,capacity-occupied-reserved) AS free FROM base
  ), sources AS (
-  SELECT *,SUM(supply) OVER (ORDER BY supply DESC,id ROWS UNBOUNDED PRECEDING) AS supply_end FROM states WHERE supply>0
+  SELECT *,SUM(supply) OVER (ORDER BY restricted DESC,supply DESC,id ROWS UNBOUNDED PRECEDING) AS supply_end FROM states WHERE supply>0
  ), targets AS (
   SELECT *,SUM(LEAST(need,free)) OVER (ORDER BY need DESC,id ROWS UNBOUNDED PRECEDING) AS demand_end FROM states WHERE need>0 AND free>0 AND NOT restricted
  ), allocations AS (
   SELECT s.id AS source_zone_id,t.id AS target_zone_id,s.name AS source_name,t.name AS target_name,
    CAST(GREATEST(0,LEAST(s.supply_end,t.demand_end)-GREATEST(s.supply_end-s.supply,t.demand_end-LEAST(t.need,t.free))) AS SIGNED) AS quantity,
    t.desired AS desired_inventory,t.available AS target_available,t.need AS sort_need,s.supply AS sort_supply,
-   s.available AS source_available,t.occupied AS target_occupied,t.capacity AS target_capacity,t.reserved AS target_reserved,
+   s.available AS source_available,s.restricted AS source_restricted,t.occupied AS target_occupied,t.capacity AS target_capacity,t.reserved AS target_reserved,
    t.borrow_count,t.return_count
   FROM targets t JOIN sources s ON s.supply_end>t.demand_end-LEAST(t.need,t.free) AND t.demand_end>s.supply_end-s.supply
  )
  SELECT a.source_zone_id,a.target_zone_id,a.source_name,a.target_name,LEAST(100,a.quantity-chunks.n*100) AS quantity,a.desired_inventory,
   a.source_available,a.target_occupied,a.target_capacity,a.target_reserved,a.borrow_count,a.return_count,
-  CONCAT('目标库存 ',a.target_available,'，建议保有 ',a.desired_inventory,'；按容量、预留车位及历史净借车需求估算') AS reason
+  CONCAT(IF(a.source_restricted,'优先转出禁行站点车辆；',''),'目标库存 ',a.target_available,'，建议保有 ',a.desired_inventory,'；按容量、预留车位及历史净借车需求估算') AS reason
  FROM allocations a JOIN chunks ON chunks.n*100<a.quantity
- ORDER BY a.sort_need DESC,a.target_zone_id,a.sort_supply DESC,a.source_zone_id,chunks.n;
+ ORDER BY a.sort_need DESC,a.target_zone_id,a.source_restricted DESC,a.sort_supply DESC,a.source_zone_id,chunks.n;
 END$$
 DELIMITER ;
 
