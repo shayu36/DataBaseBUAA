@@ -687,6 +687,37 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
       [1, 2],
     );
     assert.ok(withGap.inventory_series.length <= 1200);
+    await pool.query(`DELETE FROM zone_snapshots WHERE zone_id=1
+      AND captured_at>=TIMESTAMP('2026-09-01 00:00:00')+INTERVAL 660 MINUTE
+      AND captured_at<TIMESTAMP('2026-09-01 00:00:00')+INTERVAL 749 MINUTE`);
+    const aboveThreshold = (
+      await hotspotReport(
+        pool,
+        { start: "2026-09-01", end: "2026-09-02", zoneId: 1 },
+        new Date("2026-09-03T00:00:00Z"),
+      )
+    ).report;
+    assert.equal(aboveThreshold.snapshot_count, 1201);
+    assert.ok(aboveThreshold.inventory_series.length <= 1200);
+    await pool.query(`DELETE FROM zone_snapshots WHERE zone_id=1
+      AND captured_at=TIMESTAMP('2026-09-01 00:00:00')+INTERVAL 749 MINUTE`);
+    const threshold = (
+      await hotspotReport(
+        pool,
+        { start: "2026-09-01", end: "2026-09-02", zoneId: 1 },
+        new Date("2026-09-03T00:00:00Z"),
+      )
+    ).report;
+    assert.equal(threshold.snapshot_count, 1200);
+    assert.equal(threshold.inventory_series.length, 1200);
+    assert.deepEqual(
+      [
+        ...new Set(
+          threshold.inventory_series.map((sample) => sample.segment_id),
+        ),
+      ],
+      [1, 2],
+    );
     const [[user]] = await pool.query(
       "SELECT password_hash FROM users WHERE id=1",
     );
@@ -833,6 +864,33 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
       samples
         .filter((sample) => selected.has(sample.id))
         .map((sample) => [sample.captured_at.toISOString(), sample.available]),
+    );
+    await pool.query(`INSERT INTO zone_snapshots(id,zone_id,available,occupied,capacity,captured_at,source) VALUES
+      (9000000000000000001,2,1,24,24,'2099-01-01 00:00:00','DEMO'),
+      (9000000000000000002,2,2,24,24,'2099-01-01 00:00:00','DEMO')`);
+    const [mixed] = await pool.query(
+      "CALL sp_hotspot_report(?,?,?,?,?,?,?,?)",
+      [
+        "2099-01-01 00:00:00",
+        "2099-01-02 00:00:00",
+        "ALL",
+        0,
+        24,
+        null,
+        true,
+        "2099-01-02 00:00:00",
+      ],
+    );
+    assert.equal(mixed[4][0].snapshot_count, 1302);
+    assert.deepEqual(
+      mixed[5].filter((sample) => sample.zone_id === 1),
+      sampled[5],
+    );
+    assert.deepEqual(
+      mixed[5]
+        .filter((sample) => sample.zone_id === 2)
+        .map((sample) => sample.available),
+      [1, 2],
     );
     await pool.query("DELETE FROM system_settings WHERE name='seed_version'");
     await assert.rejects(seedDemo(appPool, pool), /Nonempty unmarked database/);

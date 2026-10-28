@@ -180,8 +180,8 @@ report: BEGIN
    OVER (PARTITION BY zone_id ORDER BY captured_at,id ROWS UNBOUNDED PRECEDING) AS segment_id
   FROM filtered
  ), buckets AS (
-  SELECT *,IF(zone_count<=1200,id,LEAST(299,FLOOR(300*TIMESTAMPDIFF(MICROSECOND,p_start,captured_at)/
-   GREATEST(1,TIMESTAMPDIFF(MICROSECOND,p_start,p_end))))) AS bucket,
+  SELECT *,LEAST(299,FLOOR(300*TIMESTAMPDIFF(MICROSECOND,p_start,captured_at)/
+   GREATEST(1,TIMESTAMPDIFF(MICROSECOND,p_start,p_end)))) AS bucket,
    -- 10^20 covers every unsigned BIGINT id; the full time key stays below 10^40.
    CAST(TIMESTAMPDIFF(MICROSECOND,'1000-01-01 00:00:00',captured_at) AS DECIMAL(40,0))*100000000000000000000+id AS time_key
   FROM segmented
@@ -191,9 +191,10 @@ report: BEGIN
    CAST(MOD(MAX(time_key),100000000000000000000) AS UNSIGNED) AS last_id,
    CAST(MOD(MIN(available*10000000000000000000000000000000000000000+time_key),100000000000000000000) AS UNSIGNED) AS min_id,
    CAST(MOD(MAX(available*10000000000000000000000000000000000000000+time_key),100000000000000000000) AS UNSIGNED) AS max_id
-  FROM buckets GROUP BY zone_id,bucket
+  FROM buckets WHERE zone_count>1200 GROUP BY zone_id,bucket
  ), selected AS (
-  SELECT first_id AS id FROM bucket_extremes UNION SELECT last_id FROM bucket_extremes
+  SELECT id FROM segmented WHERE zone_count<=1200
+  UNION SELECT first_id FROM bucket_extremes UNION SELECT last_id FROM bucket_extremes
   UNION SELECT min_id FROM bucket_extremes UNION SELECT max_id FROM bucket_extremes
  )
  SELECT s.zone_id,s.captured_at,s.available,s.occupied,s.capacity,segment.segment_id FROM selected chosen
