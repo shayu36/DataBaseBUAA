@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { createPool, ledgerTransaction } from "../backend/db.mjs";
 import { applySchema } from "../scripts/sql.mjs";
 import * as business from "../backend/business.mjs";
+import { campusDefinition } from "../backend/campus-data.mjs";
 const pool = createPool({
   database: "campus_bike_test",
   user: process.env.DB_ADMIN_USER,
@@ -302,25 +303,27 @@ test("native dispatch rejects malformed bike lists and identifiers without write
     JSON.stringify(Array.from({ length: 101 }, () => 1)),
   ]) {
     await assert.rejects(
-      pool.query("CALL sp_create_dispatch(?,?,?,?,?,?)", [
+      pool.query("CALL sp_create_dispatch(?,?,?,?,?,?,?)", [
         admin.id,
         1,
         2,
         bikes,
         null,
         "{}",
+        campusDefinition,
       ]),
       { sqlMessage: "INVALID_DISPATCH_INPUT" },
     );
   }
   await assert.rejects(
-    pool.query("CALL sp_create_dispatch(?,?,?,?,?,?)", [
+    pool.query("CALL sp_create_dispatch(?,?,?,?,?,?,?)", [
       admin.id,
       1,
       2,
       "[18446744073709551615]",
       null,
       "{}",
+      campusDefinition,
     ]),
     { sqlMessage: "BIKE_NOT_FOUND" },
   );

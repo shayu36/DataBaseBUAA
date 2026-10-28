@@ -19,13 +19,15 @@ DELIMITER ;
 DROP PROCEDURE IF EXISTS sp_create_dispatch;
 DELIMITER $$
 CREATE PROCEDURE sp_create_dispatch(IN p_actor BIGINT UNSIGNED, IN p_source BIGINT UNSIGNED, IN p_target BIGINT UNSIGNED,
- IN p_bikes JSON, IN p_staff BIGINT UNSIGNED, IN p_detail JSON)
+ IN p_bikes JSON, IN p_staff BIGINT UNSIGNED, IN p_detail JSON, IN p_campus JSON)
 SQL SECURITY INVOKER
 BEGIN
  DECLARE v_source_status,v_target_status VARCHAR(20) DEFAULT NULL;
  DECLARE v_occupied,v_reserved,v_capacity,v_found,v_available,v_distinct INT;
  DECLARE v_staff_user,v_task BIGINT UNSIGNED;
  DECLARE v_inventory JSON;
+ DECLARE v_x,v_y DECIMAL(10,2);
+ DECLARE v_areas GEOMETRY DEFAULT NULL;
  IF p_source=p_target OR p_bikes IS NULL OR JSON_TYPE(p_bikes)<>'ARRAY' OR JSON_LENGTH(p_bikes) NOT BETWEEN 1 AND 100 THEN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_DISPATCH_INPUT';
  END IF;
@@ -35,9 +37,13 @@ BEGIN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_DISPATCH_INPUT';
  END IF;
  SELECT status INTO v_source_status FROM parking_zones WHERE id=p_source FOR UPDATE;
- SELECT status,capacity INTO v_target_status,v_capacity FROM parking_zones WHERE id=p_target FOR UPDATE;
+ SELECT status,capacity,x,y INTO v_target_status,v_capacity,v_x,v_y FROM parking_zones WHERE id=p_target FOR UPDATE;
  IF v_source_status IS NULL OR v_target_status IS NULL THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ZONE_NOT_FOUND'; END IF;
  IF v_source_status<>'ACTIVE' OR v_target_status<>'ACTIVE' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='DISPATCH_ZONE_CLOSED'; END IF;
+ CALL sp_campus_restrictions(p_campus,v_areas);
+ IF v_areas IS NOT NULL AND ST_Intersects(POINT(v_x,v_y),v_areas) THEN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ZONE_RESTRICTED';
+ END IF;
  CALL sp_zone_load(p_target,v_occupied,v_reserved);
  IF v_occupied+v_reserved+JSON_LENGTH(p_bikes)>v_capacity THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='DISPATCH_ZONE_FULL'; END IF;
  IF p_staff IS NOT NULL THEN CALL sp_assert_dispatch_staff(p_staff,v_staff_user); END IF;
@@ -219,9 +225,11 @@ DELIMITER ;
 -- Capacity is at most 1000, so ten 100-bike chunks cover every allocation.
 DROP PROCEDURE IF EXISTS sp_dispatch_suggestions;
 DELIMITER $$
-CREATE PROCEDURE sp_dispatch_suggestions(IN p_zones JSON, IN p_demand JSON)
+CREATE PROCEDURE sp_dispatch_suggestions(IN p_zones JSON, IN p_demand JSON, IN p_campus JSON)
 SQL SECURITY INVOKER
 BEGIN
+ DECLARE v_areas GEOMETRY DEFAULT NULL;
+ CALL sp_campus_restrictions(p_campus,v_areas);
  WITH RECURSIVE chunks AS (
   SELECT 0 AS n UNION ALL SELECT n+1 FROM chunks WHERE n<9
  ), demand_by_zone AS (
@@ -230,10 +238,12 @@ BEGIN
   GROUP BY zone_id
  ), base AS (
   SELECT z.id,z.name,z.capacity,z.available,z.occupied,z.reserved,
+   IF(v_areas IS NOT NULL AND z.x IS NOT NULL AND z.y IS NOT NULL,ST_Intersects(POINT(z.x,z.y),v_areas),FALSE) AS restricted,
    COALESCE(d.borrow_count,0) AS borrow_count,COALESCE(d.return_count,0) AS return_count,
    LEAST(CEIL(z.capacity*0.8),GREATEST(CEIL(z.capacity*0.4),CEIL(z.capacity*0.4+(COALESCE(d.borrow_count,0)-COALESCE(d.return_count,0))*0.2))) AS desired
   FROM JSON_TABLE(p_zones,'$[*]' COLUMNS(id BIGINT UNSIGNED PATH '$.id',name VARCHAR(60) PATH '$.name',capacity INT PATH '$.capacity',
-   available INT PATH '$.available',occupied INT PATH '$.occupied',reserved INT PATH '$.reserved',status VARCHAR(20) PATH '$.status' NULL ON EMPTY)) z
+   available INT PATH '$.available',occupied INT PATH '$.occupied',reserved INT PATH '$.reserved',status VARCHAR(20) PATH '$.status' NULL ON EMPTY,
+   x DECIMAL(10,2) PATH '$.x' NULL ON EMPTY,y DECIMAL(10,2) PATH '$.y' NULL ON EMPTY)) z
   LEFT JOIN demand_by_zone d ON d.zone_id=z.id
   WHERE z.status IS NULL OR z.status='ACTIVE'
  ), states AS (
@@ -242,7 +252,7 @@ BEGIN
  ), sources AS (
   SELECT *,SUM(supply) OVER (ORDER BY supply DESC,id ROWS UNBOUNDED PRECEDING) AS supply_end FROM states WHERE supply>0
  ), targets AS (
-  SELECT *,SUM(LEAST(need,free)) OVER (ORDER BY need DESC,id ROWS UNBOUNDED PRECEDING) AS demand_end FROM states WHERE need>0 AND free>0
+  SELECT *,SUM(LEAST(need,free)) OVER (ORDER BY need DESC,id ROWS UNBOUNDED PRECEDING) AS demand_end FROM states WHERE need>0 AND free>0 AND NOT restricted
  ), allocations AS (
   SELECT s.id AS source_zone_id,t.id AS target_zone_id,s.name AS source_name,t.name AS target_name,
    CAST(GREATEST(0,LEAST(s.supply_end,t.demand_end)-GREATEST(s.supply_end-s.supply,t.demand_end-LEAST(t.need,t.free))) AS SIGNED) AS quantity,

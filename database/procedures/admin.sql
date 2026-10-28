@@ -87,7 +87,7 @@ DELIMITER ;
 
 DROP PROCEDURE IF EXISTS sp_save_bike;
 DELIMITER $$
-CREATE PROCEDURE sp_save_bike(IN p_actor BIGINT UNSIGNED, IN p_data JSON)
+CREATE PROCEDURE sp_save_bike(IN p_actor BIGINT UNSIGNED, IN p_data JSON, IN p_campus JSON)
 SQL SECURITY INVOKER
 BEGIN
  DECLARE v_id,v_zone,v_current,v_old_zone BIGINT UNSIGNED DEFAULT NULL;
@@ -95,6 +95,8 @@ BEGIN
  DECLARE v_status,v_old_status,v_target_status VARCHAR(20) DEFAULT NULL;
  DECLARE v_deployed,v_old_deployed DATE;
  DECLARE v_capacity,v_occupied,v_reserved,v_already INT;
+ DECLARE v_x,v_y DECIMAL(10,2);
+ DECLARE v_areas GEOMETRY DEFAULT NULL;
  SELECT id,code,zone_id,deployed_at,status INTO v_id,v_code,v_zone,v_deployed,v_status
  FROM JSON_TABLE(p_data,'$' COLUMNS(id BIGINT UNSIGNED PATH '$.id' NULL ON EMPTY,code VARCHAR(30) PATH '$.code',zone_id BIGINT UNSIGNED PATH '$.zone_id',
  deployed_at DATE PATH '$.deployed_at' NULL ON EMPTY,status VARCHAR(20) PATH '$.status' NULL ON EMPTY)) input_data;
@@ -104,10 +106,16 @@ BEGIN
   IF v_old_status NOT IN ('AVAILABLE','RETIRED') THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='BIKE_ACTIVE'; END IF;
  END IF;
  SET v_status=COALESCE(v_status,v_old_status,'AVAILABLE'),v_deployed=COALESCE(v_deployed,v_old_deployed,DATE(UTC_TIMESTAMP()+INTERVAL 8 HOUR));
- SELECT status,capacity INTO v_target_status,v_capacity FROM parking_zones WHERE id=v_zone FOR UPDATE;
+ SELECT status,capacity,x,y INTO v_target_status,v_capacity,v_x,v_y FROM parking_zones WHERE id=v_zone FOR UPDATE;
  IF v_target_status IS NULL THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ZONE_NOT_FOUND'; END IF;
  IF v_status='AVAILABLE' THEN
   IF v_target_status<>'ACTIVE' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='BIKE_TARGET_CLOSED'; END IF;
+  IF NOT (v_old_status <=> 'AVAILABLE' AND v_old_zone <=> v_zone) THEN
+   CALL sp_campus_restrictions(p_campus,v_areas);
+   IF v_areas IS NOT NULL AND ST_Intersects(POINT(v_x,v_y),v_areas) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='BIKE_TARGET_RESTRICTED';
+   END IF;
+  END IF;
   CALL sp_zone_load(v_zone,v_occupied,v_reserved);
   SET v_already=IF(v_old_zone=v_zone,1,0);
   IF v_occupied+v_reserved-v_already>=v_capacity THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='BIKE_TARGET_FULL'; END IF;

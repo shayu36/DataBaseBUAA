@@ -12,8 +12,14 @@ import {
 import { applySchema } from "../scripts/sql.mjs";
 import { findRoute } from "../backend/analytics.mjs";
 import { upgradeCampusMap } from "../backend/campus.mjs";
-import { routeGraph, startRide } from "../backend/business.mjs";
-import { saveZone } from "../backend/admin.mjs";
+import {
+  createDispatch,
+  dispatchAction,
+  routeGraph,
+  startRide,
+} from "../backend/business.mjs";
+import { saveBike, saveZone } from "../backend/admin.mjs";
+import { dispatchSuggestions } from "../backend/dispatch-suggestions.mjs";
 
 const pool = createPool({
   database: "campus_bike_test",
@@ -302,6 +308,95 @@ test("legacy station inside a restricted area cannot start a ride", async () => 
   assert.deepEqual(bike, { status: "AVAILABLE", current_zone_id: 1 });
   const [[orders]] = await pool.query("SELECT COUNT(*) n FROM ride_orders");
   assert.equal(orders.n, 0);
+});
+test("restricted legacy station accepts no new vehicles but allows evacuation", async () => {
+  await loadVersionedCampus(campus);
+  await pool.query("UPDATE users SET role='ADMIN' WHERE id=1");
+  await pool.query("UPDATE parking_zones SET x=700,y=200 WHERE id=1");
+  await pool.query(
+    "INSERT INTO bikes(id,code,deployed_at,current_zone_id) VALUES(2,'QX-SAFE',UTC_DATE(),2)",
+  );
+  const admin = { id: 1, role: "ADMIN", status: "ACTIVE" };
+  await assert.rejects(saveBike(pool, admin, { code: "QX-NEW", zone_id: 1 }), {
+    code: "ZONE_RESTRICTED",
+  });
+  await assert.rejects(
+    createDispatch(pool, admin, {
+      source_zone_id: 2,
+      target_zone_id: 1,
+      bike_ids: [2],
+    }),
+    { code: "ZONE_RESTRICTED" },
+  );
+  const [[before]] = await pool.query(
+    "SELECT (SELECT COUNT(*) FROM bikes) bikes,(SELECT COUNT(*) FROM dispatch_tasks) tasks",
+  );
+  assert.deepEqual(before, { bikes: 2, tasks: 0 });
+  await saveBike(pool, admin, { id: 1, code: "QX-MAP-EDIT", zone_id: 1 });
+  const task = await createDispatch(pool, admin, {
+    source_zone_id: 1,
+    target_zone_id: 2,
+    bike_ids: [1],
+  });
+  assert.ok(task.id);
+});
+test("dispatch suggestions do not send vehicles to a restricted station", async () => {
+  await loadVersionedCampus(campus);
+  const zones = [
+    {
+      id: 1,
+      name: "禁行站",
+      x: 700,
+      y: 200,
+      capacity: 10,
+      available: 0,
+      occupied: 0,
+      reserved: 0,
+      status: "ACTIVE",
+    },
+    {
+      id: 2,
+      name: "开放站",
+      x: 540,
+      y: 190,
+      capacity: 10,
+      available: 9,
+      occupied: 9,
+      reserved: 0,
+      status: "ACTIVE",
+    },
+  ];
+  assert.deepEqual(await dispatchSuggestions(pool, zones, []), []);
+  zones[0].available = zones[0].occupied = 9;
+  zones[1].available = zones[1].occupied = 0;
+  const suggestions = await dispatchSuggestions(pool, zones, []);
+  assert.ok(
+    suggestions.some(
+      (row) => row.source_zone_id === 1 && row.target_zone_id === 2,
+    ),
+  );
+});
+test("an existing in-transit dispatch can complete after a station becomes restricted", async () => {
+  await loadVersionedCampus(campus);
+  await pool.query("UPDATE users SET role='ADMIN' WHERE id=1");
+  await pool.query(
+    "INSERT INTO users(id,name,email,phone,password_hash,role) VALUES(2,'调度员','worker@test.local','13800000001','test','OPERATOR')",
+  );
+  await pool.query("INSERT INTO staff(id,user_id,job) VALUES(1,2,'DISPATCH')");
+  const admin = { id: 1, role: "ADMIN", status: "ACTIVE" };
+  const task = await createDispatch(pool, admin, {
+    source_zone_id: 1,
+    target_zone_id: 2,
+    bike_ids: [1],
+    staff_id: 1,
+  });
+  await dispatchAction(pool, admin, task.id, "start", {});
+  await pool.query("UPDATE parking_zones SET x=700,y=200 WHERE id=2");
+  await dispatchAction(pool, admin, task.id, "complete", {});
+  const [[bike]] = await pool.query(
+    "SELECT status,current_zone_id FROM bikes WHERE id=1",
+  );
+  assert.deepEqual(bike, { status: "AVAILABLE", current_zone_id: 2 });
 });
 test("new station is not created when every connection crosses a restricted area", async () => {
   await pool.query("UPDATE users SET role='ADMIN' WHERE id=1");

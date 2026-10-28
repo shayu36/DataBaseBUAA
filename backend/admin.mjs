@@ -101,6 +101,11 @@ const zoneBikeErrors = {
   ],
   BIKE_ACTIVE: ["骑行、维修或调度中的车辆不能编辑", "INVALID_STATE", 409],
   BIKE_TARGET_CLOSED: ["车辆必须投放到开放停车区", "INVALID_STATE", 409],
+  BIKE_TARGET_RESTRICTED: [
+    "目标停车区位于禁行区域，不能投放车辆",
+    "ZONE_RESTRICTED",
+    409,
+  ],
   BIKE_TARGET_FULL: ["目标停车区已满或车位已预留", "ZONE_FULL", 409],
 };
 export async function saveZone(pool, user, input) {
@@ -121,8 +126,8 @@ export async function saveBike(pool, user, input) {
   return transaction(pool, user, (connection) =>
     callProcedure(
       connection,
-      "CALL sp_save_bike(?,?)",
-      [user.id, JSON.stringify(data)],
+      "CALL sp_save_bike(?,?,?)",
+      [user.id, JSON.stringify(data), campusDefinition],
       zoneBikeErrors,
     ),
   );

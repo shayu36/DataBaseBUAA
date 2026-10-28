@@ -239,6 +239,11 @@ const dispatchErrors = {
   DISPATCH_ZONE_CLOSED: ["调度停车区必须开放", "INVALID_STATE", 409],
   DISPATCH_TARGET_CLOSED: ["目标停车区已关闭", "INVALID_STATE", 409],
   DISPATCH_ZONE_FULL: ["目标停车区车位不足", "ZONE_FULL", 409],
+  ZONE_RESTRICTED: [
+    "目标停车区位于禁行区域，不能调入车辆",
+    "ZONE_RESTRICTED",
+    409,
+  ],
   BIKE_UNAVAILABLE: ["所选车辆不在源停车区或已被占用", "BIKE_UNAVAILABLE", 409],
   DISPATCH_FORBIDDEN: ["没有此任务的处理权限", "FORBIDDEN", 403],
   TASK_NOT_ASSIGNED: ["只能处理分配给自己的任务", "FORBIDDEN", 403],
@@ -256,7 +261,7 @@ export async function createDispatchInConnection(connection, user, data) {
   requireAdmin(user);
   return callProcedure(
     connection,
-    "CALL sp_create_dispatch(?,?,?,?,?,?)",
+    "CALL sp_create_dispatch(?,?,?,?,?,?,?)",
     [
       user.id,
       data.source_zone_id,
@@ -264,6 +269,7 @@ export async function createDispatchInConnection(connection, user, data) {
       JSON.stringify(data.bike_ids),
       data.staff_id ?? null,
       JSON.stringify(data),
+      campusDefinition,
     ],
     dispatchErrors,
   );
