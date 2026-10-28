@@ -983,6 +983,108 @@ test("reviewed rides award versioned carbon and adjustments append signed rows",
   assert.equal(Number(totals.carbon), 0.2);
 });
 
+test("invalid carbon rules reject payment without writing and valid defaults remain usable", async () => {
+  const [order] = await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
+  );
+  for (const change of [
+    { kg_per_km: "0.21abc" },
+    { kg_per_km: "0.21\n" },
+    { kg_per_km: "" },
+    { points_per_km: "ten" },
+    { kg_per_km: -0.21 },
+    { points_per_km: -1 },
+    { kg_per_km: 0.123456789 },
+    { kg_per_km: "0.1234567800000000000000000000000000001" },
+    { points_per_km: "1e-20" },
+    { kg_per_km: "1e-100" },
+    { kg_per_km: "1e100" },
+    { kg_per_km: "1000000000000" },
+    { kg_per_km: true },
+    { rule_version: 42 },
+    { rule_version: {} },
+    { rule_version: "  " },
+    { rule_version: "v1\n" },
+    { rule_version: "x".repeat(31) },
+  ]) {
+    const rule = {
+      kg_per_km: 0.21,
+      points_per_km: 10,
+      rule_version: "carbon-v1",
+      ...change,
+    };
+    await pool.query("UPDATE system_settings SET value=? WHERE name='carbon'", [
+      JSON.stringify(rule),
+    ]);
+    await assert.rejects(
+      business.payRide(pool, student, order.insertId, {
+        idempotency_key: "invalid-rule-payment",
+      }),
+      { code: "INVALID_CARBON_RULE", status: 503 },
+    );
+    const [[state]] = await pool.query(
+      "SELECT status,(SELECT COUNT(*) FROM payments) payments,(SELECT COUNT(*) FROM carbon_transactions) entries,(SELECT COUNT(*) FROM audit_logs WHERE action='SIMULATED_PAYMENT') audits FROM ride_orders WHERE id=?",
+      [order.insertId],
+    );
+    assert.deepEqual(state, {
+      status: "UNPAID",
+      payments: 0,
+      entries: 0,
+      audits: 0,
+    });
+  }
+  await pool.query(
+    "UPDATE system_settings SET value=JSON_ARRAY() WHERE name='carbon'",
+  );
+  await assert.rejects(
+    business.payRide(pool, student, order.insertId, {
+      idempotency_key: "invalid-rule-payment",
+    }),
+    { code: "INVALID_CARBON_RULE", status: 503 },
+  );
+  await pool.query(
+    "UPDATE system_settings SET value=JSON_OBJECT('kg_per_km','0.21000000','points_per_km','1e1','rule_version','null') WHERE name='carbon'",
+  );
+  assert.deepEqual((await dashboard(pool, student)).carbon.rule, {
+    kg_per_km: 0.21,
+    points_per_km: 10,
+    rule_version: "null",
+  });
+  await pool.query(
+    "UPDATE system_settings SET value=JSON_OBJECT('kg_per_km','999999999999.99999999','points_per_km','0.00000001000000000000000000000000000') WHERE name='carbon'",
+  );
+  const connection = await pool.getConnection();
+  try {
+    await connection.query("CALL sp_get_carbon_rule(@factor,@rate,@version)");
+    const [[rule]] = await connection.query(
+      "SELECT CAST(@factor AS CHAR) factor,CAST(@rate AS CHAR) rate",
+    );
+    assert.deepEqual(rule, {
+      factor: "999999999999.99999999",
+      rate: "0.00000001",
+    });
+  } finally {
+    connection.release();
+  }
+  await pool.query(
+    "UPDATE system_settings SET value=JSON_OBJECT('kg_per_km',0.00000001,'points_per_km',0,'rule_version','small-v1') WHERE name='carbon'",
+  );
+  assert.deepEqual((await dashboard(pool, student)).carbon.rule, {
+    kg_per_km: 0.00000001,
+    points_per_km: 0,
+    rule_version: "small-v1",
+  });
+  await pool.query(
+    "UPDATE system_settings SET value=JSON_OBJECT('kg_per_km',NULL,'points_per_km',NULL,'rule_version',NULL) WHERE name='carbon'",
+  );
+  const paid = await business.payRide(pool, student, order.insertId, {
+    idempotency_key: "valid-rule-payment",
+  });
+  assert.equal(paid.credit.awarded, true);
+  assert.equal(paid.credit.points, 10);
+  assert.equal(paid.credit.carbon_kg, 0.21);
+});
+
 test("carbon awards retain precise historical factors and validate their own rule", async () => {
   await pool.query(
     "UPDATE system_settings SET value=JSON_OBJECT('kg_per_km',0.21019,'points_per_km',12.345678,'rule_version','precise-v1') WHERE name='carbon'",

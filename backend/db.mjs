@@ -168,6 +168,19 @@ export function actorTransaction(pool, actor, work) {
   });
 }
 
+export function translateDatabaseError(error) {
+  if (
+    error?.code === "ER_SIGNAL_EXCEPTION" &&
+    error.sqlMessage === "INVALID_CARBON_RULE"
+  )
+    return new AppError(
+      "碳积分规则配置无效，请联系管理员",
+      "INVALID_CARBON_RULE",
+      503,
+    );
+  return error;
+}
+
 // MySQL signals stable business codes; the API owns localized messages.
 export async function callProcedure(
   connection,
@@ -182,6 +195,6 @@ export async function callProcedure(
     const details =
       error.code === "ER_SIGNAL_EXCEPTION" && errors[error.sqlMessage];
     if (details) throw new AppError(...details);
-    throw error;
+    throw translateDatabaseError(error);
   }
 }

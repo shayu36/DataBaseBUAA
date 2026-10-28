@@ -45,11 +45,53 @@ DELIMITER $$
 CREATE PROCEDURE sp_get_carbon_rule(OUT p_factor DECIMAL(20,8), OUT p_rate DECIMAL(20,8), OUT p_version VARCHAR(30))
 SQL SECURITY INVOKER
 BEGIN
+ DECLARE v_rule,v_value JSON DEFAULT NULL;
+ DECLARE v_raw LONGTEXT;
+ DECLARE v_mantissa,v_digits,v_significant LONGTEXT;
+ DECLARE v_exponent,v_fraction_digits BIGINT DEFAULT 0;
+ DECLARE v_precise DECIMAL(65,30);
+ DECLARE v_index TINYINT DEFAULT 0;
+ DECLARE EXIT HANDLER FOR SQLSTATE '22003', SQLSTATE '22007'
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_CARBON_RULE';
  SET p_factor=0.21,p_rate=10,p_version='carbon-v1';
- SELECT COALESCE(CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(value,'$.kg_per_km')),'null') AS DECIMAL(20,8)),0.21),
-        COALESCE(CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(value,'$.points_per_km')),'null') AS DECIMAL(20,8)),10),
-        COALESCE(NULLIF(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(value,'$.rule_version')),'null'),''),'carbon-v1')
- INTO p_factor,p_rate,p_version FROM system_settings WHERE name='carbon';
+ SELECT value INTO v_rule FROM system_settings WHERE name='carbon';
+ IF v_rule IS NOT NULL AND JSON_TYPE(v_rule) NOT IN ('NULL','OBJECT') THEN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_CARBON_RULE';
+ END IF;
+ WHILE v_index<2 DO
+  SET v_value=JSON_EXTRACT(v_rule,IF(v_index=0,'$.kg_per_km','$.points_per_km'));
+  IF v_value IS NOT NULL AND JSON_TYPE(v_value)<>'NULL' THEN
+   SET v_raw=JSON_UNQUOTE(v_value);
+   IF JSON_TYPE(v_value) NOT IN ('INTEGER','UNSIGNED INTEGER','DOUBLE','DECIMAL','STRING')
+     OR REGEXP_LIKE(v_raw,'[^0-9eE+.-]','c')
+     OR NOT REGEXP_LIKE(v_raw,'^[+]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?$','c') THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_CARBON_RULE';
+   END IF;
+   SET v_mantissa=SUBSTRING_INDEX(LOWER(v_raw),'e',1);
+   SET v_exponent=IF(LOCATE('e',LOWER(v_raw))=0,0,CAST(SUBSTRING_INDEX(LOWER(v_raw),'e',-1) AS SIGNED));
+   SET v_fraction_digits=IF(LOCATE('.',v_mantissa)=0,0,CHAR_LENGTH(v_mantissa)-LOCATE('.',v_mantissa));
+   SET v_digits=REPLACE(REPLACE(v_mantissa,'+',''),'.','');
+   SET v_significant=TRIM(TRAILING '0' FROM v_digits);
+   IF v_significant<>'' AND v_fraction_digits-v_exponent-(CHAR_LENGTH(v_digits)-CHAR_LENGTH(v_significant))>8 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_CARBON_RULE';
+   END IF;
+   SET v_precise=CAST(v_raw AS DECIMAL(65,30));
+   IF v_precise>999999999999.99999999 OR v_precise<>ROUND(v_precise,8)
+     OR (v_precise=0 AND REGEXP_LIKE(SUBSTRING_INDEX(LOWER(v_raw),'e',1),'[1-9]','c')) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_CARBON_RULE';
+   END IF;
+   IF v_index=0 THEN SET p_factor=v_precise; ELSE SET p_rate=v_precise; END IF;
+  END IF;
+  SET v_index=v_index+1;
+ END WHILE;
+ SET v_value=JSON_EXTRACT(v_rule,'$.rule_version');
+ IF v_value IS NOT NULL AND JSON_TYPE(v_value)<>'NULL' THEN
+  SET v_raw=JSON_UNQUOTE(v_value);
+  IF JSON_TYPE(v_value)<>'STRING' OR CHAR_LENGTH(v_raw)>30 OR (v_raw<>'' AND (TRIM(v_raw)='' OR REGEXP_LIKE(v_raw,'[[:cntrl:]]','c'))) THEN
+   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_CARBON_RULE';
+  END IF;
+  IF v_raw<>'' THEN SET p_version=v_raw; END IF;
+ END IF;
 END$$
 DELIMITER ;
 

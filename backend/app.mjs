@@ -6,7 +6,7 @@ import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { AppError, errorCodes } from "./db.mjs";
+import { AppError, errorCodes, translateDatabaseError } from "./db.mjs";
 import { authenticate, login, register, issueCookie, logout } from "./auth.mjs";
 import {
   startRide,
@@ -348,6 +348,7 @@ export function createApp(pool) {
   );
   app.use((e, _req, res, next) => {
     if (res.headersSent) return next(e);
+    e = translateDatabaseError(e);
     if (e instanceof z.ZodError)
       return res.status(400).json({
         error:

@@ -105,6 +105,29 @@ test("encoded Chinese documentation URLs serve the intended generated files", as
   }
 });
 
+test("invalid carbon configuration reports a clear service error", async () => {
+  const [original] = await pool.query(
+    "SELECT value FROM system_settings WHERE name='carbon'",
+  );
+  try {
+    await pool.query(
+      "INSERT INTO system_settings(name,value) VALUES('carbon',JSON_OBJECT('kg_per_km','0.21abc')) ON DUPLICATE KEY UPDATE value=VALUES(value)",
+    );
+    const response = await request("/api/dashboard", undefined, studentCookie);
+    assert.equal(response.status, 503);
+    assert.equal(response.data.code, "INVALID_CARBON_RULE");
+    assert.match(response.data.error, /规则配置无效/);
+    assert.equal((await request("/api/health")).status, 200);
+  } finally {
+    if (original.length)
+      await pool.query(
+        "UPDATE system_settings SET value=? WHERE name='carbon'",
+        [JSON.stringify(original[0].value)],
+      );
+    else await pool.query("DELETE FROM system_settings WHERE name='carbon'");
+  }
+});
+
 test("health identifies campus bike and protected routes need login", async () => {
   assert.equal((await request("/api/health")).data.system, "campus-bike");
   assert.equal((await request("/api/dashboard")).status, 401);
