@@ -196,7 +196,8 @@ BEGIN
    CAST(CONCAT('[',GROUP_CONCAT(JSON_OBJECT('rule',rule,'message',message) ORDER BY priority,sequence SEPARATOR ','),']') AS JSON) AS reason_details
   FROM reasons GROUP BY bike_id
  )
- SELECT /*+ SET_VAR(group_concat_max_len=4294967295) */ s.bike_id,s.code,s.score,
+ -- Five fault types and three fixed reasons fit within this bound, including JSON encoding.
+ SELECT /*+ SET_VAR(group_concat_max_len=4096) */ s.bike_id,s.code,s.score,
   CASE WHEN s.score>=60 THEN 'HIGH' WHEN s.score>=30 THEN 'MEDIUM' ELSE 'LOW' END AS level,e.reasons,e.reason_details
  FROM eligible s JOIN explanations e ON e.bike_id=s.bike_id ORDER BY s.score DESC,s.bike_id;
  IF p_candidates THEN

@@ -750,6 +750,39 @@ test("SQL risk fingerprints preserve existing JSON encoding and deduplication", 
   );
 });
 
+test("all repeated fault types retain ordered risk explanations under a small session limit", async () => {
+  const now = new Date("2026-10-27T12:00:00Z");
+  await pool.query(`INSERT INTO maintenance_tickets(bike_id,reporter_id,staff_id,fault_type,description,status,result,created_at,completed_at)
+    WITH RECURSIVE n AS (SELECT 1 value UNION ALL SELECT value+1 FROM n WHERE value<10)
+    SELECT 1,2,1,ELT(CEIL(value/2),'TIRE','BRAKE','OTHER','CHAIN','LOCK'),'测试','COMPLETED','已修复',
+     '2026-10-01 12:00:00','2026-10-01 12:00:00' FROM n ORDER BY value`);
+  await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,'2026-10-27 11:59:30','2026-10-27 12:00:00',700,100,'UNPAID')",
+  );
+  const connection = await pool.getConnection();
+  try {
+    await connection.query("SET SESSION group_concat_max_len=4");
+    const { risks } = await riskData(connection, now);
+    const risk = risks.find(({ bike_id }) => bike_id === 1);
+    assert.deepEqual(risk.reasons, [
+      "近30天报修 10 次（+40）",
+      ...["TIRE", "BRAKE", "OTHER", "CHAIN", "LOCK"].map(
+        (type) => `${type} 同类型故障复发 2 次（+20）`,
+      ),
+      "近30天异常短行程 1 次（辅助线索，不计分）",
+    ]);
+    assert.equal(risk.reason_details.length, 7);
+    assert.equal(risk.score, 100);
+    const [[limit]] = await connection.query(
+      "SELECT @@SESSION.group_concat_max_len AS value",
+    );
+    assert.equal(limit.value, 4);
+  } finally {
+    await connection.query("SET SESSION group_concat_max_len=DEFAULT");
+    connection.release();
+  }
+});
+
 test("short abnormal rides appear as risk clues without changing the score", async () => {
   const now = new Date("2026-10-27T12:00:00Z");
   await pool.query(
