@@ -155,7 +155,7 @@ CREATE OR REPLACE VIEW v_zone_inventory AS
 CREATE OR REPLACE VIEW v_ride_details AS
  SELECT r.*,b.code bike_code,s.name start_zone_name,e.name end_zone_name FROM ride_orders r JOIN bikes b ON b.id=r.bike_id JOIN parking_zones s ON s.id=r.start_zone_id LEFT JOIN parking_zones e ON e.id=r.end_zone_id;
 CREATE OR REPLACE VIEW v_user_carbon AS
- SELECT u.id user_id,COALESCE(SUM(c.points_change),0) points,COALESCE(SUM(c.carbon_kg_change),0) carbon_kg,COALESCE(SUM(CASE WHEN c.entry_type='AWARD' THEN c.distance_m ELSE 0 END),0) distance_m FROM users u LEFT JOIN ride_orders r ON r.user_id=u.id LEFT JOIN carbon_transactions c ON c.order_id=r.id GROUP BY u.id;
+ SELECT u.id user_id,COALESCE(SUM(c.points_change),0) points,COALESCE(SUM(c.carbon_kg_change),0) carbon_kg,COALESCE(SUM(CASE WHEN c.entry_type='AWARD' AND r.status='PAID' AND r.qualification_status='VALID' THEN c.distance_m ELSE 0 END),0) distance_m FROM users u LEFT JOIN ride_orders r ON r.user_id=u.id LEFT JOIN carbon_transactions c ON c.order_id=r.id GROUP BY u.id;
 CREATE OR REPLACE VIEW carbon_ledger AS
  SELECT id,order_id,distance_m,points_change points,carbon_kg_change carbon_kg,factor_kg_per_km,created_at FROM carbon_transactions WHERE entry_type='AWARD';
 DROP TRIGGER IF EXISTS trg_payment_guard;

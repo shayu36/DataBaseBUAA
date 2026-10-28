@@ -1224,6 +1224,21 @@ test("excluded historical award is reversed without failing invariant checks", a
   await business.payRide(pool, student, order.insertId, {
     idempotency_key: "exclude-payment",
   });
+  const [[before]] = await pool.query(
+    "SELECT points,carbon_kg,distance_m FROM v_user_carbon WHERE user_id=2",
+  );
+  const initial = (await dashboard(pool, student)).carbon;
+  assert.equal(Number(before.points), initial.points);
+  assert.equal(Number(before.carbon_kg), initial.carbon_kg);
+  assert.equal(Number(before.distance_m), Number(initial.distance_m));
+  assert.equal(Number(before.distance_m), 1000);
+  const [[empty]] = await pool.query(
+    "SELECT points,carbon_kg,distance_m FROM v_user_carbon WHERE user_id=3",
+  );
+  assert.deepEqual(
+    [Number(empty.points), Number(empty.carbon_kg), Number(empty.distance_m)],
+    [0, 0, 0],
+  );
   await pool.query(
     "UPDATE ride_orders SET qualification_status='UNDER_REVIEW',qualification_reason='重新复核' WHERE id=?",
     [order.insertId],
@@ -1232,6 +1247,14 @@ test("excluded historical award is reversed without failing invariant checks", a
     decision: "EXCLUDED",
     reason: "人工复核排除",
   });
+  const [[summary]] = await pool.query(
+    "SELECT points,carbon_kg,distance_m FROM v_user_carbon WHERE user_id=2",
+  );
+  const personal = (await dashboard(pool, student)).carbon;
+  assert.equal(Number(summary.points), personal.points);
+  assert.equal(Number(summary.carbon_kg), personal.carbon_kg);
+  assert.equal(Number(summary.distance_m), Number(personal.distance_m));
+  assert.equal(Number(summary.distance_m), 0);
   const [rows] = await pool.query(
     await readFile(
       new URL("../database/invariant-checks.sql", import.meta.url),

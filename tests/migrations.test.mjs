@@ -135,7 +135,7 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
       [historicalCredits[0].idempotency_key, historicalCredits[0].id],
     );
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
-      "pdf_expansion@12",
+      "pdf_expansion@13",
     ]);
     assert.deepEqual(
       (
@@ -166,6 +166,52 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
       ],
     );
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
+    await pool.query(
+      "UPDATE ride_orders SET qualification_status='EXCLUDED',reviewed_by=1,reviewed_at=UTC_TIMESTAMP(3) WHERE id=1",
+    );
+    await pool.query(
+      "CREATE OR REPLACE VIEW v_user_carbon AS SELECT u.id user_id,COALESCE(SUM(c.points_change),0) points,COALESCE(SUM(c.carbon_kg_change),0) carbon_kg,COALESCE(SUM(CASE WHEN c.entry_type='AWARD' THEN c.distance_m ELSE 0 END),0) distance_m FROM users u LEFT JOIN ride_orders r ON r.user_id=u.id LEFT JOIN carbon_transactions c ON c.order_id=r.id GROUP BY u.id",
+    );
+    const [[beforeViewUpgrade]] = await pool.query(
+      "SELECT * FROM v_user_carbon WHERE user_id=1",
+    );
+    assert.equal(Number(beforeViewUpgrade.distance_m), 500);
+    await pool.query(
+      "UPDATE system_settings SET value=JSON_OBJECT('version',12) WHERE name='pdf_expansion'",
+    );
+    assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
+      "pdf_expansion@13",
+    ]);
+    const [[afterViewUpgrade]] = await pool.query(
+      "SELECT * FROM v_user_carbon WHERE user_id=1",
+    );
+    assert.equal(Number(afterViewUpgrade.distance_m), 0);
+    assert.equal(
+      Number(afterViewUpgrade.points),
+      Number(beforeViewUpgrade.points),
+    );
+    assert.equal(
+      Number(afterViewUpgrade.carbon_kg),
+      Number(beforeViewUpgrade.carbon_kg),
+    );
+    assert.deepEqual(
+      (
+        await pool.query("SELECT id,idempotency_key FROM payments ORDER BY id")
+      )[0],
+      historicalPayments,
+    );
+    assert.deepEqual(
+      (
+        await pool.query(
+          "SELECT id,idempotency_key FROM carbon_transactions ORDER BY id",
+        )
+      )[0],
+      historicalCredits,
+    );
+    assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
+    await pool.query(
+      "UPDATE ride_orders SET qualification_status='VALID',reviewed_by=NULL,reviewed_at=NULL WHERE id=1",
+    );
     const [staffColumns] = await pool.query(
       "SELECT column_name FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='staff' AND column_name IN ('name','phone')",
     );
@@ -319,14 +365,14 @@ test("schema initialization rejects unknown or malformed migration versions befo
       "INSERT INTO users(id,name,email,phone,password_hash,role) VALUES(1,'测试用户','version@test.local','13700000001','hash','STUDENT')",
     );
     await pool.query(
-      "UPDATE system_settings SET value=JSON_OBJECT('version','12') WHERE name='pdf_expansion'",
+      "UPDATE system_settings SET value=JSON_OBJECT('version','13') WHERE name='pdf_expansion'",
     );
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
     const [[revisionBefore]] = await pool.query(
       "SELECT value FROM system_settings WHERE name='procedure_revision'",
     );
     const versions = [
-      ["JSON_OBJECT('version',13)", /UNSUPPORTED_SCHEMA_VERSION/],
+      ["JSON_OBJECT('version',14)", /UNSUPPORTED_SCHEMA_VERSION/],
       ["JSON_OBJECT('version',999999)", /UNSUPPORTED_SCHEMA_VERSION/],
       [
         "CAST('{\"version\":18446744073709551615}' AS JSON)",

@@ -21,14 +21,14 @@ migration: BEGIN
   END IF;
   IF EXISTS(SELECT 1 FROM system_settings WHERE name='pdf_expansion' AND
     CASE WHEN CHAR_LENGTH(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')))>2 THEN TRUE
-    ELSE CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)>12 END) THEN
+    ELSE CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)>13 END) THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='UNSUPPORTED_SCHEMA_VERSION: use the matching newer application version';
   END IF;
   SELECT COALESCE(MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)),0) INTO current_version FROM system_settings WHERE name='pdf_expansion';
-  IF p_preparing OR current_version<12 THEN
+  IF p_preparing OR current_version<13 THEN
     DELETE FROM system_settings WHERE name='procedure_revision';
   END IF;
-  IF current_version = 12 THEN
+  IF current_version = 13 THEN
     SELECT 0 AS migrated;
     LEAVE migration;
   END IF;
@@ -315,6 +315,12 @@ migration: BEGIN
     ALTER TABLE payments MODIFY idempotency_key VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL;
     ALTER TABLE carbon_transactions MODIFY idempotency_key VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL;
   END IF;
-  INSERT INTO system_settings(name,value) VALUES('pdf_expansion',JSON_OBJECT('version',12,'applied_at',UTC_TIMESTAMP(3))) ON DUPLICATE KEY UPDATE value=VALUES(value);
+  IF current_version < 13 THEN
+    CREATE OR REPLACE VIEW v_user_carbon AS
+      SELECT u.id user_id,COALESCE(SUM(c.points_change),0) points,COALESCE(SUM(c.carbon_kg_change),0) carbon_kg,
+       COALESCE(SUM(CASE WHEN c.entry_type='AWARD' AND r.status='PAID' AND r.qualification_status='VALID' THEN c.distance_m ELSE 0 END),0) distance_m
+      FROM users u LEFT JOIN ride_orders r ON r.user_id=u.id LEFT JOIN carbon_transactions c ON c.order_id=r.id GROUP BY u.id;
+  END IF;
+  INSERT INTO system_settings(name,value) VALUES('pdf_expansion',JSON_OBJECT('version',13,'applied_at',UTC_TIMESTAMP(3))) ON DUPLICATE KEY UPDATE value=VALUES(value);
   SELECT 1 AS migrated;
 END
