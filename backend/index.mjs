@@ -8,6 +8,7 @@ import { createApp } from "./app.mjs";
 import { sessionSecret } from "./config.mjs";
 import { sql } from "./sql-statements.mjs";
 import { campus, campusDefinition } from "./campus-data.mjs";
+import { createSnapshotRunner } from "./snapshot-runner.mjs";
 import {
   loadProcedureSources,
   procedureRevision,
@@ -56,28 +57,33 @@ const server = createApp(pool).listen(port, host, () =>
       " · campus-bike simulation",
   ),
 );
-const capture = () =>
-  ledgerTransaction(pool, (c) =>
-    c.query("CALL sp_capture_zone_snapshots()"),
-  ).catch((e) =>
+const snapshot = createSnapshotRunner(
+  () =>
+    ledgerTransaction(pool, (c) => c.query("CALL sp_capture_zone_snapshots()")),
+  (e) =>
     console.error(
       "[snapshot]",
       e.code || e.message,
       ...(e instanceof AggregateError ? [errorCodes(e).join(", ")] : []),
     ),
-  );
-await capture();
-const timer = setInterval(capture, 60000);
-timer.unref();
+);
+let timer;
 let stopping = false;
 function stop() {
   if (stopping) return;
   stopping = true;
   clearInterval(timer);
+  const pending = snapshot.stop();
   server.close(async () => {
+    await pending;
     await pool.end();
     process.exit(0);
   });
 }
 process.on("SIGINT", stop);
 process.on("SIGTERM", stop);
+await snapshot.run();
+if (!stopping) {
+  timer = setInterval(snapshot.run, 60000);
+  timer.unref();
+}
