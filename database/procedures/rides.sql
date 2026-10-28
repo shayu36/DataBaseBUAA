@@ -165,7 +165,7 @@ adjustment: BEGIN
  DECLARE v_factor DECIMAL(20,8);
  DECLARE v_rate DECIMAL(20,8);
  DECLARE v_version VARCHAR(30);
- IF p_key IS NULL OR NOT REGEXP_LIKE(p_key,'^[a-zA-Z0-9_-]{8,80}$','c') THEN
+ IF p_key IS NULL OR CHAR_LENGTH(p_key) NOT BETWEEN 8 AND 80 OR REGEXP_LIKE(p_key,'[^a-zA-Z0-9_-]','c') THEN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_ADJUSTMENT';
  END IF;
  SELECT status,user_id INTO v_status,v_user_id FROM ride_orders WHERE id=p_order_id FOR UPDATE;

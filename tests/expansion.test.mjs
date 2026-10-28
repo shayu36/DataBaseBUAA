@@ -1364,6 +1364,52 @@ test("automatic exclusion reversal does not collide with manual adjustment keys"
   );
 });
 
+test("native carbon adjustment rejects control characters in idempotency keys", async () => {
+  const [order] = await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES(2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID')",
+  );
+  await business.payRide(pool, student, order.insertId, {
+    idempotency_key: "key-check-payment",
+  });
+  for (const key of [
+    null,
+    "valid_key\n",
+    "valid_key\r\n",
+    "valid_key\t",
+    "valid_key\0",
+    "valid_key🚲",
+    "valid_keyé",
+    "1234567",
+  ]) {
+    await assert.rejects(
+      pool.query("CALL sp_adjust_carbon(?,?,?,?,?,?,?)", [
+        admin.id,
+        order.insertId,
+        1,
+        0,
+        "测试调整",
+        key,
+        "{}",
+      ]),
+      { sqlMessage: "INVALID_ADJUSTMENT" },
+    );
+  }
+  const [[counts]] = await pool.query(
+    "SELECT (SELECT COUNT(*) FROM carbon_transactions WHERE entry_type='ADJUSTMENT') AS entries,(SELECT COUNT(*) FROM audit_logs WHERE action='CARBON_ADJUST') AS audits",
+  );
+  assert.deepEqual(counts, { entries: 0, audits: 0 });
+  const [result] = await pool.query("CALL sp_adjust_carbon(?,?,?,?,?,?,?)", [
+    admin.id,
+    order.insertId,
+    1,
+    0,
+    "测试调整",
+    "valid_key",
+    "{}",
+  ]);
+  assert.equal(result[0][0].duplicate, 0);
+});
+
 test("carbon adjustments enforce account balances and exact idempotency", async () => {
   const orders = [];
   for (const distance of [1000, 400]) {
