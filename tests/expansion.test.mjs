@@ -581,6 +581,53 @@ test("SQL risk aggregation matches rule results and ordered ticket references", 
   assert.deepEqual(savedIds, expectedIds);
 });
 
+test("risk ticket references remain complete with a small session aggregation limit", async () => {
+  await pool.query(`INSERT INTO maintenance_tickets(bike_id,reporter_id,staff_id,fault_type,description,status,result,created_at,completed_at)
+    WITH RECURSIVE numbers AS (SELECT 1 n UNION ALL SELECT n+1 FROM numbers WHERE n<200)
+    SELECT 1,2,1,'BRAKE','历史工单','COMPLETED','已修复','2026-10-01 12:00:00','2026-10-02 12:00:00' FROM numbers`);
+  const [tickets] = await pool.query(
+    "SELECT id FROM maintenance_tickets WHERE bike_id=1 ORDER BY id",
+  );
+  const connection = await pool.getConnection();
+  try {
+    await connection.query("SET SESSION group_concat_max_len=4");
+    await connection.query("CALL sp_refresh_risk_alerts(?,?,?,?,?)", [
+      admin.id,
+      1,
+      "risk-v1",
+      new Date("2026-10-27T12:00:00Z"),
+      JSON.stringify([
+        {
+          bike_id: 1,
+          score: 30,
+          level: "MEDIUM",
+          reasons: [{ rule: "SERVICE_GAP", message: "测试" }],
+          fingerprint: "c".repeat(64),
+        },
+      ]),
+    ]);
+    const [[row]] = await connection.query(
+      "SELECT ticket_ids FROM risk_alerts WHERE fingerprint=?",
+      ["c".repeat(64)],
+    );
+    const ids =
+      typeof row.ticket_ids === "string"
+        ? JSON.parse(row.ticket_ids)
+        : row.ticket_ids;
+    assert.deepEqual(
+      ids,
+      tickets.map(({ id }) => id),
+    );
+    const [[limit]] = await connection.query(
+      "SELECT @@SESSION.group_concat_max_len AS value",
+    );
+    assert.equal(limit.value, 4);
+  } finally {
+    await connection.query("SET SESSION group_concat_max_len=DEFAULT");
+    connection.release();
+  }
+});
+
 test("short abnormal rides appear as risk clues without changing the score", async () => {
   const now = new Date("2026-10-27T12:00:00Z");
   await pool.query(

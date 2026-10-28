@@ -118,19 +118,24 @@ CREATE PROCEDURE sp_refresh_risk_alerts(IN p_actor BIGINT UNSIGNED, IN p_evaluat
 SQL SECURITY INVOKER
 BEGIN
  DECLARE v_new JSON;
- SELECT COALESCE(JSON_ARRAYAGG(JSON_OBJECT('bike_id',j.bike_id,'score',j.score,'level',j.level,'reasons',j.reasons,
-  'ticket_ids',COALESCE((SELECT JSON_ARRAYAGG(t.id) OVER (ORDER BY t.id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
-   FROM maintenance_tickets t WHERE t.bike_id=j.bike_id AND t.created_at<=p_now ORDER BY t.id LIMIT 1),JSON_ARRAY()),
+ SELECT /*+ SET_VAR(group_concat_max_len=4294967295) */ COALESCE(JSON_ARRAYAGG(JSON_OBJECT('bike_id',j.bike_id,'score',j.score,'level',j.level,'reasons',j.reasons,
+  'tickets',(SELECT JSON_OBJECT('ids',CAST(CONCAT('[',COALESCE(GROUP_CONCAT(t.id ORDER BY t.id SEPARATOR ','),''),']') AS JSON),'count',COUNT(*))
+   FROM maintenance_tickets t WHERE t.bike_id=j.bike_id AND t.created_at<=p_now),
   'fingerprint',j.fingerprint)),JSON_ARRAY()) INTO v_new
  FROM JSON_TABLE(p_risks,'$[*]' COLUMNS(
   bike_id BIGINT UNSIGNED PATH '$.bike_id',score INT PATH '$.score',level VARCHAR(10) PATH '$.level',
   reasons JSON PATH '$.reasons',fingerprint CHAR(64) PATH '$.fingerprint')) j
  LEFT JOIN risk_alerts r ON r.open_fingerprint=j.fingerprint COLLATE utf8mb4_0900_ai_ci WHERE r.id IS NULL;
+ IF EXISTS (SELECT 1 FROM JSON_TABLE(v_new,'$[*]' COLUMNS(tickets JSON PATH '$.tickets')) j
+  WHERE COALESCE(JSON_TYPE(JSON_EXTRACT(j.tickets,'$.ids')),'')<>'ARRAY'
+   OR JSON_LENGTH(JSON_EXTRACT(j.tickets,'$.ids'))<>JSON_EXTRACT(j.tickets,'$.count')) THEN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='RISK_TICKETS_TRUNCATED';
+ END IF;
  INSERT INTO risk_alerts(bike_id,score,level,reasons,ticket_ids,fingerprint,rule_version,recommendation)
  SELECT bike_id,score,level,reasons,ticket_ids,fingerprint,p_version,'请检查相关部件并结合工单历史确认车辆状态'
  FROM JSON_TABLE(v_new,'$[*]' COLUMNS(
   bike_id BIGINT UNSIGNED PATH '$.bike_id',score INT PATH '$.score',level VARCHAR(10) PATH '$.level',
-  reasons JSON PATH '$.reasons',ticket_ids JSON PATH '$.ticket_ids',fingerprint CHAR(64) PATH '$.fingerprint')) j;
+  reasons JSON PATH '$.reasons',ticket_ids JSON PATH '$.tickets.ids',fingerprint CHAR(64) PATH '$.fingerprint')) j;
  INSERT INTO audit_logs(actor_id,action,entity_type,entity_id,detail)
  VALUES(p_actor,'RISK_REFRESH','risk_alerts',NULL,JSON_OBJECT('rule_version',p_version,'evaluated',p_evaluated,'created',JSON_LENGTH(v_new)));
  SELECT r.id FROM JSON_TABLE(v_new,'$[*]' COLUMNS(position FOR ORDINALITY,fingerprint CHAR(64) PATH '$.fingerprint')) j
