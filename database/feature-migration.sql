@@ -19,7 +19,7 @@ migration: BEGIN
   END IF;
   IF EXISTS(SELECT 1 FROM system_settings WHERE name='pdf_expansion' AND
     CASE WHEN CHAR_LENGTH(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')))>2 THEN TRUE
-    ELSE CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)>15 END) THEN
+    ELSE CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)>16 END) THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='UNSUPPORTED_SCHEMA_VERSION: use the matching newer application version';
   END IF;
   SELECT COALESCE(MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)),0) INTO current_version FROM system_settings WHERE name='pdf_expansion';
@@ -48,10 +48,10 @@ migration: BEGIN
       END IF;
     END IF;
   END IF;
-  IF p_preparing OR current_version<15 THEN
+  IF p_preparing OR current_version<16 THEN
     DELETE FROM system_settings WHERE name='procedure_revision';
   END IF;
-  IF current_version = 15 THEN
+  IF current_version = 16 THEN
     SELECT 0 AS migrated;
     LEAVE migration;
   END IF;
@@ -374,6 +374,19 @@ migration: BEGIN
       CREATE INDEX idx_ride_qualification ON ride_orders(qualification_status);
     END IF;
   END IF;
-  INSERT INTO system_settings(name,value) VALUES('pdf_expansion',JSON_OBJECT('version',15,'applied_at',UTC_TIMESTAMP(3))) ON DUPLICATE KEY UPDATE value=VALUES(value);
+  IF current_version < 16 THEN
+    IF EXISTS(SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='ride_orders' AND index_name='idx_ride_user_id') THEN
+      IF (SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='ride_orders' AND index_name='idx_ride_user_id')<>2
+       OR NOT EXISTS(SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='ride_orders' AND index_name='idx_ride_user_id'
+        AND seq_in_index=1 AND column_name='user_id' AND sub_part IS NULL AND non_unique=1 AND index_type='BTREE' AND collation='A' AND is_visible='YES')
+       OR NOT EXISTS(SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='ride_orders' AND index_name='idx_ride_user_id'
+        AND seq_in_index=2 AND column_name='id' AND sub_part IS NULL AND non_unique=1 AND index_type='BTREE' AND collation='A' AND is_visible='YES') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='MIGRATION_RIDE_USER_INDEX_CONFLICT';
+      END IF;
+    ELSE
+      CREATE INDEX idx_ride_user_id ON ride_orders(user_id,id);
+    END IF;
+  END IF;
+  INSERT INTO system_settings(name,value) VALUES('pdf_expansion',JSON_OBJECT('version',16,'applied_at',UTC_TIMESTAMP(3))) ON DUPLICATE KEY UPDATE value=VALUES(value);
   SELECT 1 AS migrated;
 END

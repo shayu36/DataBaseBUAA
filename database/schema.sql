@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS ride_orders (
  active_bike BIGINT UNSIGNED GENERATED ALWAYS AS (CASE WHEN status='RUNNING' THEN bike_id END) STORED UNIQUE,
  FOREIGN KEY(user_id) REFERENCES users(id), FOREIGN KEY(bike_id) REFERENCES bikes(id),
  FOREIGN KEY(start_zone_id) REFERENCES parking_zones(id), FOREIGN KEY(end_zone_id) REFERENCES parking_zones(id), FOREIGN KEY(reviewed_by) REFERENCES users(id),
- INDEX idx_ride_start(start_zone_id,started_at), INDEX idx_ride_end(end_zone_id,ended_at), INDEX idx_ride_user(user_id,started_at), INDEX idx_ride_user_status(user_id,status),
+ INDEX idx_ride_start(start_zone_id,started_at), INDEX idx_ride_end(end_zone_id,ended_at), INDEX idx_ride_user(user_id,started_at), INDEX idx_ride_user_status(user_id,status), INDEX idx_ride_user_id(user_id,id),
  INDEX idx_ride_started_at(started_at), INDEX idx_ride_ended_at(ended_at), INDEX idx_ride_qualification(qualification_status),
  CHECK(amount_cents>=0), CHECK(distance_m>=0), CONSTRAINT chk_ride_return_pair CHECK((return_x IS NULL)=(return_y IS NULL)),
  CONSTRAINT chk_ride_qualification_review CHECK(
