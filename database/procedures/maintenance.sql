@@ -88,6 +88,10 @@ BEGIN
   SET v_status='ACKNOWLEDGED';
   UPDATE risk_alerts SET status=v_status,handler_id=p_actor,resolution_note=p_note,acknowledged_at=UTC_TIMESTAMP(3) WHERE id=p_risk;
  ELSEIF p_action='CREATE_TICKET' THEN
+  IF v_ticket IS NOT NULL AND NOT EXISTS(SELECT 1 FROM maintenance_tickets
+   WHERE id=v_ticket AND bike_id=v_bike AND status IN ('OPEN','ASSIGNED')) THEN
+   SET v_ticket=NULL;
+  END IF;
   IF v_ticket IS NULL THEN
    SELECT id INTO v_ticket FROM maintenance_tickets WHERE active_bike=v_bike;
    IF v_ticket IS NULL THEN

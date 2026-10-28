@@ -639,6 +639,86 @@ test("risk rule produces a versioned alert and operator can link a ticket", asyn
   assert.ok(handled.maintenance_ticket_id);
 });
 
+test("risk ticket action reuses active work and replaces completed work", async () => {
+  const [risk] = await pool.query(
+    "INSERT INTO risk_alerts(bike_id,score,level,reasons,ticket_ids,fingerprint,rule_version,recommendation) VALUES(1,30,'MEDIUM',JSON_ARRAY(),JSON_ARRAY(),REPEAT('c',64),'risk-v1','检查车辆')",
+  );
+  const create = () =>
+    actOnRisk(pool, operator, risk.insertId, "CREATE_TICKET", {
+      note: "检查车辆",
+    });
+  const complete = async (ticketId) => {
+    await business.maintenanceAction(pool, admin, ticketId, "assign", {
+      staff_id: 1,
+    });
+    await business.maintenanceAction(pool, operator, ticketId, "complete", {
+      result: "检查完成",
+    });
+  };
+  const first = await create();
+  assert.equal(
+    (await create()).maintenance_ticket_id,
+    first.maintenance_ticket_id,
+  );
+  await complete(first.maintenance_ticket_id);
+  const external = await business.reportFault(pool, student, {
+    bike_id: 1,
+    fault_type: "BRAKE",
+    description: "再次检查刹车",
+  });
+  const linked = await create();
+  assert.equal(linked.maintenance_ticket_id, external.id);
+  assert.equal((await create()).maintenance_ticket_id, external.id);
+  await complete(external.id);
+  const replacement = await create();
+  assert.notEqual(
+    replacement.maintenance_ticket_id,
+    first.maintenance_ticket_id,
+  );
+  assert.notEqual(replacement.maintenance_ticket_id, external.id);
+  const [tickets] = await pool.query(
+    "SELECT id,status FROM maintenance_tickets WHERE bike_id=1 ORDER BY id",
+  );
+  assert.deepEqual(
+    tickets.map((ticket) => ticket.status),
+    ["COMPLETED", "COMPLETED", "OPEN"],
+  );
+  const [[{ maintenance_ticket_id }]] = await pool.query(
+    "SELECT maintenance_ticket_id FROM risk_alerts WHERE id=?",
+    [risk.insertId],
+  );
+  assert.equal(maintenance_ticket_id, replacement.maintenance_ticket_id);
+  const alert = (await listRiskAlerts(pool)).risks.find(
+    (row) => row.id === risk.insertId,
+  );
+  assert.equal(alert.maintenance_ticket_id, replacement.maintenance_ticket_id);
+  assert.equal(alert.ticket_status, "OPEN");
+  const [audit] = await pool.query(
+    "SELECT DISTINCT CAST(JSON_UNQUOTE(JSON_EXTRACT(detail,'$.ticket_id')) AS UNSIGNED) AS ticket_id FROM audit_logs WHERE action='RISK_CREATE_TICKET' AND entity_id=? ORDER BY ticket_id",
+    [risk.insertId],
+  );
+  assert.deepEqual(
+    audit.map((row) => row.ticket_id),
+    [
+      first.maintenance_ticket_id,
+      external.id,
+      replacement.maintenance_ticket_id,
+    ],
+  );
+  await complete(replacement.maintenance_ticket_id);
+  await pool.query(
+    "UPDATE bikes SET status='RETIRED',current_zone_id=NULL WHERE id=1",
+  );
+  const [[before]] = await pool.query(
+    "SELECT COUNT(*) AS count FROM audit_logs WHERE action='RISK_CREATE_TICKET'",
+  );
+  await assert.rejects(create(), { code: "INVALID_STATE" });
+  const [[after]] = await pool.query(
+    "SELECT COUNT(*) AS count FROM audit_logs WHERE action='RISK_CREATE_TICKET'",
+  );
+  assert.equal(after.count, before.count);
+});
+
 test("risk refresh retains candidates with no historical tickets", async () => {
   await pool.query(
     "UPDATE bikes SET last_service_at=DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 100 DAY) WHERE id=3",
