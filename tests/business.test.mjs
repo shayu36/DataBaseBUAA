@@ -177,6 +177,72 @@ test("return computes server route and fee; duplicate payment gives one payment 
   );
   assert.equal(p.n, 1);
 });
+test("native return charges each started half hour independently of division precision", async () => {
+  const { id } = await business.startRide(pool, user, { bike_id: 1 });
+  const connection = await pool.getConnection();
+  const start = new Date("2026-10-01T00:00:00.000Z");
+  try {
+    await connection.beginTransaction();
+    for (const precision of [0, 4, 12]) {
+      await connection.query("SET SESSION div_precision_increment=?", [
+        precision,
+      ]);
+      for (const [elapsedMs, expected] of [
+        [0, 100],
+        [1, 100],
+        [1_799_999, 100],
+        [1_800_000, 100],
+        [1_800_001, 200],
+        [3_599_999, 200],
+        [3_600_000, 200],
+        [3_600_001, 300],
+      ]) {
+        await connection.query("SAVEPOINT before_return");
+        await connection.query(
+          "UPDATE ride_orders SET started_at=? WHERE id=?",
+          [start, id],
+        );
+        const end = new Date(start.getTime() + elapsedMs);
+        const [result] = await connection.query(
+          "CALL sp_finish_ride_return(?,?,?,?,?,?,?,?,?,?)",
+          [
+            user.id,
+            id,
+            2,
+            500,
+            100,
+            end,
+            "MAP_SIMULATION",
+            "shortest",
+            400,
+            end,
+          ],
+        );
+        assert.equal(
+          result[0][0].amount_cents,
+          expected,
+          `precision=${precision}, elapsed=${elapsedMs}`,
+        );
+        const [[order]] = await connection.query(
+          "SELECT status,amount_cents FROM ride_orders WHERE id=?",
+          [id],
+        );
+        assert.deepEqual(order, { status: "UNPAID", amount_cents: expected });
+        const [payment] = await connection.query("CALL sp_pay_ride(?,?,?)", [
+          user.id,
+          id,
+          "boundary-fee",
+        ]);
+        assert.equal(payment[0][0].amount_cents, expected);
+        await connection.query("ROLLBACK TO SAVEPOINT before_return");
+      }
+    }
+  } finally {
+    await connection.rollback();
+    await connection.query("SET SESSION div_precision_increment=DEFAULT");
+    connection.release();
+  }
+});
 test("ownership enforced for return and payment even for admin", async () => {
   const { id } = await business.startRide(pool, user, { bike_id: 1 });
   await assert.rejects(

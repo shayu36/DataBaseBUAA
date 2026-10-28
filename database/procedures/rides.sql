@@ -360,7 +360,7 @@ BEGIN
  IF v_user<>p_actor_id THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='RETURN_FORBIDDEN'; END IF;
  IF v_order_status<>'RUNNING' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='RETURN_INVALID_STATE'; END IF;
  SET v_elapsed=TIMESTAMPDIFF(MICROSECOND,v_started,p_now);
- SET v_fee=GREATEST(1,CEIL(v_elapsed/1800000000))*100;
+ SET v_fee=GREATEST(1,(v_elapsed+1799999999) DIV 1800000000)*100;
  IF p_distance>=500 AND v_elapsed>0 AND v_elapsed<60000000 THEN
   SET v_qualification='UNDER_REVIEW',v_reason='行程时长与路网估算距离组合异常，需人工复核';
  END IF;

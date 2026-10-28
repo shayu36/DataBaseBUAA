@@ -139,6 +139,18 @@ MySQL 结构变更会隐式提交；迁移失败时应检查错误并从备份�
 
 积分一致性检查和教学查询采用与发放过程相同的计算顺序，先乘历史系数再换算公里，避免 MySQL 会话除法精度设置截断中间距离而产生误报。
 
+归还计费用整数除法按每开始 30 分钟计算，避免 MySQL 会话除法精度改变计费边界。升级不会修改历史订单和支付；如果旧环境调整过 `div_precision_increment`，可先备份，再用以下只读 SQL 核对与当前固定规则不一致的已结束订单，结合历史规则和支付记录人工处理：
+
+```sql
+SELECT id, status, started_at, ended_at, amount_cents,
+       GREATEST(1, (TIMESTAMPDIFF(MICROSECOND, started_at, ended_at)
+                    + 1799999999) DIV 1800000000) * 100 AS expected_cents
+FROM ride_orders
+WHERE status IN ('UNPAID', 'PAID')
+  AND amount_cents <> GREATEST(1, (TIMESTAMPDIFF(MICROSECOND, started_at, ended_at)
+                                   + 1799999999) DIV 1800000000) * 100;
+```
+
 碳规则存放在 `system_settings` 的 `carbon` JSON 对象中。`kg_per_km` 和 `points_per_km` 须为非负数，最大为 `999999999999.99999999`，最多保留八位有效小数；支持数字及数字字符串（包括科学计数法）。字段缺失或 JSON 空值分别使用 `0.21` 和 `10`。`rule_version` 须为不超过 30 个字符、不含控制字符且不全为空格的字符串，缺失、JSON 空值或空字符串使用 `carbon-v1`；字符串 `"null"` 是普通版本名。配置无效时，读取规则的请求返回 `INVALID_CARBON_RULE`，相关支付和记账事务会回滚；请备份后核对并修正配置。
 
 配置精确数值时应使用 JSON 字符串，例如 `"999999999999.99999999"`；MySQL 保存 JSON 数字时可能先产生浮点舍入。首页接口中的当前碳系数和积分比例，以及积分流水中的历史系数和比例，均以十进制字符串返回，防止客户端浮点转换丢失精度；历史未知的比例仍为 `null`。调用方升级时应按字符串处理这些字段。
