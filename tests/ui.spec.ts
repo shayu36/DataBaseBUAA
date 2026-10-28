@@ -1392,6 +1392,112 @@ test("复核较早订单后保留已加载范围并显示新订单", async ({ pa
     ).toHaveCount(1);
 });
 
+for (const [description, remaining] of [
+  ["仍有更早页", [103, 101, 100]],
+  ["缩短到一页", [103]],
+] as const) {
+  test(`连续刷新中复核队列先缩短再增长时保留已加载范围：${description}`, async ({
+    page,
+  }) => {
+    let phase = 0;
+    const ids = () =>
+      phase === 0
+        ? [105, 104, 103, 102, 101, 100]
+        : phase === 1
+          ? remaining
+          : [107, 106, ...remaining];
+    await page.route("**/api/**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === "/api/auth/me")
+        return route.fulfill({
+          json: {
+            user: {
+              id: 1,
+              name: "管理员",
+              email: "admin@test.local",
+              role: "ADMIN",
+              status: "ACTIVE",
+            },
+          },
+        });
+      if (url.pathname === "/api/dashboard")
+        return route.fulfill({ json: regressionDashboard });
+      if (url.pathname === "/api/orders/102/qualification") {
+        phase = 1;
+        return route.fulfill({
+          json: { id: 102, qualification_status: "VALID" },
+        });
+      }
+      if (url.pathname === "/api/admin/users/200/status") {
+        phase = 2;
+        return route.fulfill({ json: { ok: true } });
+      }
+      if (url.pathname === "/api/admin/orders/review") {
+        const before = Number(url.searchParams.get("before") || Infinity);
+        const all = ids().filter((id) => id < before);
+        const orders = all.slice(0, 2).map((id) => ({
+          id,
+          user_name: `用户${id}`,
+          bike_code: `BIKE-${id}`,
+          distance_m: 1000,
+          qualification_reason: "待复核",
+        }));
+        return route.fulfill({
+          json: {
+            orders,
+            next_before: all.length > 2 ? orders.at(-1)?.id : null,
+          },
+        });
+      }
+      if (url.pathname === "/api/admin/users")
+        return route.fulfill({
+          json: {
+            users: [
+              {
+                id: 200,
+                name: "待管理账户",
+                email: "managed@example.test",
+                role: "STUDENT",
+                status: phase === 2 ? "SUSPENDED" : "ACTIVE",
+              },
+            ],
+            next_before: null,
+          },
+        });
+      if (url.pathname === "/api/admin/roads")
+        return route.fulfill({ json: { roads: [] } });
+      if (url.pathname === "/api/return-attempts")
+        return route.fulfill({ json: { attempts: [], next_before: null } });
+      return route.fulfill({ json: {} });
+    });
+    await page.goto("/");
+    await page.getByRole("button", { name: "基础资料", exact: true }).click();
+    await page.getByRole("button", { name: "加载更早待复核订单" }).click();
+    await page
+      .getByRole("row")
+      .filter({ hasText: "BIKE-102" })
+      .getByRole("button", { name: "确认有效" })
+      .click();
+    await expect(
+      page.getByRole("row").filter({ hasText: "BIKE-102" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("row").filter({ hasText: "BIKE-103" }),
+    ).toBeVisible();
+    await page
+      .getByRole("row")
+      .filter({ hasText: "managed@example.test" })
+      .getByRole("button", { name: "停用" })
+      .click();
+    await expect(
+      page.getByRole("row").filter({ hasText: "BIKE-107" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("row").filter({ hasText: "BIKE-103" }),
+    ).toBeVisible();
+  });
+}
+
 test("管理较早账户后保留已加载范围并显示新账户", async ({ page }) => {
   let suspended = false;
   const users = () =>

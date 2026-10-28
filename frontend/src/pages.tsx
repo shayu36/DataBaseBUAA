@@ -303,7 +303,11 @@ function PaginatedRows({
           setBefore(cursor);
           if (lastId != null && lastId <= target) break;
         }
-        oldestLoaded.current = lastId;
+        if (lastId != null)
+          oldestLoaded.current = Math.min(
+            oldestLoaded.current ?? lastId,
+            lastId,
+          );
       } catch (e) {
         if (current === generation.current)
           setError(e instanceof Error ? e.message : "读取历史记录失败");
@@ -312,7 +316,6 @@ function PaginatedRows({
       }
     }
     if (needsRestore) void restorePages();
-    else oldestLoaded.current = null;
     return () => {
       generation.current++;
     };
