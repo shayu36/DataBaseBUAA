@@ -255,6 +255,9 @@ test("schema initialization rejects unknown or malformed migration versions befo
       "UPDATE system_settings SET value=JSON_OBJECT('version','11') WHERE name='pdf_expansion'",
     );
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
+    const [[revisionBefore]] = await pool.query(
+      "SELECT value FROM system_settings WHERE name='procedure_revision'",
+    );
     const versions = [
       ["JSON_OBJECT('version',12)", /UNSUPPORTED_SCHEMA_VERSION/],
       ["JSON_OBJECT('version',999999)", /UNSUPPORTED_SCHEMA_VERSION/],
@@ -291,6 +294,10 @@ test("schema initialization rejects unknown or malformed migration versions befo
       assert.equal(result[0][0].marker, "原有过程");
       const [[user]] = await pool.query("SELECT name FROM users WHERE id=1");
       assert.equal(user.name, "测试用户");
+      const [[revisionAfter]] = await pool.query(
+        "SELECT value FROM system_settings WHERE name='procedure_revision'",
+      );
+      assert.deepEqual(revisionAfter, revisionBefore);
       const [[{ temporary }]] = await pool.query(
         "SELECT COUNT(*) AS temporary FROM information_schema.routines WHERE routine_schema=DATABASE() AND LEFT(routine_name,19)='qingxing_migration_'",
       );

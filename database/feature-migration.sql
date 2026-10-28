@@ -1,6 +1,6 @@
 -- The caller supplies a unique procedure name and drops it after execution.
 -- MySQL DDL implicitly commits; make a backup before migrating an existing database.
-CREATE PROCEDURE __MIGRATION_PROCEDURE__()
+CREATE PROCEDURE __MIGRATION_PROCEDURE__(IN p_preparing BOOLEAN)
 SQL SECURITY INVOKER
 migration: BEGIN
   DECLARE current_version INT DEFAULT 0;
@@ -25,6 +25,9 @@ migration: BEGIN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='UNSUPPORTED_SCHEMA_VERSION: use the matching newer application version';
   END IF;
   SELECT COALESCE(MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)),0) INTO current_version FROM system_settings WHERE name='pdf_expansion';
+  IF p_preparing OR current_version<11 THEN
+    DELETE FROM system_settings WHERE name='procedure_revision';
+  END IF;
   IF current_version = 11 THEN
     SELECT 0 AS migrated;
     LEAVE migration;

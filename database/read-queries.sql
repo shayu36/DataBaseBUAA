@@ -88,7 +88,14 @@ SELECT 1;
 -- name: schema_version_compatible
 SELECT EXISTS(SELECT 1 FROM system_settings WHERE name='pdf_expansion'
  AND JSON_TYPE(JSON_EXTRACT(value,'$.version')) IN ('INTEGER','STRING')
- AND BINARY JSON_UNQUOTE(JSON_EXTRACT(value,'$.version'))=BINARY '11') AS compatible;
+ AND BINARY JSON_UNQUOTE(JSON_EXTRACT(value,'$.version'))=BINARY '11')
+ AND EXISTS(SELECT 1 FROM system_settings WHERE name='procedure_revision'
+ AND BINARY JSON_UNQUOTE(JSON_EXTRACT(value,'$.sha256'))=BINARY ?) AS compatible;
+-- name: clear_procedure_revision
+DELETE FROM system_settings WHERE name='procedure_revision';
+-- name: set_procedure_revision
+INSERT INTO system_settings(name,value) VALUES('procedure_revision',JSON_OBJECT('sha256',?))
+ON DUPLICATE KEY UPDATE value=VALUES(value);
 -- name: repeatable_read
 SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 -- name: consistent_snapshot
@@ -96,7 +103,7 @@ START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY;
 -- name: drop_temporary_procedure
 DROP PROCEDURE IF EXISTS ??;
 -- name: call_temporary_procedure
-CALL ??();
+CALL ??(?);
 -- name: create_application_database
 CREATE DATABASE IF NOT EXISTS ?? CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 -- name: create_restore_database

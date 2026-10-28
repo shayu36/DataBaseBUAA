@@ -13,7 +13,7 @@ try {
   await assertMysqlVersion(pool);
   const result = await withSchemaLock(pool, (connection) =>
     withNamedLock(connection, async () => {
-      const migration = await applyFeatureMigrationsLocked(connection);
+      const migration = await applyFeatureMigrationsLocked(connection, true);
       await applyProcedures(connection);
       return migration;
     }),

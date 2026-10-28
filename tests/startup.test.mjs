@@ -5,7 +5,21 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createPool } from "../backend/db.mjs";
 import { sql } from "../backend/sql-statements.mjs";
-import { applySchema } from "../scripts/sql.mjs";
+import {
+  loadProcedureSources,
+  procedureRevision,
+} from "../backend/procedure-revision.mjs";
+import { applyProcedures, applySchema } from "../scripts/sql.mjs";
+
+test("procedure revision is stable across Linux and Windows line endings", () => {
+  const linux = [{ name: "sample.sql", text: "SELECT 1;\nSELECT 2;\n" }];
+  const windows = [{ name: "sample.sql", text: "SELECT 1;\r\nSELECT 2;\r\n" }];
+  assert.equal(procedureRevision(linux), procedureRevision(windows));
+  assert.notEqual(
+    procedureRevision(linux),
+    procedureRevision([{ name: "sample.sql", text: "SELECT 3;\n" }]),
+  );
+});
 
 test("application refuses an incompatible or missing database version before listening", async () => {
   const database = `campus_bike_startup_test_${randomBytes(4).toString("hex")}`;
@@ -23,6 +37,7 @@ test("application refuses an incompatible or missing database version before lis
     created = true;
     pool = createPool({ ...credentials, database });
     await applySchema(pool);
+    const revision = procedureRevision(await loadProcedureSources());
     for (const expression of [
       "JSON_OBJECT('version',11)",
       "JSON_OBJECT('version','11')",
@@ -32,6 +47,7 @@ test("application refuses an incompatible or missing database version before lis
       );
       const [[{ compatible }]] = await pool.query(
         sql("schema_version_compatible"),
+        [revision],
       );
       assert.equal(compatible, 1);
     }
@@ -76,6 +92,63 @@ test("application refuses an incompatible or missing database version before lis
         );
       await assertStartupRejected(`版本标记 ${expression}`);
     }
+    await pool.query(
+      "INSERT INTO system_settings(name,value) VALUES('pdf_expansion',JSON_OBJECT('version',11)) ON DUPLICATE KEY UPDATE value=VALUES(value)",
+    );
+    await pool.query(
+      "UPDATE system_settings SET value=JSON_OBJECT('sha256',REPEAT('0',64)) WHERE name='procedure_revision'",
+    );
+    await assertStartupRejected("过程摘要不匹配");
+    await pool.query(
+      "DELETE FROM system_settings WHERE name='procedure_revision'",
+    );
+    await assertStartupRejected("缺少过程摘要");
+    await applySchema(pool);
+    const failingPool = {
+      async getConnection() {
+        const connection = await pool.getConnection();
+        return new Proxy(connection, {
+          get(target, property) {
+            if (property === "query")
+              return async (statement, ...args) => {
+                if (statement.startsWith("CREATE TABLE IF NOT EXISTS users"))
+                  throw new Error("模拟结构安装失败");
+                return target.query(statement, ...args);
+              };
+            const value = target[property];
+            return typeof value === "function" ? value.bind(target) : value;
+          },
+        });
+      },
+    };
+    await assert.rejects(applySchema(failingPool), /模拟结构安装失败/);
+    await assertStartupRejected("结构安装中途失败");
+    await applySchema(pool);
+    const connection = await pool.getConnection();
+    try {
+      const failing = new Proxy(connection, {
+        get(target, property) {
+          if (property === "query")
+            return async (statement, ...args) => {
+              if (statement.startsWith("CREATE PROCEDURE sp_dashboard"))
+                throw new Error("模拟过程安装失败");
+              return target.query(statement, ...args);
+            };
+          const value = target[property];
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      await assert.rejects(applyProcedures(failing), /模拟过程安装失败/);
+    } finally {
+      connection.release();
+    }
+    await assertStartupRejected("过程安装中途失败");
+    await applySchema(pool);
+    const [[{ compatible }]] = await pool.query(
+      sql("schema_version_compatible"),
+      [revision],
+    );
+    assert.equal(compatible, 1);
     await pool.query("DROP TABLE system_settings");
     await assertStartupRejected("缺少配置表");
   } finally {

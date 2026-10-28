@@ -7,12 +7,15 @@ import { withNamedLock, withSchemaLock } from "./db.mjs";
 // concurrent invocations do not overwrite another session's migration routine.
 export function applyFeatureMigrations(db) {
   return withSchemaLock(db, (connection) =>
-    withNamedLock(connection, applyFeatureMigrationsLocked),
+    withNamedLock(connection, (locked) => applyFeatureMigrationsLocked(locked)),
   );
 }
 
 // Caller holds both schema and business locks throughout the surrounding DDL.
-export async function applyFeatureMigrationsLocked(connection) {
+export async function applyFeatureMigrationsLocked(
+  connection,
+  preparing = false,
+) {
   const name = `qingxing_migration_${randomBytes(8).toString("hex")}`;
   const migrationSql = await readFile(
     new URL("../database/feature-migration.sql", import.meta.url),
@@ -28,6 +31,7 @@ export async function applyFeatureMigrationsLocked(connection) {
     created = true;
     const [result] = await connection.query(sql("call_temporary_procedure"), [
       name,
+      preparing,
     ]);
     return { applied: result[0][0].migrated ? ["pdf_expansion@11"] : [] };
   } catch (error) {

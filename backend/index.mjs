@@ -1,11 +1,26 @@
-import { createPool, ledgerTransaction, errorCodes } from "./db.mjs";
+import {
+  createPool,
+  ledgerTransaction,
+  errorCodes,
+  withSchemaLock,
+} from "./db.mjs";
 import { createApp } from "./app.mjs";
 import { sql } from "./sql-statements.mjs";
+import {
+  loadProcedureSources,
+  procedureRevision,
+} from "./procedure-revision.mjs";
 const pool = createPool();
 const versionError =
-  "SCHEMA_VERSION_MISMATCH：数据库版本不匹配，请先核对 README 中的初始化和迁移说明。";
+  "SCHEMA_VERSION_MISMATCH：数据库结构或存储过程版本不匹配，请先核对 README 中的初始化和迁移说明。";
 try {
-  const [[{ compatible }]] = await pool.query(sql("schema_version_compatible"));
+  const revision = procedureRevision(await loadProcedureSources());
+  const compatible = await withSchemaLock(pool, async (connection) => {
+    const [[row]] = await connection.query(sql("schema_version_compatible"), [
+      revision,
+    ]);
+    return row.compatible;
+  });
   if (!compatible) throw new Error(versionError);
 } catch (error) {
   await pool.end();

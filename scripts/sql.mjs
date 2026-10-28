@@ -1,18 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { applyFeatureMigrationsLocked } from "../backend/feature-migrations.mjs";
 import { withNamedLock, withSchemaLock } from "../backend/db.mjs";
+import { sql } from "../backend/sql-statements.mjs";
+import {
+  loadProcedureSources,
+  procedureRevision,
+} from "../backend/procedure-revision.mjs";
 
-const procedureFiles = [
-  "campus.sql",
-  "rides.sql",
-  "dispatch.sql",
-  "maintenance.sql",
-  "admin.sql",
-  "reports.sql",
-];
-
-async function* statements(url) {
-  const text = await readFile(url, "utf8");
+function* statements(text, name) {
   let delimiter = ";",
     statement = "";
   for (const line of text.split(/\r?\n/)) {
@@ -28,29 +23,34 @@ async function* statements(url) {
       statement = "";
     }
   }
-  if (statement.trim()) throw new Error(`Unterminated SQL statement: ${url}`);
+  if (statement.trim()) throw new Error(`Unterminated SQL statement: ${name}`);
 }
 
 export async function applyProcedures(connection) {
-  for (const file of procedureFiles) {
-    for await (const sql of statements(
-      new URL(`../database/procedures/${file}`, import.meta.url),
-    )) {
-      await connection.query(sql);
+  await connection.query(sql("clear_procedure_revision"));
+  const sources = await loadProcedureSources();
+  for (const source of sources) {
+    for (const statement of statements(source.text, source.name)) {
+      await connection.query(statement);
     }
   }
+  await connection.query(sql("set_procedure_revision"), [
+    procedureRevision(sources),
+  ]);
 }
 
 export function applySchema(pool) {
   return withSchemaLock(pool, (connection) =>
     withNamedLock(connection, async () => {
-      await applyFeatureMigrationsLocked(connection);
-      for await (const sql of statements(
-        new URL("../database/schema.sql", import.meta.url),
+      await applyFeatureMigrationsLocked(connection, true);
+      const schema = new URL("../database/schema.sql", import.meta.url);
+      for (const statement of statements(
+        await readFile(schema, "utf8"),
+        schema,
       )) {
-        await connection.query(sql);
+        await connection.query(statement);
       }
-      await applyFeatureMigrationsLocked(connection);
+      await applyFeatureMigrationsLocked(connection, true);
       await applyProcedures(connection);
     }),
   );
