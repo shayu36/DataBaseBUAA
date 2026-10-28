@@ -16,7 +16,7 @@
 - POST /rides/start {bike_id} -> {id}
 - GET /rides?status=ALL|RUNNING|UNPAID|PAID&before=编号 -> {rides,next_before}；GET /payments?before=编号 -> {payments,next_before}。均只返回本人数据，按编号倒序每页最多 100 条，next_before 为 null 表示结束。
 - GET /rides/export.csv?status=ALL|RUNNING|UNPAID|PAID 流式导出符合条件的全部本人订单，包含表头和 UTF-8 字节顺序标记，并处理电子表格公式前缀。
-- POST /rides/:id/return {zone_id,x,y,route_mode:'shortest'|'safe'|'comfortable'} -> {id,amount_cents,distance_m}; 坐标按米保留两位小数后用于围栏判断和记录；错误 OUTSIDE_FENCE/ZONE_FULL 保留尝试且订单不结束。
+- POST /rides/:id/return {zone_id,x,y,route_mode?:'shortest'|'safe'|'comfortable',captured_at?:时间,location_source?:'MAP_SIMULATION'|'DEVICE_GPS'|'MANUAL'} -> {id,amount_cents,distance_m}；坐标按米保留两位小数后用于围栏判断和记录，来源缺省为 `MAP_SIMULATION`。`DEVICE_GPS` 必须提供采集时间，缺失或为 null 时返回 HTTP 400 和 `LOCATION_TIMESTAMP_REQUIRED`；模拟或手动输入未提供时间或为 null 时使用服务器接收时间。圈外、过期、站点关闭或车位满等拒还会保存尝试且订单不结束。
 - POST /rides/:id/pay {idempotency_key:string} -> {id,order_id,amount_cents,duplicate:boolean}；请求编号为 8–80 位英文字母、数字、下划线或连字符，区分字母大小写。同一用户用原编号重试已支付订单时返回原结果；编号已用于另一订单时返回 `IDEMPOTENCY_CONFLICT`；使用不同的新编号支付已支付订单时返回 HTTP 409 和 `ORDER_ALREADY_PAID`，该新编号不会被占用。
 - POST /carbon/adjustments {order_id,points_change,carbon_kg_change,reason,idempotency_key}；减排量在 -1000 至 1000 范围内且最多四位有效小数，精度无效返回 HTTP 400 和 `INVALID_ADJUSTMENT_AMOUNT`；请求编号遵循相同字符、长度和大小写规则，人工扣减不得超过账户余额，相同请求编号内容不一致返回 `IDEMPOTENCY_CONFLICT`。
 - GET /carbon/entries?before=编号 -> {entries,next_before}；仅返回当前用户的积分流水，按编号倒序每页最多 100 条，使用 next_before 获取更早记录，null 表示结束。

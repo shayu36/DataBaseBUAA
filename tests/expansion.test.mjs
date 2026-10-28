@@ -1118,6 +1118,64 @@ test("risk ticket creation preserves active ride and dispatch states", async () 
   );
 });
 
+test("device GPS requires a capture timestamp before any return writes", async () => {
+  const ride = await business.startRide(pool, student, { bike_id: 1 });
+  await assert.rejects(
+    pool.query("CALL sp_prepare_ride_return(?,?,?,?,?,?,?)", [
+      student.id,
+      ride.id,
+      2,
+      500,
+      100,
+      null,
+      "DEVICE_GPS",
+    ]),
+    { sqlMessage: "LOCATION_TIMESTAMP_REQUIRED" },
+  );
+  await assert.rejects(
+    business.returnRide(pool, student, ride.id, {
+      zone_id: 2,
+      x: 500,
+      y: 100,
+      location_source: "DEVICE_GPS",
+    }),
+    { code: "LOCATION_TIMESTAMP_REQUIRED", status: 400 },
+  );
+  await assert.rejects(
+    business.returnRide(pool, student, ride.id, {
+      zone_id: 2,
+      x: 500,
+      y: 100,
+      captured_at: null,
+      location_source: "DEVICE_GPS",
+    }),
+    { code: "LOCATION_TIMESTAMP_REQUIRED", status: 400 },
+  );
+  const [[state]] = await pool.query(
+    "SELECT r.status,b.status bike_status,(SELECT COUNT(*) FROM return_attempts WHERE order_id=r.id) attempts FROM ride_orders r JOIN bikes b ON b.id=r.bike_id WHERE r.id=?",
+    [ride.id],
+  );
+  assert.deepEqual(state, {
+    status: "RUNNING",
+    bike_status: "RIDING",
+    attempts: 0,
+  });
+  const capturedAt = new Date(Date.now() + 1000).toISOString();
+  await business.returnRide(pool, student, ride.id, {
+    zone_id: 2,
+    x: 500,
+    y: 100,
+    captured_at: capturedAt,
+    location_source: "DEVICE_GPS",
+  });
+  const [[completed]] = await pool.query(
+    "SELECT location_captured_at,location_source FROM ride_orders WHERE id=?",
+    [ride.id],
+  );
+  assert.equal(completed.location_captured_at.toISOString(), capturedAt);
+  assert.equal(completed.location_source, "DEVICE_GPS");
+});
+
 test("stale location is rejected, retained and then reviewed", async () => {
   const ride = await business.startRide(pool, student, { bike_id: 1 });
   await assert.rejects(

@@ -720,6 +720,26 @@ test("HTTP lifecycle has private orders and one payment", async () => {
   const id = started.data.id;
   const adminView = await request("/api/dashboard", undefined, adminCookie);
   assert.equal(adminView.data.rides.length, 0);
+  const noGpsTime = await request(
+    "/api/rides/" + id + "/return",
+    { zone_id: 2, x: 500, y: 100, location_source: "DEVICE_GPS" },
+    studentCookie,
+  );
+  assert.equal(noGpsTime.status, 400);
+  assert.equal(noGpsTime.data.code, "LOCATION_TIMESTAMP_REQUIRED");
+  const nullGpsTime = await request(
+    "/api/rides/" + id + "/return",
+    {
+      zone_id: 2,
+      x: 500,
+      y: 100,
+      captured_at: null,
+      location_source: "DEVICE_GPS",
+    },
+    studentCookie,
+  );
+  assert.equal(nullGpsTime.status, 400);
+  assert.equal(nullGpsTime.data.code, "LOCATION_TIMESTAMP_REQUIRED");
   const bad = await request(
     "/api/rides/" + id + "/return",
     { zone_id: 2, x: 0, y: 0 },

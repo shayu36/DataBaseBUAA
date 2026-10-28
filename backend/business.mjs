@@ -65,7 +65,10 @@ export async function returnRide(pool, user, id, input) {
       zone_id: idSchema,
       x: coord,
       y: coord,
-      captured_at: z.coerce.date().optional(),
+      captured_at: z.preprocess(
+        (value) => (value === null ? undefined : value),
+        z.coerce.date().optional(),
+      ),
       location_source: z
         .enum(["MAP_SIMULATION", "DEVICE_GPS", "MANUAL"])
         .default("MAP_SIMULATION"),
@@ -93,6 +96,11 @@ export async function returnRide(pool, user, id, input) {
         ZONE_NOT_FOUND: ["记录不存在", "NOT_FOUND", 404],
         RETURN_FORBIDDEN: ["不能操作他人订单", "FORBIDDEN", 403],
         RETURN_INVALID_STATE: ["该订单不在骑行中", "INVALID_STATE", 409],
+        LOCATION_TIMESTAMP_REQUIRED: [
+          "设备 GPS 定位必须提供采集时间",
+          "LOCATION_TIMESTAMP_REQUIRED",
+          400,
+        ],
       },
     );
     if (prepared.rejected) return prepared;
