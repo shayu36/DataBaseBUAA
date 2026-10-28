@@ -106,6 +106,127 @@ test("Beihang official map names landmarks and selects parking zones after zoom"
   await expect(page.getByLabel("借车停车点")).toHaveValue("1");
   await expect(page.getByLabel("归还横坐标（米）")).toHaveCount(0);
 });
+test("模拟路网按需读取数据库状态，失败可重试并随数据刷新", async ({ page }) => {
+  let calls = 0;
+  await page.route("**/api/road-graph", async (route) => {
+    calls++;
+    if (calls === 1)
+      return route.fulfill({ status: 503, json: { error: "暂不可用" } });
+    return route.fulfill({
+      json: {
+        nodes: [
+          { id: 1, x: 100, y: 100 },
+          { id: 2, x: 200, y: 100 },
+          { id: 3, x: 300, y: 100 },
+          { id: 4, x: 400, y: 100 },
+        ],
+        edges: [
+          {
+            id: 1,
+            from_node_id: 1,
+            to_node_id: 2,
+            status: calls === 2 ? "CLOSED" : "OPEN",
+          },
+          { id: 2, from_node_id: 2, to_node_id: 3, status: "NO_RIDE" },
+          { id: 3, from_node_id: 3, to_node_id: 4, status: "OPEN" },
+        ],
+      },
+    });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  const map = page.getByLabel("学生骑行地图");
+  const toggle = map.getByRole("button", { name: "模拟路网" });
+  expect(calls).toBe(0);
+  await toggle.click();
+  await expect(map.getByText(/路网加载失败/)).toBeVisible();
+  await expect(map.locator("[data-road-status]")).toHaveCount(0);
+  await toggle.click();
+  await toggle.click();
+  await expect(map.locator('[data-road-status="CLOSED"]')).toHaveCount(1);
+  await expect(map.locator('[data-road-status="NO_RIDE"]')).toHaveCount(1);
+  await expect(map.locator('[data-road-status="OPEN"]')).toHaveCount(1);
+  await page.getByRole("button", { name: "刷新数据" }).click();
+  await expect(map.locator('[data-road-status="CLOSED"]')).toHaveCount(0);
+  await expect(map.locator('[data-road-status="OPEN"]')).toHaveCount(2);
+  expect(calls).toBe(3);
+});
+
+test("模拟路网图层反映当前数据库道路状态", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  const map = page.getByLabel("学生骑行地图");
+  await expect(map).toBeVisible();
+  const response = await page.request.get("/api/road-graph");
+  expect(response.ok()).toBeTruthy();
+  const { edges } = await response.json();
+  await map.getByRole("button", { name: "模拟路网" }).click();
+  for (const status of ["OPEN", "CLOSED", "NO_RIDE"]) {
+    await expect(map.locator(`[data-road-status="${status}"]`)).toHaveCount(
+      edges.filter((edge: any) => edge.status === status).length,
+    );
+  }
+});
+
+test("关闭并重新打开路网图层不会使用过期请求", async ({ page }) => {
+  let calls = 0;
+  let release = () => {};
+  let finish = () => {};
+  const delayed = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const finished = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  await page.route("**/api/road-graph", async (route) => {
+    calls++;
+    const first = calls === 1;
+    if (first) await delayed;
+    try {
+      await route
+        .fulfill({
+          json: {
+            nodes: [
+              { id: 1, x: 100, y: 100 },
+              { id: 2, x: 200, y: 100 },
+            ],
+            edges: [
+              {
+                id: 1,
+                from_node_id: 1,
+                to_node_id: 2,
+                status: first ? "OPEN" : "CLOSED",
+              },
+            ],
+          },
+        })
+        .catch(() => {});
+    } finally {
+      if (first) finish();
+    }
+  });
+  try {
+    await page.goto("/");
+    await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
+    await page.getByRole("button", { name: "登录青行", exact: true }).click();
+    const map = page.getByLabel("学生骑行地图");
+    const toggle = map.getByRole("button", { name: "模拟路网" });
+    await toggle.click();
+    await expect.poll(() => calls).toBe(1);
+    await toggle.click();
+    await toggle.click();
+    await expect(map.locator('[data-road-status="CLOSED"]')).toHaveCount(1);
+    release();
+    await finished;
+    await expect(map.locator('[data-road-status="OPEN"]')).toHaveCount(0);
+    expect(calls).toBe(2);
+  } finally {
+    release();
+  }
+});
+
 test("demo admin opens dashboard without a database design page", async ({
   page,
 }) => {

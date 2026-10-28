@@ -129,6 +129,7 @@ export function Overview({ d, user }: Props) {
           role={user.role}
           tickets={d.tickets}
           dispatches={d.dispatches}
+          graphRefresh={d}
         />
         <section className="panel">
           <div className="section-head">
@@ -300,6 +301,7 @@ export function Rides({ d, run }: Props) {
       <CampusMap
         zones={d.zones}
         bikes={d.bikes}
+        graphRefresh={d}
         onSelect={(z) => {
           if (active) {
             setReturnZone(z.id);

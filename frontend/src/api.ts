@@ -1,7 +1,12 @@
-export async function api<T = any>(path: string, body?: unknown): Promise<T> {
+export async function api<T = any>(
+  path: string,
+  body?: unknown,
+  options?: { signal?: AbortSignal },
+): Promise<T> {
   const response = await fetch("/api" + path, {
     credentials: "include",
     headers: { "Content-Type": "application/json" },
+    signal: options?.signal,
     ...(body !== undefined
       ? { method: "POST", body: JSON.stringify(body) }
       : {}),

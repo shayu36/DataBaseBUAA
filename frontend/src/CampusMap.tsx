@@ -8,6 +8,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import campus from "../../database/campus-map.json";
+import { api } from "./api";
 import type { Row, User } from "./types";
 
 const landmarks = [
@@ -32,6 +33,7 @@ export function CampusMap({
   role = "STUDENT",
   tickets = [],
   dispatches = [],
+  graphRefresh,
 }: {
   zones: Row[];
   bikes: Row[];
@@ -40,12 +42,15 @@ export function CampusMap({
   role?: User["role"];
   tickets?: Row[];
   dispatches?: Row[];
+  graphRefresh?: object;
 }) {
   const [selected, setSelected] = useState<number>();
   const [zoom, setZoom] = useState(1);
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">(
     "loading",
   );
+  const [graph, setGraph] = useState<{ nodes: Row[]; edges: Row[] }>();
+  const [graphError, setGraphError] = useState("");
   const [layers, setLayers] = useState({
     roads: false,
     restrictions: true,
@@ -54,19 +59,19 @@ export function CampusMap({
   const id = useId();
   const maxX = campus.width;
   const maxY = campus.height;
-  const nodes: Row[] = route?.nodes || campus.nodes;
-  const edges: Row[] = route?.edges || campus.edges;
-  const openEdges = edges.filter((edge) => edge.status !== "NO_RIDE");
-  const forbiddenEdges = edges.filter((edge) => edge.status === "NO_RIDE");
+  const nodes: Row[] = route?.nodes || graph?.nodes || [];
+  const edges: Row[] = route?.edges || graph?.edges || [];
+  const nodesById = new Map(nodes.map((node) => [Number(node.id), node]));
   const selectedZone = zones.find((zone) => zone.id === selected);
   const taskZones = new Map<number, number>();
+  const bikesById = new Map(bikes.map((bike) => [Number(bike.id), bike]));
   const addTask = (zoneId: unknown) => {
     const id = Number(zoneId);
     if (id) taskZones.set(id, (taskZones.get(id) || 0) + 1);
   };
   for (const ticket of tickets) {
     if (ticket.status === "COMPLETED") continue;
-    addTask(bikes.find((bike) => bike.id === ticket.bike_id)?.current_zone_id);
+    addTask(bikesById.get(Number(ticket.bike_id))?.current_zone_id);
   }
   for (const task of dispatches) {
     if (!["PENDING", "IN_PROGRESS"].includes(task.status)) continue;
@@ -91,7 +96,7 @@ export function CampusMap({
     return "available";
   };
   const points = (route?.path || [])
-    .map((id: number) => nodes.find((n) => n.id === id))
+    .map((id: number) => nodesById.get(Number(id)))
     .filter(Boolean)
     .map((n: Row) => `${n.x},${n.y}`)
     .join(" ");
@@ -100,6 +105,26 @@ export function CampusMap({
     onSelect?.(z);
   };
   useEffect(() => setSelected(undefined), [zones.length]);
+  useEffect(() => {
+    if (!layers.roads || route) return;
+    let active = true;
+    const controller = new AbortController();
+    setGraph(undefined);
+    setGraphError("");
+    api<{ nodes: Row[]; edges: Row[] }>("/road-graph", undefined, {
+      signal: controller.signal,
+    })
+      .then((value) => {
+        if (active) setGraph(value);
+      })
+      .catch((error) => {
+        if (active) setGraphError((error as Error).message);
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [layers.roads, route, graphRefresh]);
   return (
     <section
       className={`map-shell map-role-${role.toLowerCase()}`}
@@ -169,8 +194,15 @@ export function CampusMap({
             {label}
           </button>
         ))}
-        <span>官方底图展示全校道路；家属区道路纳入骑行范围</span>
+        <span>路网状态来自数据库；线条不表示行驶方向</span>
       </div>
+      {layers.roads && !route && !graph && (
+        <p className="muted" role="status">
+          {graphError
+            ? `路网加载失败：${graphError}；可关闭图层后重试。`
+            : "正在加载路网…"}
+        </p>
+      )}
       <div
         className="map-viewport"
         tabIndex={0}
@@ -212,29 +244,31 @@ export function CampusMap({
           />
           {layers.roads && (
             <g className="map-roads-on-plan" fill="none" strokeLinecap="round">
-              {openEdges.map((edge) => {
-                const a = nodes.find((node) => node.id === edge.from_node_id);
-                const b = nodes.find((node) => node.id === edge.to_node_id);
+              {edges.map((edge) => {
+                const a = nodesById.get(Number(edge.from_node_id));
+                const b = nodesById.get(Number(edge.to_node_id));
+                const status = edge.status || "OPEN";
                 return a && b ? (
                   <path
                     key={edge.id}
+                    data-road-status={status}
                     d={"M" + a.x + " " + a.y + " L" + b.x + " " + b.y}
-                    stroke="#087f91"
-                    strokeWidth="4"
-                    strokeOpacity=".48"
-                  />
-                ) : null;
-              })}
-              {forbiddenEdges.map((edge) => {
-                const a = nodes.find((node) => node.id === edge.from_node_id);
-                const b = nodes.find((node) => node.id === edge.to_node_id);
-                return a && b ? (
-                  <path
-                    key={"closed-" + edge.id}
-                    d={"M" + a.x + " " + a.y + " L" + b.x + " " + b.y}
-                    stroke="#d94b55"
-                    strokeWidth="5"
-                    strokeDasharray="9 7"
+                    stroke={
+                      status === "OPEN"
+                        ? "#087f91"
+                        : status === "CLOSED"
+                          ? "#b52238"
+                          : "#b04c05"
+                    }
+                    strokeWidth={status === "OPEN" ? "4" : "5"}
+                    strokeOpacity={status === "OPEN" ? ".65" : "1"}
+                    strokeDasharray={
+                      status === "OPEN"
+                        ? undefined
+                        : status === "CLOSED"
+                          ? "4 5"
+                          : "9 7"
+                    }
                   />
                 ) : null;
               })}
@@ -426,6 +460,9 @@ export function CampusMap({
         )}
       </div>
       <div className="map-legend">
+        {layers.roads && (
+          <span>路网：青色开放 · 红色短虚线关闭 · 橙色长虚线禁行</span>
+        )}
         <span>
           <i className="legend-academic" />
           教学 / 科研

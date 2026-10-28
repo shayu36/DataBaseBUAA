@@ -322,6 +322,10 @@ export function createApp(pool) {
   app.post("/api/profile/leaderboard", async (req, res) =>
     res.json(await updateLeaderboardProfile(pool, req.user, req.body)),
   );
+  app.get("/api/road-graph", async (_req, res) => {
+    const [nodes, edges] = await readSnapshot(pool, routeGraph);
+    res.json({ nodes, edges });
+  });
   app.get("/api/routes", async (req, res) => {
     const mode = z
       .enum(["shortest", "safe", "comfortable", "all"])

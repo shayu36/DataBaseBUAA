@@ -876,6 +876,20 @@ test("ride CSV exports all filtered personal orders and protects spreadsheet cel
   }
 });
 test("route API validates modes and schema endpoint reflects real objects", async () => {
+  assert.equal((await request("/api/road-graph")).status, 401);
+  await pool.query(
+    "UPDATE road_edges SET status='CLOSED' WHERE from_node_id=1 AND to_node_id=2",
+  );
+  try {
+    const graph = await request("/api/road-graph", undefined, studentCookie);
+    assert.equal(graph.status, 200);
+    assert.equal(graph.data.nodes.length, 2);
+    assert.equal(graph.data.edges[0].status, "CLOSED");
+  } finally {
+    await pool.query(
+      "UPDATE road_edges SET status='OPEN' WHERE from_node_id=1 AND to_node_id=2",
+    );
+  }
   assert.equal(
     (
       await request(
