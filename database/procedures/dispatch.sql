@@ -135,7 +135,11 @@ BEGIN
  CLOSE suggestions;
  INSERT INTO audit_logs(actor_id,action,entity_type,entity_id,detail)
  VALUES(p_actor,'SUGGESTIONS_GENERATE','dispatch_suggestions',NULL,JSON_OBJECT('filter',p_filter,'count',JSON_LENGTH(v_ids)));
- SELECT id FROM JSON_TABLE(v_ids,'$[*]' COLUMNS(position FOR ORDINALITY,id BIGINT UNSIGNED PATH '$')) ids ORDER BY position;
+ SELECT s.id,s.source_zone_id,s.target_zone_id,a.name AS source_name,b.name AS target_name,s.quantity,s.desired_inventory,
+  s.source_available,s.target_occupied,s.target_capacity,s.target_reserved,s.borrow_count,s.return_count,s.reason,s.status
+ FROM JSON_TABLE(v_ids,'$[*]' COLUMNS(position FOR ORDINALITY,id BIGINT UNSIGNED PATH '$')) ids
+ JOIN dispatch_suggestions s ON s.id=ids.id JOIN parking_zones a ON a.id=s.source_zone_id JOIN parking_zones b ON b.id=s.target_zone_id
+ ORDER BY ids.position;
 END$$
 DELIMITER ;
 
@@ -199,12 +203,17 @@ SQL SECURITY INVOKER
 BEGIN
  WITH RECURSIVE chunks AS (
   SELECT 0 AS n UNION ALL SELECT n+1 FROM chunks WHERE n<9
+ ), demand_by_zone AS (
+  SELECT zone_id,SUM(borrow_count) AS borrow_count,SUM(return_count) AS return_count
+  FROM JSON_TABLE(p_demand,'$[*]' COLUMNS(zone_id BIGINT UNSIGNED PATH '$.zone_id',borrow_count INT PATH '$.borrow_count' NULL ON EMPTY,return_count INT PATH '$.return_count' NULL ON EMPTY)) demand
+  GROUP BY zone_id
  ), base AS (
   SELECT z.id,z.name,z.capacity,z.available,z.occupied,z.reserved,
+   COALESCE(d.borrow_count,0) AS borrow_count,COALESCE(d.return_count,0) AS return_count,
    LEAST(CEIL(z.capacity*0.8),GREATEST(CEIL(z.capacity*0.4),CEIL(z.capacity*0.4+(COALESCE(d.borrow_count,0)-COALESCE(d.return_count,0))*0.2))) AS desired
   FROM JSON_TABLE(p_zones,'$[*]' COLUMNS(id BIGINT UNSIGNED PATH '$.id',name VARCHAR(60) PATH '$.name',capacity INT PATH '$.capacity',
    available INT PATH '$.available',occupied INT PATH '$.occupied',reserved INT PATH '$.reserved',status VARCHAR(20) PATH '$.status' NULL ON EMPTY)) z
-  LEFT JOIN JSON_TABLE(p_demand,'$[*]' COLUMNS(zone_id BIGINT UNSIGNED PATH '$.zone_id',borrow_count INT PATH '$.borrow_count' NULL ON EMPTY,return_count INT PATH '$.return_count' NULL ON EMPTY)) d ON d.zone_id=z.id
+  LEFT JOIN demand_by_zone d ON d.zone_id=z.id
   WHERE z.status IS NULL OR z.status='ACTIVE'
  ), states AS (
   SELECT *,GREATEST(0,available-desired) AS supply,GREATEST(0,desired-available) AS need,
@@ -216,10 +225,13 @@ BEGIN
  ), allocations AS (
   SELECT s.id AS source_zone_id,t.id AS target_zone_id,s.name AS source_name,t.name AS target_name,
    CAST(GREATEST(0,LEAST(s.supply_end,t.demand_end)-GREATEST(s.supply_end-s.supply,t.demand_end-LEAST(t.need,t.free))) AS SIGNED) AS quantity,
-   t.desired AS desired_inventory,t.available AS target_available,t.need AS sort_need,s.supply AS sort_supply
+   t.desired AS desired_inventory,t.available AS target_available,t.need AS sort_need,s.supply AS sort_supply,
+   s.available AS source_available,t.occupied AS target_occupied,t.capacity AS target_capacity,t.reserved AS target_reserved,
+   t.borrow_count,t.return_count
   FROM targets t JOIN sources s ON s.supply_end>t.demand_end-LEAST(t.need,t.free) AND t.demand_end>s.supply_end-s.supply
  )
  SELECT a.source_zone_id,a.target_zone_id,a.source_name,a.target_name,LEAST(100,a.quantity-chunks.n*100) AS quantity,a.desired_inventory,
+  a.source_available,a.target_occupied,a.target_capacity,a.target_reserved,a.borrow_count,a.return_count,
   CONCAT('目标库存 ',a.target_available,'，建议保有 ',a.desired_inventory,'；按容量、预留车位及历史净借车需求估算') AS reason
  FROM allocations a JOIN chunks ON chunks.n*100<a.quantity
  ORDER BY a.sort_need DESC,a.target_zone_id,a.sort_supply DESC,a.source_zone_id,chunks.n;

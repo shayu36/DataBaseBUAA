@@ -107,19 +107,34 @@ test("SQL registration preserves the full user id in default aliases", async () 
 });
 
 test("saved dispatch suggestions keep their basis and create a revalidated task", async () => {
+  await pool.query(`INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status) VALUES
+    (2,1,2,1,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 10 MINUTE),DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 9 MINUTE),400,100,'UNPAID'),
+    (2,1,2,1,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 8 MINUTE),DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 7 MINUTE),400,100,'UNPAID')`);
   const generated = await createDispatchSuggestions(pool, admin, { days: 7 });
   assert.ok(generated.suggestions.length > 0);
   const suggestion = generated.suggestions[0];
   const task = await confirmDispatchSuggestion(pool, admin, suggestion.id, 1);
   assert.equal(task.suggestion_id, suggestion.id);
   const [[saved]] = await pool.query(
-    "SELECT status,task_id,algorithm_version,source_available,desired_inventory FROM dispatch_suggestions WHERE id=?",
+    "SELECT status,task_id,algorithm_version,source_available,target_occupied,target_capacity,target_reserved,borrow_count,return_count,desired_inventory FROM dispatch_suggestions WHERE id=?",
     [suggestion.id],
   );
   assert.equal(saved.status, "CONFIRMED");
   assert.equal(saved.task_id, task.id);
   assert.equal(saved.algorithm_version, "demand-balance-v1");
   assert.ok(saved.source_available > saved.desired_inventory);
+  for (const key of [
+    "source_available",
+    "target_occupied",
+    "target_capacity",
+    "target_reserved",
+    "borrow_count",
+    "return_count",
+    "desired_inventory",
+  ])
+    assert.equal(saved[key], suggestion[key]);
+  assert.equal(saved.borrow_count, 2);
+  assert.equal(saved.return_count, 0);
 });
 
 test("large dispatch allocations are split into executable suggestions", async () => {
@@ -136,6 +151,12 @@ test("large dispatch allocations are split into executable suggestions", async (
     [100, 100, 50],
   );
   for (const suggestion of generated.suggestions) {
+    const [[saved]] = await pool.query(
+      "SELECT quantity,source_zone_id,target_zone_id,source_available,target_occupied,target_capacity,target_reserved,borrow_count,return_count,desired_inventory,reason,status FROM dispatch_suggestions WHERE id=?",
+      [suggestion.id],
+    );
+    for (const key of Object.keys(saved))
+      assert.equal(saved[key], suggestion[key]);
     await confirmDispatchSuggestion(pool, admin, suggestion.id, 1);
   }
   const [[totals]] = await pool.query(

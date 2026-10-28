@@ -21,6 +21,8 @@ export function dispatchSuggestions(zones, demand = []) {
       return {
         ...z,
         available,
+        borrow_count: number(d?.borrow_count),
+        return_count: number(d?.return_count),
         desired,
         free: Math.max(
           0,
@@ -49,6 +51,12 @@ export function dispatchSuggestions(zones, demand = []) {
           target_name: target.name,
           quantity: Math.min(100, remaining),
           desired_inventory: target.desired,
+          source_available: source.available,
+          target_occupied: target.occupied,
+          target_capacity: target.capacity,
+          target_reserved: target.reserved,
+          borrow_count: target.borrow_count,
+          return_count: target.return_count,
           reason: `目标库存 ${target.available}，建议保有 ${target.desired}；按容量、预留车位及历史净借车需求估算`,
         });
       source.supply -= quantity;

@@ -228,6 +228,16 @@ test("SQL seed is atomic, repeatable and retains the expected demo data", async 
         expectedSuggestions(allZones, demand),
       );
     }
+    const repeatedDemand = [
+      { zone_id: 2, borrow_count: 3, return_count: 1 },
+      { zone_id: 2, borrow_count: 4, return_count: 2 },
+    ];
+    assert.deepEqual(
+      await dispatchSuggestions(pool, allZones, repeatedDemand),
+      await dispatchSuggestions(pool, allZones, [
+        { zone_id: 2, borrow_count: 7, return_count: 3 },
+      ]),
+    );
     let randomState = 0x12345678;
     const random = (max) => {
       randomState = (Math.imul(randomState, 1664525) + 1013904223) >>> 0;

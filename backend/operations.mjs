@@ -91,24 +91,6 @@ export async function createDispatchSuggestions(pool, actor, rawFilter) {
       filter: window,
     } = await hotspotDemand(c, filter, now);
     const suggestions = await dispatchSuggestions(c, zones, demand);
-    const zonesById = new Map(zones.map((zone) => [zone.id, zone]));
-    const demandById = new Map(
-      demand.map((hotspot) => [hotspot.zone_id, hotspot]),
-    );
-    const candidates = suggestions.map((suggestion) => {
-      const source = zonesById.get(suggestion.source_zone_id);
-      const target = zonesById.get(suggestion.target_zone_id);
-      const demand = demandById.get(target.id);
-      return {
-        ...suggestion,
-        source_available: source.available,
-        target_occupied: target.occupied,
-        target_capacity: target.capacity,
-        target_reserved: target.reserved,
-        borrow_count: demand?.borrow_count || 0,
-        return_count: demand?.return_count || 0,
-      };
-    });
     const [rows] = await c.query(
       "CALL sp_save_dispatch_suggestions(?,?,?,?,?)",
       [
@@ -116,15 +98,10 @@ export async function createDispatchSuggestions(pool, actor, rawFilter) {
         JSON.stringify(filter),
         new Date(window.start),
         new Date(window.end),
-        JSON.stringify(candidates),
+        JSON.stringify(suggestions),
       ],
     );
-    const created = rows[0].map((row, index) => ({
-      id: row.id,
-      ...suggestions[index],
-      status: "OPEN",
-    }));
-    return { suggestions: created, filter: window };
+    return { suggestions: rows[0], filter: window };
   });
 }
 
