@@ -5,6 +5,68 @@ import { createPool } from "../backend/db.mjs";
 import { applyFeatureMigrations } from "../backend/feature-migrations.mjs";
 import { applySchema } from "../scripts/sql.mjs";
 
+test("review queue index migrates safely from version 14 and can be retried", async () => {
+  const database = `campus_bike_review_test_${randomBytes(4).toString("hex")}`;
+  const credentials = {
+    user: process.env.DB_ADMIN_USER,
+    password: process.env.DB_ADMIN_PASSWORD,
+  };
+  const admin = createPool({ ...credentials, database: undefined });
+  let pool,
+    created = false;
+  try {
+    await admin.query(`CREATE DATABASE \`${database}\` CHARACTER SET utf8mb4`);
+    created = true;
+    pool = createPool({ ...credentials, database });
+    await applySchema(pool);
+    await pool.query(
+      "INSERT INTO users(id,name,email,phone,password_hash) VALUES(1,'学生','review-migration@test.local','13000000000','hash')",
+    );
+    await pool.query(
+      "ALTER TABLE ride_orders DROP INDEX idx_ride_qualification",
+    );
+    await pool.query(
+      "UPDATE system_settings SET value=JSON_OBJECT('version',14) WHERE name='pdf_expansion'",
+    );
+    assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
+      "pdf_expansion@15",
+    ]);
+    const [index] = await pool.query(
+      "SELECT column_name AS column_name,non_unique AS non_unique FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='ride_orders' AND index_name='idx_ride_qualification' ORDER BY seq_in_index",
+    );
+    assert.deepEqual(index, [
+      { column_name: "qualification_status", non_unique: 1 },
+    ]);
+    assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
+    const [[user]] = await pool.query("SELECT name FROM users WHERE id=1");
+    assert.equal(user.name, "学生");
+    await pool.query(
+      "ALTER TABLE ride_orders DROP INDEX idx_ride_qualification, ADD INDEX idx_ride_qualification(status)",
+    );
+    await pool.query(
+      "UPDATE system_settings SET value=JSON_OBJECT('version',14) WHERE name='pdf_expansion'",
+    );
+    await assert.rejects(applyFeatureMigrations(pool), {
+      sqlMessage: "MIGRATION_REVIEW_INDEX_CONFLICT",
+    });
+    const [[marker]] = await pool.query(
+      "SELECT JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS version FROM system_settings WHERE name='pdf_expansion'",
+    );
+    assert.equal(marker.version, "14");
+    await pool.query(
+      "ALTER TABLE ride_orders DROP INDEX idx_ride_qualification",
+    );
+    assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
+      "pdf_expansion@15",
+    ]);
+    assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
+  } finally {
+    if (pool) await pool.end();
+    if (created) await admin.query(`DROP DATABASE \`${database}\``);
+    await admin.end();
+  }
+});
+
 test("feature migration preserves legacy rows and carbon totals and is idempotent", async () => {
   const admin = createPool({
     user: process.env.DB_ADMIN_USER,
@@ -188,7 +250,7 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
         "UPDATE system_settings SET value=JSON_OBJECT('version',0) WHERE name='pdf_expansion'",
       );
       assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
-        "pdf_expansion@14",
+        "pdf_expansion@15",
       ]);
       const [[actualRule]] = await pool.query(
         "SELECT value FROM system_settings WHERE name='carbon'",
@@ -226,7 +288,7 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
       [historicalCredits[0].idempotency_key, historicalCredits[0].id],
     );
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
-      "pdf_expansion@14",
+      "pdf_expansion@15",
     ]);
     assert.deepEqual(
       (
@@ -271,7 +333,7 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
       "UPDATE system_settings SET value=JSON_OBJECT('version',12) WHERE name='pdf_expansion'",
     );
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
-      "pdf_expansion@14",
+      "pdf_expansion@15",
     ]);
     const [[afterViewUpgrade]] = await pool.query(
       "SELECT * FROM v_user_carbon WHERE user_id=1",
@@ -609,7 +671,7 @@ test("legacy carbon migration rejects equal-total rows with conflicting history"
       "UPDATE carbon_ledger SET created_at='2024-01-02 01:00:00.000000' WHERE id=2",
     );
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
-      "pdf_expansion@14",
+      "pdf_expansion@15",
     ]);
     const [awards] = await pool.query(
       "SELECT id,order_id,idempotency_key,distance_m,points_change,carbon_kg_change,rule_version FROM carbon_transactions ORDER BY id",
@@ -683,7 +745,7 @@ test("legacy carbon migration rejects equal-total rows with conflicting history"
     assert.deepEqual(retained, { source_rows: 2, backup_rows: 2 });
     await pool.query("DROP TABLE carbon_ledger");
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, [
-      "pdf_expansion@14",
+      "pdf_expansion@15",
     ]);
     const [[restored]] = await pool.query(
       "SELECT table_type AS kind FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='carbon_ledger'",
@@ -829,14 +891,14 @@ test("schema initialization rejects unknown or malformed migration versions befo
       "INSERT INTO users(id,name,email,phone,password_hash,role) VALUES(1,'测试用户','version@test.local','13700000001','hash','STUDENT')",
     );
     await pool.query(
-      "UPDATE system_settings SET value=JSON_OBJECT('version','14') WHERE name='pdf_expansion'",
+      "UPDATE system_settings SET value=JSON_OBJECT('version','15') WHERE name='pdf_expansion'",
     );
     assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
     const [[revisionBefore]] = await pool.query(
       "SELECT value FROM system_settings WHERE name='procedure_revision'",
     );
     const versions = [
-      ["JSON_OBJECT('version',15)", /UNSUPPORTED_SCHEMA_VERSION/],
+      ["JSON_OBJECT('version',16)", /UNSUPPORTED_SCHEMA_VERSION/],
       ["JSON_OBJECT('version',999999)", /UNSUPPORTED_SCHEMA_VERSION/],
       [
         "CAST('{\"version\":18446744073709551615}' AS JSON)",

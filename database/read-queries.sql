@@ -67,7 +67,7 @@ JOIN road_nodes a ON a.id=e.from_node_id JOIN road_nodes b ON b.id=e.to_node_id 
 -- name: admin_review_orders
 SELECT r.*,u.name user_name,b.code bike_code FROM ride_orders r
 JOIN users u ON u.id=r.user_id JOIN bikes b ON b.id=r.bike_id
-WHERE r.qualification_status='UNDER_REVIEW' ORDER BY r.id DESC;
+WHERE r.qualification_status='UNDER_REVIEW' AND (? IS NULL OR r.id<?) ORDER BY r.id DESC LIMIT 101;
 -- name: admin_users
 SELECT id,name,email,phone,role,status,created_at FROM users ORDER BY id;
 -- name: metadata_columns
@@ -90,7 +90,7 @@ SELECT 1;
 -- name: schema_version_compatible
 SELECT EXISTS(SELECT 1 FROM system_settings WHERE name='pdf_expansion'
  AND JSON_TYPE(JSON_EXTRACT(value,'$.version')) IN ('INTEGER','STRING')
- AND BINARY JSON_UNQUOTE(JSON_EXTRACT(value,'$.version'))=BINARY '14')
+ AND BINARY JSON_UNQUOTE(JSON_EXTRACT(value,'$.version'))=BINARY '15')
  AND EXISTS(SELECT 1 FROM system_settings WHERE name='procedure_revision'
  AND BINARY JSON_UNQUOTE(JSON_EXTRACT(value,'$.sha256'))=BINARY ?) AS compatible;
 -- name: clear_procedure_revision

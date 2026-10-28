@@ -46,6 +46,7 @@ import {
   ticketHistory,
 } from "./history.mjs";
 import { schemaInfo } from "./schema-info.mjs";
+import { pageById } from "./pagination.mjs";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const publicDocuments = new Set(["ER图.svg", "数据库课程设计报告.html"]);
 export function createApp(pool) {
@@ -221,8 +222,14 @@ export function createApp(pool) {
   );
   app.get("/api/admin/orders/review", async (req, res) => {
     requireAdmin(req.user);
-    const [orders] = await pool.query(sql("admin_review_orders"));
-    res.json({ orders });
+    const { before } = z
+      .object({ before: idSchema.optional() })
+      .parse(req.query);
+    const [orders] = await pool.query(sql("admin_review_orders"), [
+      before ?? null,
+      before ?? null,
+    ]);
+    res.json(pageById(orders, "orders"));
   });
   app.get("/api/admin/users", async (req, res) => {
     requireAdmin(req.user);

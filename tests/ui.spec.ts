@@ -1323,6 +1323,75 @@ test("reviewing an older risk keeps the loaded boundary when new alerts arrive",
     ).toHaveCount(1);
 });
 
+test("复核较早订单后保留已加载范围并显示新订单", async ({ page }) => {
+  let reviewed = false;
+  const orders = () =>
+    (reviewed ? [105, 104, 103, 102, 100] : [104, 103, 102, 101, 100]).map(
+      (id) => ({
+        id,
+        user_name: `用户${id}`,
+        bike_code: `BIKE-${id}`,
+        distance_m: 1000,
+        qualification_reason: "待复核",
+      }),
+    );
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: 1,
+            name: "管理员",
+            email: "admin@test.local",
+            role: "ADMIN",
+            status: "ACTIVE",
+          },
+        },
+      });
+    if (url.pathname === "/api/dashboard")
+      return route.fulfill({ json: regressionDashboard });
+    if (url.pathname === "/api/orders/101/qualification") {
+      reviewed = true;
+      return route.fulfill({
+        json: { id: 101, qualification_status: "VALID" },
+      });
+    }
+    if (url.pathname === "/api/admin/orders/review") {
+      const before = Number(url.searchParams.get("before") || Infinity);
+      const all = orders().filter((row) => row.id < before);
+      const pageRows = all.slice(0, 2);
+      return route.fulfill({
+        json: {
+          orders: pageRows,
+          next_before: all.length > 2 ? pageRows.at(-1)?.id : null,
+        },
+      });
+    }
+    if (url.pathname === "/api/admin/users")
+      return route.fulfill({ json: { users: [] } });
+    if (url.pathname === "/api/admin/roads")
+      return route.fulfill({ json: { roads: [] } });
+    if (url.pathname === "/api/return-attempts")
+      return route.fulfill({ json: { attempts: [], next_before: null } });
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "基础资料", exact: true }).click();
+  await page.getByRole("button", { name: "加载更早待复核订单" }).click();
+  const oldRow = page.getByRole("row").filter({ hasText: "BIKE-101" });
+  await expect(oldRow).toBeVisible();
+  await oldRow.getByRole("button", { name: "确认有效" }).click();
+  await expect(
+    page.getByRole("row").filter({ hasText: "BIKE-105" }),
+  ).toBeVisible();
+  await expect(oldRow).toHaveCount(0);
+  for (const id of [105, 104, 103, 102, 100])
+    await expect(
+      page.getByRole("row").filter({ hasText: `BIKE-${id}` }),
+    ).toHaveCount(1);
+});
+
 test("personal and administrator return histories load older records", async ({
   page,
 }) => {

@@ -251,6 +251,86 @@ test("carbon adjustment rejects excess precision through the API", async () => {
   }
 });
 
+test("administrators paginate and review older qualifying orders", async () => {
+  const [inserted] = await pool.query(
+    "INSERT INTO ride_orders(user_id,bike_id,start_zone_id,end_zone_id,started_at,ended_at,distance_m,amount_cents,status,qualification_status,qualification_reason) WITH RECURSIVE n AS (SELECT 1 AS value UNION ALL SELECT value+1 FROM n WHERE value<205) SELECT 2,1,1,2,DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE),UTC_TIMESTAMP(3),1000,100,'UNPAID','UNDER_REVIEW','分页测试' FROM n",
+  );
+  const firstId = inserted.insertId;
+  const lastId = firstId + inserted.affectedRows - 1;
+  try {
+    assert.equal(
+      (await request("/api/admin/orders/review", undefined, studentCookie))
+        .status,
+      403,
+    );
+    assert.equal(
+      (
+        await request(
+          "/api/admin/orders/review?before=0",
+          undefined,
+          adminCookie,
+        )
+      ).status,
+      400,
+    );
+    const first = await request(
+      "/api/admin/orders/review",
+      undefined,
+      adminCookie,
+    );
+    assert.equal(first.status, 200);
+    assert.equal(first.data.orders.length, 100);
+    assert.equal(first.data.next_before, first.data.orders.at(-1).id);
+    const second = await request(
+      `/api/admin/orders/review?before=${first.data.next_before}`,
+      undefined,
+      adminCookie,
+    );
+    assert.equal(second.data.orders.length, 100);
+    const third = await request(
+      `/api/admin/orders/review?before=${second.data.next_before}`,
+      undefined,
+      adminCookie,
+    );
+    assert.equal(third.data.orders.length, 5);
+    assert.equal(third.data.next_before, null);
+    const ids = [
+      ...first.data.orders,
+      ...second.data.orders,
+      ...third.data.orders,
+    ].map((r) => r.id);
+    assert.equal(new Set(ids).size, 205);
+    assert.deepEqual(
+      ids,
+      Array.from({ length: 205 }, (_, i) => lastId - i),
+    );
+    const older = second.data.orders[0].id;
+    const reviewed = await request(
+      `/api/orders/${older}/qualification`,
+      { decision: "VALID", reason: "分页复核" },
+      adminCookie,
+    );
+    assert.equal(reviewed.status, 200);
+    const updated = await request(
+      `/api/admin/orders/review?before=${first.data.next_before}`,
+      undefined,
+      adminCookie,
+    );
+    assert.equal(updated.data.orders.length, 100);
+    assert.ok(!updated.data.orders.some((r) => r.id === older));
+    assert.equal(updated.data.orders[0].id, older - 1);
+  } finally {
+    await pool.query(
+      "DELETE FROM audit_logs WHERE action='ORDER_QUALIFICATION' AND entity_id BETWEEN ? AND ?",
+      [firstId, lastId],
+    );
+    await pool.query("DELETE FROM ride_orders WHERE id BETWEEN ? AND ?", [
+      firstId,
+      lastId,
+    ]);
+  }
+});
+
 test("health identifies campus bike and protected routes need login", async () => {
   assert.equal((await request("/api/health")).data.system, "campus-bike");
   assert.equal((await request("/api/dashboard")).status, 401);

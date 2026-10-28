@@ -260,6 +260,7 @@ function PaginatedRows({
     | "risks"
     | "entries"
     | "rides"
+    | "orders"
     | "dispatches"
     | "tickets";
   label: string;
@@ -1876,6 +1877,7 @@ export function Admin({ d, run }: Props) {
     [attempts, setAttempts] = useState<Row[]>([]),
     [attemptsBefore, setAttemptsBefore] = useState<number | null>(null),
     [reviews, setReviews] = useState<Row[]>([]),
+    [reviewsBefore, setReviewsBefore] = useState<number | null>(null),
     [adjustOrder, setAdjustOrder] = useState(""),
     [adjustPoints, setAdjustPoints] = useState(0),
     [adjustCarbon, setAdjustCarbon] = useState(0),
@@ -1896,6 +1898,7 @@ export function Admin({ d, run }: Props) {
         setAttempts(a.attempts || []);
         setAttemptsBefore(a.next_before ?? null);
         setReviews(q.orders || []);
+        setReviewsBefore(q.next_before ?? null);
         setUserError("");
       })
       .catch((e) => {
@@ -2303,50 +2306,60 @@ export function Admin({ d, run }: Props) {
         <p className="muted">
           短时间内出现异常长距离的订单不会立即发放积分，经人工确认后再记入流水。
         </p>
-        <Table
-          rows={reviews}
-          columns={[
-            {
-              label: "订单 / 用户",
-              render: (r) => `#${r.id} · ${r.user_name}`,
-            },
-            {
-              label: "车辆 / 里程",
-              render: (r) =>
-                `${r.bike_code} · ${(r.distance_m / 1000).toFixed(2)} km`,
-            },
-            { label: "异常依据", render: (r) => r.qualification_reason },
-            {
-              label: "操作",
-              render: (r) => (
-                <div className="actions">
-                  <button
-                    className="tiny"
-                    onClick={() =>
-                      run("/orders/" + r.id + "/qualification", {
-                        decision: "VALID",
-                        reason: "人工复核确认行程数据有效",
-                      })
-                    }
-                  >
-                    确认有效
-                  </button>
-                  <button
-                    className="tiny secondary"
-                    onClick={() =>
-                      run("/orders/" + r.id + "/qualification", {
-                        decision: "EXCLUDED",
-                        reason: "人工复核确认不参与积分统计",
-                      })
-                    }
-                  >
-                    排除
-                  </button>
-                </div>
-              ),
-            },
-          ]}
-        />
+        <PaginatedRows
+          initialRows={reviews}
+          initialBefore={reviewsBefore}
+          path="/admin/orders/review"
+          field="orders"
+          label="加载更早待复核订单"
+        >
+          {(rows) => (
+            <Table
+              rows={rows}
+              columns={[
+                {
+                  label: "订单 / 用户",
+                  render: (r) => `#${r.id} · ${r.user_name}`,
+                },
+                {
+                  label: "车辆 / 里程",
+                  render: (r) =>
+                    `${r.bike_code} · ${(r.distance_m / 1000).toFixed(2)} km`,
+                },
+                { label: "异常依据", render: (r) => r.qualification_reason },
+                {
+                  label: "操作",
+                  render: (r) => (
+                    <div className="actions">
+                      <button
+                        className="tiny"
+                        onClick={() =>
+                          run("/orders/" + r.id + "/qualification", {
+                            decision: "VALID",
+                            reason: "人工复核确认行程数据有效",
+                          })
+                        }
+                      >
+                        确认有效
+                      </button>
+                      <button
+                        className="tiny secondary"
+                        onClick={() =>
+                          run("/orders/" + r.id + "/qualification", {
+                            decision: "EXCLUDED",
+                            reason: "人工复核确认不参与积分统计",
+                          })
+                        }
+                      >
+                        排除
+                      </button>
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          )}
+        </PaginatedRows>
       </section>
       <section className="panel">
         <h2>碳积分人工调整</h2>
