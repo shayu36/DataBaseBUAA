@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { AppError, actorTransaction, callProcedure } from "./db.mjs";
 import { findRoute, findRoutes } from "./analytics.mjs";
+import { sql } from "./sql-statements.mjs";
 export const idSchema = z.coerce.number().int().positive().safe();
 // Reject values that cannot be represented in return_attempts before writing evidence.
 const coord = z.number().finite().min(-99999999.99).max(99999999.99);
@@ -58,8 +59,8 @@ export async function returnRide(pool, user, id, input) {
   const d = z
     .object({
       zone_id: idSchema,
-      x: coord,
-      y: coord,
+      x: coord.optional(),
+      y: coord.optional(),
       captured_at: z.preprocess(
         (value) => (value === null ? undefined : value),
         z.coerce.date().optional(),
@@ -72,8 +73,25 @@ export async function returnRide(pool, user, id, input) {
         .default("shortest"),
     })
     .parse(input);
+  need(
+    (d.x === undefined) === (d.y === undefined) &&
+      (d.x !== undefined || d.location_source === "MAP_SIMULATION"),
+    "模拟还车可只选停车点；设备定位须同时提供横纵坐标",
+    "INVALID_INPUT",
+    400,
+  );
   const orderId = idSchema.parse(id);
   const result = await actorTransaction(pool, user, async (connection) => {
+    let x = d.x,
+      y = d.y;
+    if (x === undefined) {
+      const [[zone]] = await connection.query(sql("return_zone_coordinates"), [
+        d.zone_id,
+      ]);
+      need(zone, "记录不存在", "NOT_FOUND", 404);
+      x = zone.x;
+      y = zone.y;
+    }
     const prepared = await callProcedure(
       connection,
       "CALL sp_prepare_ride_return(?,?,?,?,?,?,?)",
@@ -81,8 +99,8 @@ export async function returnRide(pool, user, id, input) {
         user.id,
         orderId,
         d.zone_id,
-        d.x,
-        d.y,
+        x,
+        y,
         d.captured_at || null,
         d.location_source,
       ],
@@ -112,8 +130,8 @@ export async function returnRide(pool, user, id, input) {
         user.id,
         orderId,
         d.zone_id,
-        d.x,
-        d.y,
+        x,
+        y,
         prepared.captured_at,
         d.location_source,
         d.route_mode,

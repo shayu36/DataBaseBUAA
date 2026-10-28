@@ -20,60 +20,83 @@ try {
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(base);
   await page
-    .getByRole("heading", { name: "让校园的每一程，更轻盈。" })
+    .getByRole("heading", { name: /让校园的每一程，\s*更轻盈。/ })
     .waitFor();
   await page.screenshot({
     path: output + "01-login-desktop.png",
     fullPage: true,
   });
-  await page.getByRole("button", { name: "管理员 · 贾鑫洋" }).click();
-  await page.getByRole("button", { name: "登录青行", exact: true }).click();
-  await page.getByRole("heading", { name: "校园总览", exact: true }).waitFor();
-  const pages = [
-    ["校园总览", "02-overview"],
-    ["骑行与归还", "03-rides"],
-    ["路线规划", "04-routes"],
-    ["碳积分", "05-carbon"],
-    ["运营分析", "06-analytics"],
-    ["维修报修", "07-maintenance"],
-    ["车辆调度", "08-dispatch"],
-    ["基础资料", "09-admin"],
-    ["数据库设计", "10-schema"],
-    ["骑行订单", "11-orders"],
+  const groups = [
+    {
+      account: "管理员 · 贾鑫洋",
+      pages: [
+        ["运营驾驶舱", "02-overview"],
+        ["运营分析", "06-analytics"],
+        ["维修管理", "07-maintenance"],
+        ["车辆调度", "08-dispatch"],
+        ["基础资料", "09-admin"],
+      ],
+    },
+    {
+      account: "学生 · 欧阳晨",
+      pages: [
+        ["骑行首页", "12-student"],
+        ["借车与归还", "03-rides"],
+        ["路线规划", "04-routes"],
+        ["碳积分", "05-carbon"],
+        ["我的订单", "11-orders"],
+        ["我的报修", "13-repair"],
+      ],
+    },
+    {
+      account: "运营员 · 郑一凡",
+      pages: [
+        ["运维工作台", "14-operator"],
+        ["维修工单", "15-tickets"],
+        ["调度任务", "16-dispatch"],
+        ["风险处置", "17-risks"],
+      ],
+    },
   ];
-  for (const width of [1440, 390]) {
-    await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
-    for (const [name, file] of pages) {
-      await page
-        .getByRole("navigation")
-        .getByRole("button", { name, exact: true })
-        .click();
-      await page.getByRole("heading", { name, exact: true }).waitFor();
-      await page.waitForLoadState("networkidle");
-      await expect(page.locator(".loading")).toHaveCount(0);
-      if (name === "数据库设计") {
-        await expect(page.locator(".entity-grid article")).toHaveCount(18);
-        await expect(page.getByText(/trg_payment_guard/)).toBeVisible();
-      }
-      await page.evaluate(() => window.scrollTo(0, 0));
-      const check = {
-        name,
+  for (const group of groups) {
+    await page.getByRole("button", { name: group.account }).click();
+    await page.getByRole("button", { name: "登录青行", exact: true }).click();
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({
         width,
-        overflow: await page.evaluate(
-          () => document.documentElement.scrollWidth > innerWidth,
-        ),
-        alerts: await page.getByRole("alert").allTextContents(),
-      };
-      checks.push(check);
-      await page.screenshot({
-        path: output + file + "-" + width + ".png",
-        fullPage: true,
+        height: width === 1440 ? 1000 : 844,
       });
-      if (name === "校园总览")
-        await page.screenshot({
-          path: output + file + "-" + width + "-viewport.png",
+      for (const [name, file] of group.pages) {
+        await page
+          .getByRole("navigation")
+          .getByRole("button", { name, exact: true })
+          .click();
+        await page
+          .getByRole("heading", { name, exact: true, level: 1 })
+          .waitFor();
+        await page.waitForLoadState("networkidle");
+        await expect(page.locator(".loading")).toHaveCount(0);
+        if (name === "基础资料") {
+          await page.getByRole("button", { name: "查看数据库结构" }).click();
+          await expect(page.locator(".entity-grid article")).toHaveCount(18);
+          await expect(page.getByText(/trg_payment_guard/)).toBeVisible();
+        }
+        await page.evaluate(() => window.scrollTo(0, 0));
+        checks.push({
+          name,
+          width,
+          overflow: await page.evaluate(
+            () => document.documentElement.scrollWidth > innerWidth,
+          ),
+          alerts: await page.getByRole("alert").allTextContents(),
         });
+        await page.screenshot({
+          path: output + file + "-" + width + ".png",
+          fullPage: true,
+        });
+      }
     }
+    await page.getByRole("button", { name: "退出登录" }).click();
   }
   const report = {
     completed: true,

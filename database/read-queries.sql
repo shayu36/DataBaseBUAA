@@ -14,6 +14,13 @@ SELECT CURRENT_USER() AS account;
 SELECT role,status FROM users WHERE id=? FOR UPDATE;
 -- name: session_user
 SELECT id,name,email,phone,role,status,leaderboard_alias,leaderboard_visible FROM users WHERE id=?;
+-- name: return_zone_coordinates
+SELECT x,y FROM parking_zones WHERE id=?;
+-- name: seed_installed
+SELECT EXISTS(SELECT 1 FROM system_settings WHERE name='seed_version') AS installed;
+-- name: campus_map_compatible
+SELECT EXISTS(SELECT 1 FROM system_settings WHERE name='campus_map'
+ AND BINARY JSON_UNQUOTE(JSON_EXTRACT(value,'$.version'))=BINARY ?) AS compatible;
 -- name: login_user
 SELECT id,name,email,phone,role,status,leaderboard_alias,leaderboard_visible,password_hash FROM users WHERE email=?;
 -- name: risk_alerts

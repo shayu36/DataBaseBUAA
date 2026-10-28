@@ -7,6 +7,7 @@ import {
 import { createApp } from "./app.mjs";
 import { sessionSecret } from "./config.mjs";
 import { sql } from "./sql-statements.mjs";
+import campus from "../database/campus-map.json" with { type: "json" };
 import {
   loadProcedureSources,
   procedureRevision,
@@ -17,13 +18,19 @@ const versionError =
   "SCHEMA_VERSION_MISMATCH：数据库结构或存储过程版本不匹配，请先核对 README 中的初始化和迁移说明。";
 try {
   const revision = procedureRevision(await loadProcedureSources());
-  const compatible = await withSchemaLock(pool, async (connection) => {
+  await withSchemaLock(pool, async (connection) => {
     const [[row]] = await connection.query(sql("schema_version_compatible"), [
       revision,
     ]);
-    return row.compatible;
+    if (!row.compatible) throw new Error(versionError);
+    const [[map]] = await connection.query(sql("campus_map_compatible"), [
+      campus.version,
+    ]);
+    if (!map.compatible)
+      throw new Error(
+        "CAMPUS_MAP_VERSION_MISMATCH：校园地图未升级，请先备份并按 README 执行初始化或迁移。",
+      );
   });
-  if (!compatible) throw new Error(versionError);
 } catch (error) {
   await pool.end();
   if (error.code === "ER_NO_SUCH_TABLE")

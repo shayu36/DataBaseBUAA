@@ -8,7 +8,6 @@ import {
   Truck,
   ChartNoAxesCombined,
   Leaf,
-  Database,
   Settings,
   LogOut,
   ArrowRight,
@@ -26,20 +25,35 @@ import {
   RiskAlerts,
   Routes,
   Carbon,
-  Schema,
   Admin,
 } from "./pages";
 import type { User, Dashboard } from "./types";
 const navigation = [
-  { id: "overview", name: "校园总览", icon: LayoutDashboard },
-  { id: "rides", name: "骑行与归还", icon: Bike },
-  { id: "orders", name: "骑行订单", icon: ClipboardList },
-  { id: "routes", name: "路线规划", icon: Map },
-  { id: "carbon", name: "碳积分", icon: Leaf },
-  { id: "maintenance", name: "维修报修", icon: Wrench },
+  {
+    id: "overview",
+    name: {
+      ADMIN: "运营驾驶舱",
+      STUDENT: "骑行首页",
+      OPERATOR: "运维工作台",
+    },
+    icon: LayoutDashboard,
+  },
+  { id: "rides", name: "借车与归还", icon: Bike, roles: ["STUDENT"] },
+  { id: "orders", name: "我的订单", icon: ClipboardList, roles: ["STUDENT"] },
+  { id: "routes", name: "路线规划", icon: Map, roles: ["STUDENT"] },
+  { id: "carbon", name: "碳积分", icon: Leaf, roles: ["STUDENT"] },
+  {
+    id: "maintenance",
+    name: {
+      ADMIN: "维修管理",
+      STUDENT: "我的报修",
+      OPERATOR: "维修工单",
+    },
+    icon: Wrench,
+  },
   {
     id: "dispatch",
-    name: "车辆调度",
+    name: { ADMIN: "车辆调度", OPERATOR: "调度任务" },
     icon: Truck,
     roles: ["ADMIN", "OPERATOR"],
   },
@@ -51,7 +65,6 @@ const navigation = [
   },
   { id: "risks", name: "风险处置", icon: Wrench, roles: ["OPERATOR"] },
   { id: "admin", name: "基础资料", icon: Settings, roles: ["ADMIN"] },
-  { id: "schema", name: "数据库设计", icon: Database },
 ];
 function BeijingDate() {
   const [now, setNow] = useState(() => Date.now());
@@ -86,6 +99,13 @@ function BeijingDate() {
     </span>
   );
 }
+const visibleNavigation = (role: User["role"]) =>
+  navigation
+    .filter((item) => !item.roles || item.roles.includes(role))
+    .map((item) => ({
+      ...item,
+      name: typeof item.name === "string" ? item.name : item.name[role],
+    }));
 function Login({ onLogin }: { onLogin: (u: User) => void }) {
   const [register, setRegister] = useState(false),
     [email, setEmail] = useState(""),
@@ -98,6 +118,11 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
   return (
     <div className="login-page">
       <section className="login-story">
+        <img
+          className="login-photo"
+          src="/buaa-xueyuan-main-building.jpg"
+          alt="北航学院路校区主楼实景"
+        />
         <a className="brand" href="/">
           <span>
             <Bike size={29} />
@@ -106,21 +131,24 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
             青行<small>QINGXING</small>
           </div>
         </a>
-        <span className="eyebrow">BEIHANG · XUEYUAN ROAD CAMPUS</span>
-        <h1>让校园的每一程，更轻盈。</h1>
-        <p>
-          从主楼到新主楼，从图书馆到体育场。
-          <br />
-          一辆自行车，连接校园里的美好日常。
-        </p>
-        <div className="login-illustration">
-          <div className="sun" />
-          <div className="hill" />
-          <Bike size={220} strokeWidth={1.2} />
-          <span>RIDE A LITTLE. CHANGE A LOT.</span>
+        <div className="login-story-copy">
+          <span className="eyebrow">BEIHANG · XUEYUAN ROAD CAMPUS</span>
+          <h1>
+            让校园的每一程，
+            <br />
+            更轻盈。
+          </h1>
+          <p>从主楼到新主楼，一辆自行车连接校园里的每一站。</p>
         </div>
         <small>
-          北航学院路校区共享自行车课程系统 · 校园地图 / 模拟支付 / 模拟碳积分
+          <span>北京航空航天大学 · 学院路校区</span>
+          <a
+            href="https://zs.buaa.edu.cn/xxzl/xyfc.htm"
+            target="_blank"
+            rel="noreferrer"
+          >
+            校园照片：北航招生网 · 主楼盛夏
+          </a>
         </small>
       </section>
       <section className="login-form">
@@ -332,7 +360,10 @@ export default function App() {
   }
   if (initial) return <div className="loading full">正在连接青行…</div>;
   if (!user) return <Login onLogin={setUser} />;
-  const current = navigation.find((n) => n.id === page)!;
+  const roleNavigation = visibleNavigation(user.role);
+  const current =
+    roleNavigation.find((item) => item.id === page) || roleNavigation[0];
+  const activePage = current.id;
   const props = d ? { d, user, run } : undefined;
   const Page = (
     {
@@ -347,7 +378,7 @@ export default function App() {
       carbon: Carbon,
       admin: Admin,
     } as any
-  )[page];
+  )[activePage];
   return (
     <div className="app">
       <aside className="sidebar" inert={busy}>
@@ -361,23 +392,21 @@ export default function App() {
         </a>
         <span className="nav-label">校园出行 CAMPUS</span>
         <nav>
-          {navigation
-            .filter((n) => !n.roles || n.roles.includes(user.role))
-            .map((n) => (
-              <button
-                key={n.id}
-                className={page === n.id ? "active" : ""}
-                onClick={() => {
-                  setPage(n.id);
-                  setNotice("");
-                  setError("");
-                }}
-              >
-                <n.icon size={19} />
-                {n.name}
-                {page === n.id && <span className="nav-dot" />}
-              </button>
-            ))}
+          {roleNavigation.map((n) => (
+            <button
+              key={n.id}
+              className={activePage === n.id ? "active" : ""}
+              onClick={() => {
+                setPage(n.id);
+                setNotice("");
+                setError("");
+              }}
+            >
+              <n.icon size={19} />
+              {n.name}
+              {activePage === n.id && <span className="nav-dot" />}
+            </button>
+          ))}
         </nav>
         <div className="sidebar-bottom">
           <div className="green-note">
@@ -453,9 +482,7 @@ export default function App() {
           inert={busy}
           disabled={busy}
         >
-          {page === "schema" ? (
-            <Schema />
-          ) : props && Page ? (
+          {props && Page ? (
             <Page {...props} />
           ) : (
             <div className="loading">正在读取校园数据…</div>

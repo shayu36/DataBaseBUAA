@@ -17,19 +17,91 @@ type Props = {
   user: User;
   run: (path: string, body: any) => Promise<boolean>;
 };
-export function Overview({ d }: Props) {
+export function Overview({ d, user }: Props) {
+  const roleContent = {
+    STUDENT: {
+      eyebrow: "BEIHANG · STUDENT RIDE",
+      title: "从附近出发，\n轻盈抵达校园每一站。",
+      description: "查看可借车辆与剩余车位，规划避开禁行区的校园路线。",
+      tag: "学院路校区 · 安全骑行从青行开始 ↗",
+    },
+    ADMIN: {
+      eyebrow: "BEIHANG · OPERATIONS CENTER",
+      title: "掌握车辆分布，\n让校园运转更有序。",
+      description: "集中查看站点容量、故障车辆与调度任务，及时处理运营异常。",
+      tag: "学院路校区 · 运营状态实时总览 ↗",
+    },
+    OPERATOR: {
+      eyebrow: "BEIHANG · FIELD OPERATIONS",
+      title: "任务清晰到站，\n维护每一次安全出发。",
+      description: "查看分配给你的维修、调度和风险任务，按站点安排现场作业。",
+      tag: "学院路校区 · 今日运维任务地图 ↗",
+    },
+  }[user.role];
+  const activeTickets = d.tickets.filter(
+    (ticket) => ticket.status !== "COMPLETED",
+  );
+  const activeDispatches = d.dispatches.filter((task) =>
+    ["PENDING", "IN_PROGRESS"].includes(task.status),
+  );
+  const stats: [string, string | number, string][] =
+    user.role === "STUDENT"
+      ? [
+          [
+            "附近可借车辆",
+            d.summary.available_bikes,
+            `全校共 ${d.summary.total_bikes} 辆`,
+          ],
+          [
+            "我的进行中行程",
+            d.actionable_rides.filter((ride) => ride.status === "RUNNING")
+              .length,
+            "归还前请确认围栏与剩余车位",
+          ],
+          [
+            "我的碳积分",
+            d.carbon.points,
+            `累计模拟减排 ${Number(d.carbon.carbon_kg).toFixed(2)} kg`,
+          ],
+          [
+            "我的待处理报修",
+            activeTickets.length,
+            "工单进度可在我的报修中查看",
+          ],
+        ]
+      : user.role === "ADMIN"
+        ? [
+            [
+              "可用自行车",
+              d.summary.available_bikes,
+              `车辆总数 ${d.summary.total_bikes}`,
+            ],
+            [
+              "当前骑行",
+              d.summary.active_rides,
+              `今日完成 ${d.summary.today_rides} 单`,
+            ],
+            ["开放维修工单", activeTickets.length, "待分配与处理中工单"],
+            ["活动调度任务", activeDispatches.length, "待执行与运输中任务"],
+          ]
+        : [
+            ["待处理维修", activeTickets.length, "仅显示当前可处理工单"],
+            ["活动调度", activeDispatches.length, "待执行与运输中任务"],
+            ["可用自行车", d.summary.available_bikes, "现场作业前核对站点库存"],
+            ["停车站点", d.zones.length, "地图标记任务相关站点"],
+          ];
   return (
     <>
-      <div className="hero">
+      <div className={`hero hero-${user.role.toLowerCase()}`}>
         <div>
-          <span className="eyebrow">BEIHANG · XUEYUAN ROAD CAMPUS</span>
+          <span className="eyebrow">{roleContent.eyebrow}</span>
           <h2>
-            风经过校园，
-            <br />
-            也经过你的每一程。
+            {roleContent.title.split("\n").map((line) => (
+              <span key={line}>{line}</span>
+            ))}
           </h2>
-          <p>从北航主楼到新主楼，在学院路校区找到附近的自行车。</p>
-          <span className="hero-tag">学院路校区 · 绿色出行从青行开始 ↗</span>
+          <p>{roleContent.description}</p>
+          <span className="hero-tag">{roleContent.tag}</span>
         </div>
         <div className="hero-bike">
           <Bike size={190} strokeWidth={1.1} />
@@ -41,29 +113,23 @@ export function Overview({ d }: Props) {
         </div>
       </div>
       <div className="stats">
-        <Stat
-          label="可用自行车"
-          value={d.summary.available_bikes}
-          detail={"全校共 " + d.summary.total_bikes + " 辆"}
-        />
-        <Stat
-          label="今日骑行"
-          value={d.summary.today_rides}
-          detail={"当前 " + d.summary.active_rides + " 人正在骑行"}
-        />
-        <Stat
-          label="累计模拟减排"
-          value={Number(d.summary.carbon_kg).toFixed(2) + " kg"}
-          detail="基于已支付行程估算"
-        />
-        <Stat
-          label="待处理报修"
-          value={d.summary.open_tickets}
-          detail="维护让每一程更安心"
-        />
+        {stats.map(([label, value, detail]) => (
+          <Stat
+            key={String(label)}
+            label={label}
+            value={value}
+            detail={detail}
+          />
+        ))}
       </div>
       <div className="overview-grid">
-        <CampusMap zones={d.zones} bikes={d.bikes} />
+        <CampusMap
+          zones={d.zones}
+          bikes={d.bikes}
+          role={user.role}
+          tickets={d.tickets}
+          dispatches={d.dispatches}
+        />
         <section className="panel">
           <div className="section-head">
             <h2>停车区一览</h2>
@@ -97,11 +163,23 @@ export function Overview({ d }: Props) {
   );
 }
 export function Rides({ d, run }: Props) {
-  const [zone, setZone] = useState(d.zones[0]?.id || 0),
-    [x, setX] = useState(d.zones[0]?.x || 0),
-    [y, setY] = useState(d.zones[0]?.y || 0),
-    [capturedAt, setCapturedAt] = useState(() => new Date().toISOString()),
-    [mode, setMode] = useState("shortest");
+  const [borrowZone, setBorrowZone] = useState(
+      d.zones.find((z) => z.status === "ACTIVE" && Number(z.available) > 0)
+        ?.id ||
+        d.zones[0]?.id ||
+        0,
+    ),
+    [returnZone, setReturnZone] = useState(
+      d.zones.find(
+        (z) =>
+          z.status === "ACTIVE" &&
+          Number(z.capacity) > Number(z.occupied) + Number(z.reserved),
+      )?.id ||
+        d.zones[0]?.id ||
+        0,
+    ),
+    [mode, setMode] = useState("shortest"),
+    [capturedAt, setCapturedAt] = useState(() => new Date().toISOString());
   const capture = () => setCapturedAt(new Date().toISOString());
   const active = d.actionable_rides.find((r) => r.status === "RUNNING");
   return (
@@ -112,9 +190,29 @@ export function Rides({ d, run }: Props) {
           <p className="muted">
             每开始 30 分钟 ¥1.00，最低 ¥1.00。里程由服务器路网估算。
           </p>
+          <Field label="借车停车点">
+            <select
+              value={borrowZone}
+              onChange={(e) => setBorrowZone(Number(e.target.value))}
+            >
+              {d.zones.map((z) => (
+                <option
+                  key={z.id}
+                  value={z.id}
+                  disabled={z.status !== "ACTIVE"}
+                >
+                  {z.name}（可借 {z.available} 辆）
+                </option>
+              ))}
+            </select>
+          </Field>
           <div className="bike-grid">
             {d.bikes
-              .filter((b) => b.status === "AVAILABLE")
+              .filter(
+                (b) =>
+                  b.status === "AVAILABLE" &&
+                  Number(b.current_zone_id) === Number(borrowZone),
+              )
               .map((b) => (
                 <article className="bike-card" key={b.id}>
                   <span className="bike-symbol">🚲</span>
@@ -132,6 +230,13 @@ export function Rides({ d, run }: Props) {
                 </article>
               ))}
           </div>
+          {!d.bikes.some(
+            (b) =>
+              b.status === "AVAILABLE" &&
+              Number(b.current_zone_id) === Number(borrowZone),
+          ) && (
+            <p className="muted">该停车点暂无可借车辆，请选择其他停车点。</p>
+          )}
         </section>
         <section className="panel">
           <h2>归还到停车区</h2>
@@ -140,53 +245,28 @@ export function Rides({ d, run }: Props) {
               正在骑行 {active.bike_code} · {date(active.started_at)}
             </p>
           ) : (
-            <p className="muted">
-              借车后可在这里结束行程。点击地图站点会填入站点中心坐标。
-            </p>
+            <p className="muted">借车后在这里选择停车点，完成模拟还车。</p>
           )}
-          <Field label="归还停车区">
+          <Field label="归还停车点">
             <select
-              value={zone}
+              value={returnZone}
               onChange={(e) => {
-                const z = d.zones.find((z) => z.id === Number(e.target.value));
-                if (z) {
-                  setZone(z.id);
-                  setX(z.x);
-                  setY(z.y);
-                  capture();
-                }
+                setReturnZone(Number(e.target.value));
+                capture();
               }}
             >
               {d.zones.map((z) => (
-                <option key={z.id} value={z.id}>
+                <option
+                  key={z.id}
+                  value={z.id}
+                  disabled={z.status !== "ACTIVE"}
+                >
                   {z.name}（空位{" "}
                   {Math.max(0, z.capacity - z.occupied - z.reserved)}）
                 </option>
               ))}
             </select>
           </Field>
-          <div className="form-row">
-            <Field label="归还横坐标（米）">
-              <input
-                type="number"
-                value={x}
-                onChange={(e) => {
-                  setX(Number(e.target.value));
-                  capture();
-                }}
-              />
-            </Field>
-            <Field label="归还纵坐标（米）">
-              <input
-                type="number"
-                value={y}
-                onChange={(e) => {
-                  setY(Number(e.target.value));
-                  capture();
-                }}
-              />
-            </Field>
-          </div>
           <Field label="行程路线偏好">
             <select value={mode} onChange={(e) => setMode(e.target.value)}>
               <option value="shortest">最短路线</option>
@@ -196,7 +276,7 @@ export function Rides({ d, run }: Props) {
           </Field>
           <p className="muted">
             模拟位置采集于 {date(capturedAt)}
-            。选点或修改坐标会重新采集；圈外、定位过期或车位已满时会记录尝试并保留骑行订单。
+            。选择停车点会重新采集；定位过期或车位已满时会记录尝试并保留骑行订单。
           </p>
           <button className="secondary" onClick={capture}>
             重新采集模拟位置
@@ -206,9 +286,7 @@ export function Rides({ d, run }: Props) {
             onClick={() =>
               active &&
               run("/rides/" + active.id + "/return", {
-                zone_id: zone,
-                x,
-                y,
+                zone_id: returnZone,
                 route_mode: mode,
                 captured_at: capturedAt,
                 location_source: "MAP_SIMULATION",
@@ -223,15 +301,10 @@ export function Rides({ d, run }: Props) {
         zones={d.zones}
         bikes={d.bikes}
         onSelect={(z) => {
-          setZone(z.id);
-          setX(z.x);
-          setY(z.y);
-          capture();
-        }}
-        onPoint={(a, b) => {
-          setX(a);
-          setY(b);
-          capture();
+          if (active) {
+            setReturnZone(z.id);
+            capture();
+          } else setBorrowZone(z.id);
         }}
       />
       <section className="panel">
@@ -506,59 +579,64 @@ export function Maintenance({ d, user, run }: Props) {
     [result, setResult] = useState("");
   return (
     <>
-      <section className="panel">
-        <h2>发现问题，交给我们</h2>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            run("/maintenance", {
-              bike_id: bike,
-              fault_type: fault,
-              description: desc,
-            });
-          }}
-        >
-          <div className="form-row">
-            <Field label="车辆">
-              <select
-                value={bike}
-                onChange={(e) => setBike(Number(e.target.value))}
-              >
-                {d.bikes.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.code}
-                  </option>
-                ))}
-              </select>
+      {user.role === "STUDENT" && (
+        <section className="panel">
+          <h2>发现问题，交给我们</h2>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              run("/maintenance", {
+                bike_id: bike,
+                fault_type: fault,
+                description: desc,
+              });
+            }}
+          >
+            <div className="form-row">
+              <Field label="车辆">
+                <select
+                  value={bike}
+                  onChange={(e) => setBike(Number(e.target.value))}
+                >
+                  {d.bikes.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.code}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="故障类型">
+                <select
+                  value={fault}
+                  onChange={(e) => setFault(e.target.value)}
+                >
+                  {Object.entries({
+                    BRAKE: "刹车",
+                    TIRE: "轮胎",
+                    LOCK: "车锁",
+                    CHAIN: "链条",
+                    OTHER: "其他",
+                  }).map(([k, v]) => (
+                    <option key={k} value={k}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <Field label="问题描述">
+              <textarea
+                required
+                minLength={3}
+                value={desc}
+                onChange={(e) => setDesc(e.target.value)}
+                placeholder="请描述故障发生位置与具体情况"
+              />
             </Field>
-            <Field label="故障类型">
-              <select value={fault} onChange={(e) => setFault(e.target.value)}>
-                {Object.entries({
-                  BRAKE: "刹车",
-                  TIRE: "轮胎",
-                  LOCK: "车锁",
-                  CHAIN: "链条",
-                  OTHER: "其他",
-                }).map(([k, v]) => (
-                  <option key={k} value={k}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-          <Field label="问题描述">
-            <textarea
-              required
-              minLength={3}
-              value={desc}
-              onChange={(e) => setDesc(e.target.value)}
-              placeholder="请描述故障发生位置与具体情况"
-            />
-          </Field>
-          <button>提交报修</button>
-        </form>
-      </section>
+            <button>提交报修</button>
+          </form>
+        </section>
+      )}
       <section className="panel">
         <h2>维护工单</h2>
         {user.role !== "STUDENT" && (
@@ -1921,6 +1999,7 @@ type PendingAdjustment = {
 };
 
 export function Admin({ d, user, run }: Props) {
+  const [showSchema, setShowSchema] = useState(false);
   const adjustmentStorageKey = `qingxing-adjustment-${user.id}`;
   const [pendingAdjustment, setPendingAdjustment] =
     useState<PendingAdjustment | null>(() => {
@@ -1994,6 +2073,15 @@ export function Admin({ d, user, run }: Props) {
   };
   return (
     <>
+      <section className="panel">
+        <button
+          className="secondary"
+          onClick={() => setShowSchema(!showSchema)}
+        >
+          {showSchema ? "收起数据库结构" : "查看数据库结构"}
+        </button>
+      </section>
+      {showSchema && <Schema />}
       <section className="panel">
         <div className="tabs">
           {[

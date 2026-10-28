@@ -150,6 +150,25 @@ test("full station rejects return without losing bike", async () => {
     { code: "ZONE_FULL" },
   );
 });
+test("station-only simulated return records the selected station centre", async () => {
+  const { id } = await business.startRide(pool, user, { bike_id: 1 });
+  await business.returnRide(pool, user, id, {
+    zone_id: 2,
+    route_mode: "shortest",
+    location_source: "MAP_SIMULATION",
+  });
+  const [[order]] = await pool.query(
+    "SELECT end_zone_id,return_x,return_y,location_source,status FROM ride_orders WHERE id=?",
+    [id],
+  );
+  assert.deepEqual(order, {
+    end_zone_id: 2,
+    return_x: 500,
+    return_y: 100,
+    location_source: "MAP_SIMULATION",
+    status: "UNPAID",
+  });
+});
 test("return computes server route and fee; duplicate payment gives one payment and credit", async () => {
   const { id } = await business.startRide(pool, user, { bike_id: 1 });
   const r = await business.returnRide(pool, user, id, {

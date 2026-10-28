@@ -13,22 +13,28 @@ DELIMITER ;
 -- and serializes ledger changes; a customized graph is never overwritten.
 DROP PROCEDURE IF EXISTS sp_upgrade_campus_map;
 DELIMITER $$
-CREATE PROCEDURE sp_upgrade_campus_map(IN campus JSON)
+CREATE PROCEDURE sp_upgrade_campus_map(IN campus JSON, IN campus_v1 JSON, IN campus_v2 JSON)
 SQL SECURITY INVOKER
 upgrade_map: BEGIN
  DECLARE current_version VARCHAR(100);
+ DECLARE prior_campus JSON;
  SET current_version=(SELECT JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) FROM system_settings WHERE name='campus_map');
  IF EXISTS(SELECT 1 FROM system_settings WHERE name='campus_map') THEN
-  IF NOT (BINARY current_version <=> BINARY JSON_UNQUOTE(JSON_EXTRACT(campus,'$.version'))) THEN
+  IF BINARY current_version <=> BINARY JSON_UNQUOTE(JSON_EXTRACT(campus,'$.version')) THEN
+   SELECT 0 AS migrated;
+   LEAVE upgrade_map;
+  END IF;
+  IF NOT (BINARY current_version <=> BINARY 'beihang-xueyuan-1' OR BINARY current_version <=> BINARY 'beihang-xueyuan-2') THEN
    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Unknown campus map version; explicit migration required.';
   END IF;
-  SELECT 0 AS migrated;
-  LEAVE upgrade_map;
  END IF;
  IF EXISTS(SELECT 1 FROM ride_orders WHERE status='RUNNING') OR EXISTS(SELECT 1 FROM dispatch_tasks WHERE status IN ('PENDING','IN_PROGRESS')) THEN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Campus map update requires no active rides or dispatches.';
  END IF;
- IF (SELECT COUNT(*) FROM parking_zones)<>6 OR (SELECT COUNT(*) FROM road_nodes)<>8 OR (SELECT COUNT(*) FROM road_edges)<>13
+ IF EXISTS(SELECT 1 FROM audit_logs WHERE entity_type='road_edges') THEN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Refusing to overwrite a customized map; explicit mapping required.';
+ END IF;
+ IF current_version IS NULL AND ((SELECT COUNT(*) FROM parking_zones)<>6 OR (SELECT COUNT(*) FROM road_nodes)<>8 OR (SELECT COUNT(*) FROM road_edges)<>13
  OR (SELECT COUNT(*) FROM parking_zones z JOIN JSON_TABLE(
   '[[1,"东门驿站","校园东门 · 主入口",160,440],[2,"图书馆","图书馆南侧 · 知行广场",450,180],[3,"教学楼","第一教学楼 · 东侧",760,210],[4,"学生公寓","学生生活区 · 榕树路",210,750],[5,"中心食堂","中心食堂 · 北广场",530,550],[6,"运动场","体育中心 · 西门",850,700]]', '$[*]'
   COLUMNS(id INT PATH '$[0]',name VARCHAR(60) PATH '$[1]',location VARCHAR(160) PATH '$[2]',x INT PATH '$[3]',y INT PATH '$[4]')) e
@@ -48,26 +54,58 @@ upgrade_map: BEGIN
      AND r.surface=CASE WHEN MOD(r.id,5)=0 THEN 'ROUGH' WHEN MOD(r.id,2)=0 THEN 'AVERAGE' ELSE 'SMOOTH' END
      AND r.shade_level=LEAST(5,2+MOD(r.id,4)) AND r.lighting_level=5-MOD(r.id,3)
      AND r.traffic_mix=CASE WHEN MOD(r.id,7)=0 THEN 'MOTOR_HEAVY' WHEN MOD(r.id,3)=0 THEN 'BIKE_ONLY' ELSE 'MIXED' END
-     AND r.intersection_risk=MOD(r.id,4))))<>13
- OR EXISTS(SELECT 1 FROM audit_logs WHERE entity_type='road_edges') THEN
+     AND r.intersection_risk=MOD(r.id,4))))<>13)
+ THEN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Refusing to overwrite a customized map; explicit mapping required.';
+ END IF;
+ IF current_version IS NOT NULL THEN
+  SET prior_campus=IF(BINARY current_version=BINARY 'beihang-xueyuan-1',campus_v1,campus_v2);
+  IF (SELECT COUNT(*) FROM parking_zones)<>JSON_LENGTH(prior_campus,'$.zones')
+  OR (SELECT COUNT(*) FROM road_nodes)<>JSON_LENGTH(prior_campus,'$.nodes')
+  OR (SELECT COUNT(*) FROM road_edges)<>JSON_LENGTH(prior_campus,'$.edges')
+  OR (SELECT COUNT(*) FROM parking_zones z JOIN JSON_TABLE(prior_campus,'$.zones[*]' COLUMNS(
+   id INT PATH '$.id',name VARCHAR(60) PATH '$.name',location VARCHAR(160) PATH '$.location',
+   x DECIMAL(10,2) PATH '$.x',y DECIMAL(10,2) PATH '$.y')) e
+   ON z.id=e.id AND BINARY z.name=BINARY e.name AND BINARY z.location=BINARY e.location
+   AND z.x=e.x AND z.y=e.y AND z.radius=35)<>JSON_LENGTH(prior_campus,'$.zones')
+  OR (SELECT COUNT(*) FROM road_nodes n JOIN JSON_TABLE(prior_campus,'$.nodes[*]' COLUMNS(
+   id INT PATH '$.id',name VARCHAR(60) PATH '$.name',x DECIMAL(10,2) PATH '$.x',
+   y DECIMAL(10,2) PATH '$.y',zone_id INT PATH '$.zone_id' NULL ON EMPTY)) e
+   ON n.id=e.id AND BINARY n.name=BINARY e.name AND n.x=e.x AND n.y=e.y AND n.zone_id <=> e.zone_id)<>JSON_LENGTH(prior_campus,'$.nodes')
+  OR (SELECT COUNT(*) FROM road_edges r JOIN JSON_TABLE(prior_campus,'$.edges[*]' COLUMNS(
+   id INT PATH '$.id',from_id INT PATH '$.from_node_id',to_id INT PATH '$.to_node_id',
+   distance_m INT PATH '$.distance_m',safety DECIMAL(6,2) PATH '$.safety_cost',comfort DECIMAL(6,2) PATH '$.comfort_cost',
+   direction VARCHAR(10) PATH '$.direction' NULL ON EMPTY,status VARCHAR(10) PATH '$.status' NULL ON EMPTY)) e
+   ON r.from_node_id=e.from_id AND r.to_node_id=e.to_id AND r.distance_m=e.distance_m
+    AND r.safety_cost=e.safety AND r.comfort_cost=e.comfort
+    AND BINARY r.direction=BINARY COALESCE(e.direction,'BOTH') AND BINARY r.status=BINARY COALESCE(e.status,'OPEN')
+    AND r.attribute_source='SIMULATED_COURSE_DATA'
+    AND r.slope_percent=(CAST(MOD(e.id,5) AS SIGNED)-2)*1.5
+    AND r.surface=CASE WHEN MOD(e.id,5)=0 THEN 'ROUGH' WHEN MOD(e.id,2)=0 THEN 'AVERAGE' ELSE 'SMOOTH' END
+    AND r.shade_level=LEAST(5,2+MOD(e.id,4)) AND r.lighting_level=5-MOD(e.id,3)
+    AND r.traffic_mix=CASE WHEN MOD(e.id,7)=0 THEN 'MOTOR_HEAVY' WHEN MOD(e.id,3)=0 THEN 'BIKE_ONLY' ELSE 'MIXED' END
+    AND r.intersection_risk=MOD(e.id,4))<>JSON_LENGTH(prior_campus,'$.edges') THEN
+   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Refusing to overwrite a customized map; explicit mapping required.';
+  END IF;
  END IF;
  UPDATE parking_zones z JOIN JSON_TABLE(campus,'$.zones[*]' COLUMNS(
   id INT PATH '$.id',name VARCHAR(60) PATH '$.name',location VARCHAR(160) PATH '$.location',x DECIMAL(10,2) PATH '$.x',y DECIMAL(10,2) PATH '$.y')) s ON z.id=s.id
  SET z.name=s.name,z.location=s.location,z.x=s.x,z.y=s.y,z.radius=35;
  DELETE FROM road_edges;
+ DELETE FROM road_nodes;
  INSERT INTO road_nodes(id,name,x,y,zone_id)
  SELECT id,name,x,y,zone_id FROM JSON_TABLE(campus,'$.nodes[*]' COLUMNS(
-  id INT PATH '$.id',name VARCHAR(60) PATH '$.name',x DECIMAL(10,2) PATH '$.x',y DECIMAL(10,2) PATH '$.y',zone_id INT PATH '$.zone_id' NULL ON EMPTY)) n
- ON DUPLICATE KEY UPDATE name=VALUES(name),x=VALUES(x),y=VALUES(y),zone_id=VALUES(zone_id);
+  id INT PATH '$.id',name VARCHAR(60) PATH '$.name',x DECIMAL(10,2) PATH '$.x',y DECIMAL(10,2) PATH '$.y',zone_id INT PATH '$.zone_id' NULL ON EMPTY)) n;
  INSERT INTO road_edges(from_node_id,to_node_id,distance_m,safety_cost,comfort_cost,direction,status,slope_percent,surface,shade_level,lighting_level,traffic_mix,intersection_risk,attribute_source)
- SELECT from_id,to_id,distance_m,safety_cost,comfort_cost,'BOTH','OPEN',
+ SELECT from_id,to_id,distance_m,safety_cost,comfort_cost,COALESCE(direction,'BOTH'),COALESCE(status,'OPEN'),
   (CAST(MOD(id,5) AS SIGNED)-2)*1.5,CASE WHEN MOD(id,5)=0 THEN 'ROUGH' WHEN MOD(id,2)=0 THEN 'AVERAGE' ELSE 'SMOOTH' END,
   LEAST(5,2+MOD(id,4)),5-MOD(id,3),CASE WHEN MOD(id,7)=0 THEN 'MOTOR_HEAVY' WHEN MOD(id,3)=0 THEN 'BIKE_ONLY' ELSE 'MIXED' END,
   MOD(id,4),'SIMULATED_COURSE_DATA'
  FROM JSON_TABLE(campus,'$.edges[*]' COLUMNS(id INT PATH '$.id',from_id INT PATH '$.from_node_id',to_id INT PATH '$.to_node_id',
-  distance_m INT PATH '$.distance_m',safety_cost DECIMAL(6,2) PATH '$.safety_cost',comfort_cost DECIMAL(6,2) PATH '$.comfort_cost')) e;
- INSERT INTO system_settings(name,value) VALUES('campus_map',JSON_OBJECT('version',JSON_UNQUOTE(JSON_EXTRACT(campus,'$.version')),'source',JSON_UNQUOTE(JSON_EXTRACT(campus,'$.source'))));
+  distance_m INT PATH '$.distance_m',safety_cost DECIMAL(6,2) PATH '$.safety_cost',comfort_cost DECIMAL(6,2) PATH '$.comfort_cost',
+  direction VARCHAR(10) PATH '$.direction' NULL ON EMPTY,status VARCHAR(10) PATH '$.status' NULL ON EMPTY)) e;
+ INSERT INTO system_settings(name,value) VALUES('campus_map',JSON_OBJECT('version',JSON_UNQUOTE(JSON_EXTRACT(campus,'$.version')),'source',JSON_UNQUOTE(JSON_EXTRACT(campus,'$.source'))))
+ ON DUPLICATE KEY UPDATE value=VALUES(value);
  SELECT 1 AS migrated;
 END$$
 DELIMITER ;

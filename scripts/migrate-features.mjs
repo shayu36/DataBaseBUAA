@@ -1,5 +1,12 @@
-import { createPool, withNamedLock, withSchemaLock } from "../backend/db.mjs";
+import {
+  createPool,
+  ledgerTransaction,
+  withNamedLock,
+  withSchemaLock,
+} from "../backend/db.mjs";
 import { applyFeatureMigrationsLocked } from "../backend/feature-migrations.mjs";
+import { upgradeCampusMap } from "../backend/campus.mjs";
+import { sql } from "../backend/sql-statements.mjs";
 import { applyProcedures, refreshTriggerCatalogue } from "./sql.mjs";
 import { assertMysqlVersion } from "./mysql-version.mjs";
 
@@ -16,6 +23,8 @@ try {
       const migration = await applyFeatureMigrationsLocked(connection, true);
       await refreshTriggerCatalogue(connection);
       await applyProcedures(connection);
+      const [[{ installed }]] = await connection.query(sql("seed_installed"));
+      if (installed) await ledgerTransaction(connection, upgradeCampusMap);
       return migration;
     }),
   );

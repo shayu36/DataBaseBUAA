@@ -194,6 +194,33 @@ test("application refuses an incompatible or missing database version before lis
       [revision],
     );
     assert.equal(compatible, 1);
+    for (const marker of [null, "beihang-xueyuan-1"]) {
+      await pool.query("DELETE FROM system_settings WHERE name='campus_map'");
+      if (marker)
+        await pool.query(
+          "INSERT INTO system_settings(name,value) VALUES('campus_map',JSON_OBJECT('version',?))",
+          [marker],
+        );
+      const result = spawnSync(
+        process.execPath,
+        [fileURLToPath(new URL("../backend/index.mjs", import.meta.url))],
+        {
+          env: {
+            ...process.env,
+            DB_NAME: database,
+            DB_USER: credentials.user,
+            DB_PASSWORD: credentials.password,
+            HOST: "127.0.0.1",
+            PORT: "0",
+          },
+          encoding: "utf8",
+          timeout: 5000,
+        },
+      );
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /CAMPUS_MAP_VERSION_MISMATCH/);
+      assert.doesNotMatch(result.stdout, /Qingxing ready/);
+    }
     await pool.query("DROP TABLE system_settings");
     await assertStartupRejected("缺少配置表");
   } finally {
