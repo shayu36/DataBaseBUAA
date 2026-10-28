@@ -12,8 +12,20 @@ migration: BEGIN
     SELECT 0 AS migrated;
     LEAVE migration;
   END IF;
+  IF EXISTS(SELECT 1 FROM system_settings WHERE name='pdf_expansion' AND (
+    COALESCE(JSON_TYPE(JSON_EXTRACT(value,'$.version')),'') NOT IN ('INTEGER','UNSIGNED INTEGER','STRING') OR
+    COALESCE(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')),'')='' OR
+    JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) REGEXP '[^0-9]' OR
+    (CHAR_LENGTH(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')))>1 AND LEFT(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')),1)='0'))) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='INVALID_SCHEMA_VERSION: reconcile the migration marker before continuing';
+  END IF;
+  IF EXISTS(SELECT 1 FROM system_settings WHERE name='pdf_expansion' AND
+    CASE WHEN CHAR_LENGTH(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')))>2 THEN TRUE
+    ELSE CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)>11 END) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='UNSUPPORTED_SCHEMA_VERSION: use the matching newer application version';
+  END IF;
   SELECT COALESCE(MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(value,'$.version')) AS UNSIGNED)),0) INTO current_version FROM system_settings WHERE name='pdf_expansion';
-  IF current_version >= 11 THEN
+  IF current_version = 11 THEN
     SELECT 0 AS migrated;
     LEAVE migration;
   END IF;

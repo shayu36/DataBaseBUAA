@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { createPool } from "../backend/db.mjs";
 import { applyFeatureMigrations } from "../backend/feature-migrations.mjs";
+import { applySchema } from "../scripts/sql.mjs";
 
 test("feature migration preserves legacy rows and carbon totals and is idempotent", async () => {
   const admin = createPool({
@@ -222,6 +224,81 @@ test("feature migration preserves legacy rows and carbon totals and is idempoten
   } finally {
     await pool.end();
     await admin.query(`DROP DATABASE IF EXISTS \`${dbName}\``);
+    await admin.end();
+  }
+});
+
+test("schema initialization rejects unknown or malformed migration versions before changing existing objects", async () => {
+  const database = `campus_bike_version_test_${randomBytes(4).toString("hex")}`;
+  const credentials = {
+    user: process.env.DB_ADMIN_USER,
+    password: process.env.DB_ADMIN_PASSWORD,
+  };
+  const admin = createPool({ ...credentials, database: undefined });
+  let pool,
+    created = false;
+  try {
+    await admin.query(
+      `CREATE DATABASE \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci`,
+    );
+    created = true;
+    pool = createPool({ ...credentials, database });
+    await applySchema(pool);
+    await pool.query("DROP PROCEDURE sp_dashboard");
+    await pool.query(
+      "CREATE PROCEDURE sp_dashboard(IN p_user BIGINT UNSIGNED, IN p_role VARCHAR(20)) SELECT '原有过程' AS marker",
+    );
+    await pool.query(
+      "INSERT INTO users(id,name,email,phone,password_hash,role) VALUES(1,'测试用户','version@test.local','13700000001','hash','STUDENT')",
+    );
+    await pool.query(
+      "UPDATE system_settings SET value=JSON_OBJECT('version','11') WHERE name='pdf_expansion'",
+    );
+    assert.deepEqual((await applyFeatureMigrations(pool)).applied, []);
+    const versions = [
+      ["JSON_OBJECT('version',12)", /UNSUPPORTED_SCHEMA_VERSION/],
+      ["JSON_OBJECT('version',999999)", /UNSUPPORTED_SCHEMA_VERSION/],
+      [
+        "CAST('{\"version\":18446744073709551615}' AS JSON)",
+        /UNSUPPORTED_SCHEMA_VERSION/,
+      ],
+      [
+        "JSON_OBJECT('version','999999999999999999999')",
+        /UNSUPPORTED_SCHEMA_VERSION/,
+      ],
+      ["JSON_OBJECT('version',NULL)", /INVALID_SCHEMA_VERSION/],
+      ["JSON_OBJECT()", /INVALID_SCHEMA_VERSION/],
+      ["JSON_OBJECT('version','invalid')", /INVALID_SCHEMA_VERSION/],
+      [
+        "JSON_OBJECT('version',CONCAT('11',CHAR(10)))",
+        /INVALID_SCHEMA_VERSION/,
+      ],
+      ["JSON_OBJECT('version','01')", /INVALID_SCHEMA_VERSION/],
+      ["JSON_OBJECT('version','+11')", /INVALID_SCHEMA_VERSION/],
+      ["JSON_OBJECT('version',-1)", /INVALID_SCHEMA_VERSION/],
+      ["JSON_OBJECT('version',1.5)", /INVALID_SCHEMA_VERSION/],
+    ];
+    for (const [expression, expected] of versions) {
+      await pool.query(
+        `UPDATE system_settings SET value=${expression} WHERE name='pdf_expansion'`,
+      );
+      await assert.rejects(applyFeatureMigrations(pool), expected);
+      await assert.rejects(applySchema(pool), expected);
+      const [result] = await pool.query("CALL sp_dashboard(?,?)", [
+        1,
+        "STUDENT",
+      ]);
+      assert.equal(result[0][0].marker, "原有过程");
+      const [[user]] = await pool.query("SELECT name FROM users WHERE id=1");
+      assert.equal(user.name, "测试用户");
+      const [[{ temporary }]] = await pool.query(
+        "SELECT COUNT(*) AS temporary FROM information_schema.routines WHERE routine_schema=DATABASE() AND LEFT(routine_name,19)='qingxing_migration_'",
+      );
+      assert.equal(temporary, 0);
+    }
+  } finally {
+    if (pool) await pool.end();
+    if (created) await admin.query(`DROP DATABASE \`${database}\``);
     await admin.end();
   }
 });
