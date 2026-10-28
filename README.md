@@ -121,7 +121,7 @@ WHERE u.id IS NULL OR NOT (BINARY s.name <=> BINARY u.name)
 
 该查询仅用于尚未完成员工字段迁移的旧库；迁移完成后，姓名和电话只存在于用户表。
 
-迁移报 `UNSUPPORTED_SCHEMA_VERSION` 时，数据库来自更新的应用版本，应使用与该数据库匹配的版本；报 `INVALID_SCHEMA_VERSION` 时，应核对备份和 `system_settings` 中的迁移标记。不要通过修改版本号绕过检查。
+启动时会核对数据库迁移标记；标记缺失或不匹配时，应用在监听端口前报 `SCHEMA_VERSION_MISMATCH`。先核对数据库和代码版本；对于需要升级的旧库，备份后执行 `npm run db:migrate`。迁移报 `UNSUPPORTED_SCHEMA_VERSION` 时，数据库来自更新的应用版本，应使用与该数据库匹配的版本；报 `INVALID_SCHEMA_VERSION` 时，应核对备份和 `system_settings` 中的迁移标记。不要通过修改版本号绕过检查。启动检查只验证版本标记；升级后仍应按上文执行数据检查。
 
 ## 目录与文档
 

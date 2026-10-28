@@ -85,6 +85,10 @@ SELECT DATABASE() db,(SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM bi
 (SELECT COUNT(*) FROM ride_orders) rides,(SELECT COUNT(*) FROM payments) payments;
 -- name: health
 SELECT 1;
+-- name: schema_version_compatible
+SELECT EXISTS(SELECT 1 FROM system_settings WHERE name='pdf_expansion'
+ AND JSON_TYPE(JSON_EXTRACT(value,'$.version')) IN ('INTEGER','STRING')
+ AND BINARY JSON_UNQUOTE(JSON_EXTRACT(value,'$.version'))=BINARY '11') AS compatible;
 -- name: repeatable_read
 SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 -- name: consistent_snapshot
