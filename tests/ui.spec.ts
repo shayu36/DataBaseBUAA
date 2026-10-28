@@ -140,6 +140,38 @@ test("login form validates and demo account opens campus dashboard", async ({
     page.getByRole("heading", { name: "核心关系", exact: true }),
   ).toBeVisible();
 });
+test("登录页允许提交旧短密码，注册仍要求至少八位", async ({ page }) => {
+  let loginPassword = "";
+  let registrations = 0;
+  await page.route("**/api/auth/me", (route) =>
+    route.fulfill({ status: 401, json: {} }),
+  );
+  await page.route("**/api/auth/login", (route) => {
+    loginPassword = route.request().postDataJSON().password;
+    return route.fulfill({ status: 401, json: { error: "模拟认证" } });
+  });
+  await page.route("**/api/auth/register", (route) => {
+    registrations++;
+    return route.fulfill({ status: 400, json: { error: "模拟注册" } });
+  });
+  await page.goto("/");
+  await page.getByLabel("邮箱").fill("legacy@example.com");
+  await page.getByLabel("密码").fill("abc1");
+  await page.getByRole("button", { name: "登录青行" }).click();
+  await expect(page.getByRole("alert")).toContainText("模拟认证");
+  expect(loginPassword).toBe("abc1");
+  await page.getByRole("button", { name: "注册学生账户" }).click();
+  await page.getByLabel("姓名").fill("测试用户");
+  await page.getByLabel("手机号码").fill("13900000001");
+  await page.getByRole("button", { name: "注册并进入校园" }).click();
+  expect(
+    await page
+      .locator(".login-form form")
+      .evaluate((form: HTMLFormElement) => form.checkValidity()),
+  ).toBe(false);
+  expect(registrations).toBe(0);
+});
+
 test("登录和注册期间冻结表单并阻止重复提交，失败后可重试", async ({ page }) => {
   let requests = 0;
   let registrations = 0;

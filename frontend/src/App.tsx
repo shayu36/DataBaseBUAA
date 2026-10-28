@@ -207,7 +207,7 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete={register ? "new-password" : "current-password"}
-                  minLength={8}
+                  minLength={register ? 8 : 1}
                 />
               </Field>
               {error && (

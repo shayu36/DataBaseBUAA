@@ -508,6 +508,30 @@ test("session uses HttpOnly SameSite and login never returns password hash", asy
     401,
   );
 });
+test("legacy short passwords can authenticate but cannot be used for registration", async () => {
+  const hash = await bcrypt.hash("abc1", 4);
+  await pool.query(
+    "INSERT INTO users(name,email,phone,password_hash,role) VALUES('旧账号','legacy@http.local','13900000999',?,'STUDENT')",
+    [hash],
+  );
+  try {
+    const login = await request("/api/auth/login", {
+      email: "legacy@http.local",
+      password: "abc1",
+    });
+    assert.equal(login.status, 200);
+    const registered = await request("/api/auth/register", {
+      name: "新账号",
+      email: "new-short@http.local",
+      phone: "13900000998",
+      password: "abc1",
+    });
+    assert.equal(registered.status, 400);
+  } finally {
+    await pool.query("DELETE FROM users WHERE email='legacy@http.local'");
+  }
+});
+
 test("login rejects passwords exceeding bcrypt's UTF-8 byte limit", async () => {
   const password = "a".repeat(69) + "中";
   const [[original]] = await pool.query(
