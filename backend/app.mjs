@@ -187,7 +187,7 @@ export function createApp(pool) {
           pool,
           req.user,
           req.params.id,
-          req.body.staff_id,
+          req.body?.staff_id,
         ),
       ),
   );

@@ -1127,3 +1127,28 @@ test("SQL constraints enforce foreign keys, active ride uniqueness and payment a
     { code: "ER_SIGNAL_EXCEPTION" },
   );
 });
+
+test("dispatch suggestion can be confirmed without an optional request body", async () => {
+  await pool.query(
+    "INSERT INTO bikes(code,deployed_at,current_zone_id) VALUES('HTTP-OPTIONAL-BODY','2026-01-01',1)",
+  );
+  const [suggestion] = await pool.query(`INSERT INTO dispatch_suggestions
+    (source_zone_id,target_zone_id,quantity,source_available,target_occupied,target_capacity,target_reserved,borrow_count,return_count,desired_inventory,window_start,window_end,reason,algorithm_version,created_by)
+    VALUES(1,2,1,1,0,10,0,0,0,1,'2026-01-01','2026-01-02','测试可选请求体','test',1)`);
+  const response = await fetch(
+    `${base}/api/dispatches/from-suggestion/${suggestion.insertId}`,
+    { method: "POST", headers: { Cookie: adminCookie } },
+  );
+  assert.equal(response.status, 201);
+  const result = await response.json();
+  assert.equal(result.suggestion_id, suggestion.insertId);
+  const [[saved]] = await pool.query(
+    "SELECT s.status,t.staff_id,t.status task_status FROM dispatch_suggestions s JOIN dispatch_tasks t ON t.id=s.task_id WHERE s.id=?",
+    [suggestion.insertId],
+  );
+  assert.deepEqual(saved, {
+    status: "CONFIRMED",
+    staff_id: null,
+    task_status: "PENDING",
+  });
+});
