@@ -65,6 +65,50 @@ test.describe("北京时间的运营分析", () => {
   });
 });
 
+test("校园底图在接近视口时才下载", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 360 });
+  let downloads = 0;
+  page.on("request", (request) => {
+    if (
+      request.resourceType() === "image" &&
+      request.url().includes("buaa-xueyuan-campus-map")
+    )
+      downloads++;
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  const map = page.locator(".map-shell");
+  await expect(map).toBeVisible();
+  const viewport = map.locator(".map-viewport");
+  expect((await viewport.boundingBox())!.y).toBeGreaterThan(560);
+  await expect(viewport.locator("svg image")).toHaveCount(0);
+  expect(downloads).toBe(0);
+  await viewport.scrollIntoViewIfNeeded();
+  await expect(viewport.locator("svg image")).toHaveCount(1);
+  await expect(viewport.locator(".map-image-status")).toHaveCount(0);
+  expect(downloads).toBe(1);
+});
+
+test("浏览器不支持可见性检测时仍加载底图并提示失败", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 360 });
+  await page.addInitScript(() => {
+    delete (window as any).IntersectionObserver;
+  });
+  await page.route("**/*buaa-xueyuan-campus-map*.jpg", (route) =>
+    route.abort(),
+  );
+  await page.goto("/");
+  await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  const viewport = page.locator(".map-viewport");
+  expect((await viewport.boundingBox())!.y).toBeGreaterThan(560);
+  await expect(viewport.locator("svg image")).toHaveCount(1);
+  await expect(viewport.locator(".map-image-status")).toContainText(
+    "校区图未能加载",
+  );
+});
+
 test("Beihang official map names landmarks and selects parking zones after zoom", async ({
   page,
 }) => {
@@ -72,6 +116,7 @@ test("Beihang official map names landmarks and selects parking zones after zoom"
   await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
   await page.getByRole("button", { name: "登录青行", exact: true }).click();
   const map = page.locator(".map-shell");
+  await map.locator(".map-viewport").scrollIntoViewIfNeeded();
   await expect(
     map.getByRole("heading", { name: "北京航空航天大学 · 学院路校区" }),
   ).toBeVisible();
@@ -204,6 +249,7 @@ test("生产服务的校园底图重复加载使用浏览器缓存", async ({ pa
   await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
   await page.getByRole("button", { name: "登录青行", exact: true }).click();
   await expect(page.locator(".map-shell")).toBeVisible();
+  await page.locator(".map-viewport").scrollIntoViewIfNeeded();
   await expect(page.locator(".map-image-status")).toHaveCount(0);
   const transfer = () =>
     page.evaluate(() =>
@@ -217,6 +263,7 @@ test("生产服务的校园底图重复加载使用浏览器缓存", async ({ pa
   expect(first[0]).toBeGreaterThan(0);
   await page.reload();
   await expect(page.locator(".map-shell")).toBeVisible();
+  await page.locator(".map-viewport").scrollIntoViewIfNeeded();
   await expect(page.locator(".map-image-status")).toHaveCount(0);
   expect(await transfer()).toEqual([0]);
 });

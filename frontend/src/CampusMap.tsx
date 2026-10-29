@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   Bike,
   MapPin,
@@ -50,6 +50,8 @@ export function CampusMap({
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">(
     "loading",
   );
+  const [loadMap, setLoadMap] = useState(false);
+  const viewport = useRef<HTMLDivElement>(null);
   const [graph, setGraph] = useState<{ nodes: Row[]; edges: Row[] }>();
   const [graphError, setGraphError] = useState("");
   const [layers, setLayers] = useState({
@@ -106,6 +108,23 @@ export function CampusMap({
     onSelect?.(z);
   };
   useEffect(() => setSelected(undefined), [zones.length]);
+  useEffect(() => {
+    if (!("IntersectionObserver" in window)) {
+      setLoadMap(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setLoadMap(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(viewport.current!);
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     if (!layers.roads || route) return;
     let active = true;
@@ -206,6 +225,7 @@ export function CampusMap({
       )}
       <div
         className="map-viewport"
+        ref={viewport}
         tabIndex={0}
         aria-label="可滚动地图，窄屏可左右滑动查看建筑"
       >
@@ -233,16 +253,18 @@ export function CampusMap({
             </pattern>
           </defs>
           <rect width={maxX} height={maxY} fill="#f2f7f7" />
-          <image
-            href={campusMap}
-            x="-100"
-            y="-150"
-            width="2048"
-            height="1161"
-            aria-label="北航官网学院路校区平面图"
-            onLoad={() => setMapStatus("ready")}
-            onError={() => setMapStatus("error")}
-          />
+          {loadMap && (
+            <image
+              href={campusMap}
+              x="-100"
+              y="-150"
+              width="2048"
+              height="1161"
+              aria-label="北航官网学院路校区平面图"
+              onLoad={() => setMapStatus("ready")}
+              onError={() => setMapStatus("error")}
+            />
+          )}
           {layers.roads && (
             <g className="map-roads-on-plan" fill="none" strokeLinecap="round">
               {edges.map((edge) => {
@@ -444,7 +466,7 @@ export function CampusMap({
             );
           })}
         </svg>
-        {mapStatus !== "ready" && (
+        {loadMap && mapStatus !== "ready" && (
           <div className="map-image-status" role="status">
             {mapStatus === "loading" ? (
               <span>正在加载北航学院路校区平面图…</span>
