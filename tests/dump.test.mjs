@@ -4,8 +4,80 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execFile, spawnSync } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import { writeMysqlDump, writeLockedMysqlDump } from "../scripts/dump.mjs";
 import { createPool, ledgerTransaction } from "../backend/db.mjs";
+
+const execFileAsync = promisify(execFile);
+const mysqlName = process.platform === "win32" ? "mysql.exe" : "mysql";
+const mysql = process.env.MYSQL_BASE
+  ? join(process.env.MYSQL_BASE, "bin", mysqlName)
+  : mysqlName;
+const mysqlAvailable =
+  spawnSync(mysql, ["--version"], { stdio: "ignore" }).status === 0;
+
+test(
+  "restore works when the configured source database no longer exists",
+  { skip: mysqlAvailable ? false : "需要 MySQL 客户端" },
+  async () => {
+    const suffix = randomBytes(8).toString("hex");
+    const target = `campus_bike_restore_test_${suffix}`;
+    const missing = `campus_bike_missing_${suffix}`;
+    const directory = await mkdtemp(join(tmpdir(), "qingxing-restore-"));
+    const file = join(directory, "backup.sql");
+    const admin = createPool({
+      database: undefined,
+      user: process.env.DB_ADMIN_USER,
+      password: process.env.DB_ADMIN_PASSWORD,
+    });
+    let targetWasAbsent = false;
+    try {
+      const [existing] = await admin.query(
+        "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME IN (?,?)",
+        [target, missing],
+      );
+      assert.deepEqual(existing, []);
+      targetWasAbsent = true;
+      await writeFile(
+        file,
+        `CREATE TABLE users (id INT PRIMARY KEY);
+CREATE TABLE bikes (id INT PRIMARY KEY);
+CREATE TABLE ride_orders (id INT PRIMARY KEY);
+CREATE TABLE payments (id INT PRIMARY KEY);
+INSERT INTO users VALUES (1),(2);
+INSERT INTO bikes VALUES (1);
+`,
+      );
+      const args = [
+        fileURLToPath(new URL("../scripts/restore.mjs", import.meta.url)),
+        file,
+        target,
+      ];
+      const options = { env: { ...process.env, DB_NAME: missing } };
+      const { stdout } = await execFileAsync(process.execPath, args, options);
+      assert.match(stdout, /"users":2/);
+      assert.match(stdout, /"bikes":1/);
+      await assert.rejects(
+        execFileAsync(process.execPath, args, options),
+        (error) => {
+          assert.match(error.stderr, /ER_DB_CREATE_EXISTS/);
+          return true;
+        },
+      );
+      const [rows] = await admin.query(
+        `SELECT id FROM \`${target}\`.users ORDER BY id`,
+      );
+      assert.deepEqual(rows, [{ id: 1 }, { id: 2 }]);
+    } finally {
+      if (targetWasAbsent)
+        await admin.query("DROP DATABASE IF EXISTS ??", [target]);
+      await admin.end();
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);
 
 test("failed database export preserves an existing snapshot and removes partial files", async () => {
   const directory = await mkdtemp(join(tmpdir(), "qingxing-dump-"));

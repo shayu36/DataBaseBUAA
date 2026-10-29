@@ -144,6 +144,8 @@ git pull --ff-only origin zyf
 
 备份与恢复客户端使用与应用相同的主机和端口默认值；管理员账号和密码中的特殊字符会按 MySQL 选项文件规则转义。客户端执行期间会在 `.runtime` 创建临时配置，正常结束或出错后尝试删除；清理失败会报错。
 
+恢复会直接连接 MySQL 服务器并创建新目标库，即使配置中的原业务库已经不存在也可以执行；管理员账号仍需具备建库和导入所需权限。`npm test` 中的实际恢复测试也需要 MySQL 客户端；客户端不可用时该项会标记为跳过。
+
 ```text
 npm run backup
 node scripts/restore.mjs backups/备份文件.sql campus_bike_restore_demo

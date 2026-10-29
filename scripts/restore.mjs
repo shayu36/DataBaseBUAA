@@ -19,6 +19,7 @@ for await (const line of lines) {
     throw new Error("Backup must not select or create another database.");
 }
 const pool = createPool({
+  database: undefined,
   user: process.env.DB_ADMIN_USER,
   password: process.env.DB_ADMIN_PASSWORD,
 });
