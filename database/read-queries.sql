@@ -31,7 +31,7 @@ LEFT JOIN road_nodes a ON a.id=expected.from_id LEFT JOIN road_nodes b ON b.id=e
 WHERE expected.status='NO_RIDE' AND NOT (BINARY actual.status <=> BINARY 'NO_RIDE')
 ORDER BY expected.from_id,expected.to_id;
 -- name: login_user
-SELECT id,name,email,phone,role,status,leaderboard_alias,leaderboard_visible,password_hash FROM users WHERE email=?;
+SELECT CAST(id AS CHAR) AS id,name,email,phone,role,status,leaderboard_alias,leaderboard_visible,password_hash FROM users WHERE email=?;
 -- name: risk_alerts
 SELECT r.*,b.code bike_code,u.name handler_name,t.status ticket_status
 FROM risk_alerts r JOIN bikes b ON b.id=r.bike_id LEFT JOIN users u ON u.id=r.handler_id

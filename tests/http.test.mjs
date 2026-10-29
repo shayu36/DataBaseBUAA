@@ -1,6 +1,8 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { sessionSecret } from "../backend/config.mjs";
 import { randomBytes } from "node:crypto";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -1281,4 +1283,81 @@ test("numeric inputs reject boolean and array coercions", async () => {
   }
   const [[after]] = await pool.query("SELECT COUNT(*) count FROM audit_logs");
   assert.equal(after.count, before.count);
+});
+
+test("unsafe account identifiers cannot authenticate as a neighboring user", async () => {
+  const hash = await bcrypt.hash("Qingxing2026!", 4);
+  await pool.query(
+    "INSERT INTO users(id,name,email,phone,password_hash,role) VALUES(?,?,?,?,?,'STUDENT'),(?,?,?,?,?,'STUDENT'),(?,?,?,?,?,'STUDENT')",
+    [
+      "9007199254740991",
+      "安全边界账户",
+      "boundary@http.local",
+      "13990000006",
+      hash,
+      "9007199254740992",
+      "相邻账户",
+      "neighbor@http.local",
+      "13990000004",
+      hash,
+      "9007199254740993",
+      "大编号账户",
+      "large@http.local",
+      "13990000005",
+      hash,
+    ],
+  );
+  const response = await request("/api/auth/login", {
+    email: "large@http.local",
+    password: "Qingxing2026!",
+  });
+  assert.equal(response.status, 503);
+  assert.equal(response.data.code, "ACCOUNT_ID_OUT_OF_RANGE");
+  assert.equal(response.cookie, null);
+  const invalidPassword = await request("/api/auth/login", {
+    email: "large@http.local",
+    password: "Wrong2026!",
+  });
+  assert.equal(invalidPassword.status, 401);
+  for (const sub of ["9007199254740992", "9007199254740993"]) {
+    const token = jwt.sign({ sub }, sessionSecret(), {
+      algorithm: "HS256",
+      issuer: "qingxing-local",
+      audience: "qingxing-browser",
+      expiresIn: "8h",
+    });
+    const me = await request(
+      "/api/auth/me",
+      undefined,
+      `qingxing_session=${token}`,
+    );
+    assert.equal(me.status, 503);
+    assert.equal(me.data.code, "ACCOUNT_ID_OUT_OF_RANGE");
+  }
+  const boundary = await request("/api/auth/login", {
+    email: "boundary@http.local",
+    password: "Qingxing2026!",
+  });
+  assert.equal(boundary.status, 200);
+  assert.equal(boundary.data.user.id, Number.MAX_SAFE_INTEGER);
+  const me = await request(
+    "/api/auth/me",
+    undefined,
+    boundary.cookie.split(";")[0],
+  );
+  assert.equal(me.status, 200);
+  assert.equal(me.data.user.email, "boundary@http.local");
+  const registered = await request("/api/auth/register", {
+    name: "编号超限注册",
+    email: "overflow-register@http.local",
+    phone: "13990000007",
+    password: "Qingxing2026!",
+  });
+  assert.equal(registered.status, 503);
+  assert.equal(registered.data.code, "ACCOUNT_ID_OUT_OF_RANGE");
+  assert.equal(registered.cookie, null);
+  const [[state]] = await pool.query(
+    "SELECT COUNT(*) count FROM users WHERE email='overflow-register@http.local'",
+  );
+  assert.equal(state.count, 0);
 });

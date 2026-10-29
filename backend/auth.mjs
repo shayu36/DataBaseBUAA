@@ -4,6 +4,17 @@ import { sql } from "./sql-statements.mjs";
 import { z } from "zod";
 import { AppError, ledgerTransaction, callProcedure } from "./db.mjs";
 import { sessionSecret } from "./config.mjs";
+import { idSchema } from "./validation.mjs";
+function accountId(value) {
+  const parsed = idSchema.safeParse(value);
+  if (!parsed.success)
+    throw new AppError(
+      "账户编号超出当前接口支持范围，请联系管理员",
+      "ACCOUNT_ID_OUT_OF_RANGE",
+      503,
+    );
+  return parsed.data;
+}
 const publicUser = ({
   id,
   name,
@@ -14,7 +25,7 @@ const publicUser = ({
   leaderboard_alias,
   leaderboard_visible,
 }) => ({
-  id,
+  id: accountId(id),
   name,
   email,
   phone,
@@ -81,7 +92,9 @@ export function authenticate(pool) {
           audience: "qingxing-browser",
         },
       );
-      const [[user]] = await pool.query(sql("session_user"), [p.sub]);
+      const [[user]] = await pool.query(sql("session_user"), [
+        accountId(p.sub),
+      ]);
       if (!user)
         return res
           .status(401)

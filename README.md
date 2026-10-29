@@ -136,7 +136,17 @@ git switch zyf
 git pull --ff-only origin zyf
 ```
 
-提交并推送到 `zyf` 后，定期把 `main` 的新提交合入开发分支，解决冲突并完成构建和相关测试，再将经过验证的结果合入 `main`。首次使用时可运行 `git switch --track origin/zyf`；本仓库目前没有配置定时自动合并。
+完成开发、构建和相关测试后，将 `zyf` 的已验证成果合入 `main`。先获取远程更新；若 `main` 有独立新提交，先在 `zyf` 合并并核对冲突、重新测试。`main` 是 `zyf` 祖先时，可使用下面的快进合并流程，保留全部开发历史：
+
+```text
+git switch main
+git pull --ff-only origin main
+git merge --ff-only zyf
+git push origin main
+git switch zyf
+```
+
+快进失败时应停下来检查分支差异，不能强制推送。首次使用开发分支时可运行 `git switch --track origin/zyf`；本仓库目前没有配置定时自动合并。
 
 ## 备份与恢复
 
