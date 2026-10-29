@@ -69,8 +69,8 @@ export async function returnRide(pool, user, id, input) {
       y: coord.optional(),
       captured_at: z.preprocess(
         (value) => (value === null ? undefined : value),
-        z
-          .union([z.string(), z.number(), z.date()])
+        z.iso
+          .datetime({ offset: true })
           .pipe(z.coerce.date())
           .refine(
             (value) =>

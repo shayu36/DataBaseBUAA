@@ -840,6 +840,11 @@ test("HTTP lifecycle has private orders and one payment", async () => {
   for (const captured_at of [
     "+010000-01-01T00:00:00.000Z",
     "0999-12-31T23:59:59.999Z",
+    "2026-02-30T12:00:00Z",
+    "2100-02-29T12:00:00Z",
+    "2026-02-28T12:00:00",
+    "2026-02-28",
+    1,
     true,
     [1],
   ]) {

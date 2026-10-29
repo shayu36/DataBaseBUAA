@@ -131,6 +131,7 @@ test("representable datetime boundaries are retained in stale location evidence"
   for (const captured_at of [
     "1000-01-01T08:00:00.000+08:00",
     "9999-12-31T23:59:59.999Z",
+    "2024-02-29T12:00:00-05:00",
   ]) {
     await assert.rejects(
       business.returnRide(pool, user, id, {
@@ -149,7 +150,11 @@ test("representable datetime boundaries are retained in stale location evidence"
   );
   assert.deepEqual(
     rows.map((row) => row.captured),
-    ["1000-01-01 00:00:00.000000", "9999-12-31 23:59:59.999000"],
+    [
+      "1000-01-01 00:00:00.000000",
+      "9999-12-31 23:59:59.999000",
+      "2024-02-29 17:00:00.000000",
+    ],
   );
 });
 test("geofence decisions use the same precision as stored evidence", async () => {
