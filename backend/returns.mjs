@@ -2,11 +2,12 @@ import { z } from "zod";
 import { sql } from "./sql-statements.mjs";
 import { AppError, actorTransaction, callProcedure } from "./db.mjs";
 import { pageById } from "./pagination.mjs";
+import { idSchema } from "./validation.mjs";
 
 export function reviewReturnAttempt(pool, actor, attemptId, input) {
   if (actor.role !== "ADMIN")
     throw new AppError("仅管理员可处理违规还车记录", "FORBIDDEN", 403);
-  const id = z.coerce.number().int().positive().parse(attemptId),
+  const id = idSchema.parse(attemptId),
     data = z
       .object({
         action: z.enum(["RESOLVE", "DISMISS"]),

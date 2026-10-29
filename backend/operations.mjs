@@ -3,20 +3,20 @@ import { dispatchSuggestions } from "./dispatch-suggestions.mjs";
 import { z } from "zod";
 import { sql } from "./sql-statements.mjs";
 import { AppError, actorTransaction, callProcedure } from "./db.mjs";
-import {
-  requireAdmin,
-  createDispatchInConnection,
-  idSchema,
-} from "./business.mjs";
+import { requireAdmin, createDispatchInConnection } from "./business.mjs";
 import { parseReportingDay } from "./analytics.mjs";
 import { pageById } from "./pagination.mjs";
+import { idSchema, numericInput } from "./validation.mjs";
 
 export const reportFilterSchema = z
   .object({
-    days: z.coerce
-      .number()
-      .int()
-      .refine((v) => [7, 30].includes(v))
+    days: numericInput
+      .pipe(
+        z
+          .number()
+          .int()
+          .refine((v) => [7, 30].includes(v)),
+      )
       .optional(),
     start: z
       .string()
@@ -27,9 +27,9 @@ export const reportFilterSchema = z
       .regex(/^\d{4}-\d{2}-\d{2}$/)
       .optional(),
     dayType: z.enum(["ALL", "WEEKDAY", "WEEKEND"]).default("ALL"),
-    startHour: z.coerce.number().int().min(0).max(23).default(0),
-    endHour: z.coerce.number().int().min(1).max(24).default(24),
-    zoneId: z.coerce.number().int().positive().optional(),
+    startHour: numericInput.pipe(z.number().int().min(0).max(23)).default(0),
+    endHour: numericInput.pipe(z.number().int().min(1).max(24)).default(24),
+    zoneId: idSchema.optional(),
   })
   .superRefine((v, ctx) => {
     if ((v.start && !v.end) || (!v.start && v.end))

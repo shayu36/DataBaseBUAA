@@ -2,7 +2,11 @@
 
 除特别说明外，路径均加 /api；查询返回 JSON，写入使用 POST JSON。错误格式为 {error,code}；业务字段使用 snake_case，运营筛选参数使用下文列出的 camelCase。id 为数字，金额以整数分表示，日期为 ISO 格式。用户 {id,name,email,phone,role,status} role=STUDENT/ADMIN/OPERATOR，status=ACTIVE/SUSPENDED。除健康检查、登录、注册和退出外，接口均需登录；管理员或运维权限按下文和业务状态检查。前端以响应为准刷新，不伪造成功；写入成功但刷新失败时保留保存成功的结果并提示手动刷新，刷新成功或重新刷新时清除旧提示。
 
+编号、道路数值及运营筛选数值接受数字或非空数字字符串，不接受布尔值、数组或对象；无效输入返回 HTTP 400 和 `INVALID_INPUT`。定位时间不接受布尔值、数组或对象。
+
 压缩请求内容损坏时返回 HTTP 400 和 `INVALID_COMPRESSED_BODY`；不支持的内容编码或字符编码分别返回 HTTP 415 和 `UNSUPPORTED_CONTENT_ENCODING`、`UNSUPPORTED_CHARSET`。
+
+调度分配、维修分配及维修完成需要请求体中的必填字段；省略时返回 HTTP 400 和 `INVALID_INPUT`。调度开始、完成及取消无需请求体。
 
 还车定位时间转换为 UTC 后必须在 MySQL DATETIME 支持的 1000 至 9999 年范围内；超出时返回 HTTP 400 和 `INVALID_INPUT`，不会写入拒还记录。
 

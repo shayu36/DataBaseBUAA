@@ -3,6 +3,7 @@ import { sql } from "./sql-statements.mjs";
 import { AppError, actorTransaction, callProcedure } from "./db.mjs";
 import { riskData } from "./risk-data.mjs";
 import { pageById } from "./pagination.mjs";
+import { idSchema } from "./validation.mjs";
 
 const RULE_VERSION = "risk-v1";
 export function refreshRiskAlerts(pool, actor, now = new Date()) {
@@ -25,7 +26,7 @@ export function refreshRiskAlerts(pool, actor, now = new Date()) {
   });
 }
 export function actOnRisk(pool, actor, riskId, action, input = {}) {
-  const id = z.coerce.number().int().positive().parse(riskId),
+  const id = idSchema.parse(riskId),
     verb = z
       .enum(["ACKNOWLEDGE", "RESOLVE", "DISMISS", "CREATE_TICKET"])
       .parse(String(action).toUpperCase()),

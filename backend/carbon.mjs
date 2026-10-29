@@ -2,8 +2,7 @@ import { z } from "zod";
 import { AppError, actorTransaction, callProcedure } from "./db.mjs";
 import { sql } from "./sql-statements.mjs";
 import { pageById } from "./pagination.mjs";
-
-const id = z.coerce.number().int().positive().safe();
+import { idSchema } from "./validation.mjs";
 
 export async function listCarbonEntries(pool, actor, before = null) {
   const [rows] = await pool.query(sql("carbon_entries_own"), [
@@ -23,7 +22,7 @@ export function reviewOrderQualification(pool, actor, orderId, input) {
       reason: z.string().trim().min(2).max(300),
     })
     .parse(input);
-  const parsedId = id.parse(orderId);
+  const parsedId = idSchema.parse(orderId);
   return actorTransaction(pool, actor, (connection) =>
     callProcedure(
       connection,
@@ -46,7 +45,7 @@ export function adjustCarbon(pool, actor, input) {
     throw new AppError("仅管理员可调整积分", "FORBIDDEN", 403);
   const data = z
     .object({
-      order_id: id,
+      order_id: idSchema,
       points_change: z.number().int().min(-100000).max(100000),
       carbon_kg_change: z.number().finite().min(-1000).max(1000),
       reason: z.string().trim().min(2).max(300),

@@ -3,7 +3,7 @@ import { AppError, actorTransaction, callProcedure } from "./db.mjs";
 import { findRoute, findRoutes } from "./analytics.mjs";
 import { sql } from "./sql-statements.mjs";
 import { campusDefinition } from "./campus-data.mjs";
-export const idSchema = z.coerce.number().int().positive().safe();
+import { idSchema } from "./validation.mjs";
 // Reject values that cannot be represented in return_attempts before writing evidence.
 const coord = z.number().finite().min(-99999999.99).max(99999999.99);
 const need = (ok, message, code = "INVALID_STATE", status = 409) => {
@@ -69,8 +69,9 @@ export async function returnRide(pool, user, id, input) {
       y: coord.optional(),
       captured_at: z.preprocess(
         (value) => (value === null ? undefined : value),
-        z.coerce
-          .date()
+        z
+          .union([z.string(), z.number(), z.date()])
+          .pipe(z.coerce.date())
           .refine(
             (value) =>
               value.getUTCFullYear() >= 1000 && value.getUTCFullYear() <= 9999,
@@ -295,12 +296,13 @@ export async function dispatchAction(pool, user, id, action, input) {
     400,
   );
   if (action === "assign" || action === "cancel") requireAdmin(user);
-  const staffId = action === "assign" ? idSchema.parse(input.staff_id) : null;
+  const staffId = action === "assign" ? idSchema.parse(input?.staff_id) : null;
+  const taskId = idSchema.parse(id);
   return actorTransaction(pool, user, async (connection) => {
     await callProcedure(
       connection,
       "CALL sp_dispatch_action(?,?,?,?)",
-      [user.id, idSchema.parse(id), action, staffId],
+      [user.id, taskId, action, staffId],
       dispatchErrors,
     );
     return { ok: true };
@@ -339,16 +341,17 @@ export async function maintenanceAction(pool, user, id, action, input) {
     400,
   );
   if (action === "assign") requireAdmin(user);
-  const staffId = action === "assign" ? idSchema.parse(input.staff_id) : null;
+  const staffId = action === "assign" ? idSchema.parse(input?.staff_id) : null;
   const result =
     action === "complete"
-      ? z.string().trim().min(3).max(500).parse(input.result)
+      ? z.string().trim().min(3).max(500).parse(input?.result)
       : null;
+  const ticketId = idSchema.parse(id);
   return actorTransaction(pool, user, async (connection) => {
     await callProcedure(
       connection,
       "CALL sp_maintenance_action(?,?,?,?,?)",
-      [user.id, idSchema.parse(id), action, staffId, result],
+      [user.id, ticketId, action, staffId, result],
       {
         TICKET_NOT_FOUND: ["记录不存在", "NOT_FOUND", 404],
         STAFF_NOT_FOUND: ["记录不存在", "NOT_FOUND", 404],

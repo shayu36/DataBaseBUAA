@@ -1,16 +1,17 @@
 import { z } from "zod";
 import { AppError, actorTransaction, callProcedure } from "./db.mjs";
+import { idSchema, numericInput } from "./validation.mjs";
 
 const schema = z.object({
-  id: z.coerce.number().int().positive(),
+  id: idSchema,
   direction: z.enum(["BOTH", "FORWARD", "REVERSE"]),
   status: z.enum(["OPEN", "CLOSED", "NO_RIDE"]),
-  slope_percent: z.coerce.number().min(-30).max(30),
+  slope_percent: numericInput.pipe(z.number().min(-30).max(30)),
   surface: z.enum(["SMOOTH", "AVERAGE", "ROUGH"]),
-  shade_level: z.coerce.number().int().min(0).max(5),
-  lighting_level: z.coerce.number().int().min(0).max(5),
+  shade_level: numericInput.pipe(z.number().int().min(0).max(5)),
+  lighting_level: numericInput.pipe(z.number().int().min(0).max(5)),
   traffic_mix: z.enum(["BIKE_ONLY", "MIXED", "MOTOR_HEAVY"]),
-  intersection_risk: z.coerce.number().int().min(0).max(5),
+  intersection_risk: numericInput.pipe(z.number().int().min(0).max(5)),
 });
 export function saveRoad(pool, actor, input) {
   if (actor.role !== "ADMIN")

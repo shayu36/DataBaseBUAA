@@ -840,6 +840,8 @@ test("HTTP lifecycle has private orders and one payment", async () => {
   for (const captured_at of [
     "+010000-01-01T00:00:00.000Z",
     "0999-12-31T23:59:59.999Z",
+    true,
+    [1],
   ]) {
     const invalidTime = await request(
       "/api/rides/" + id + "/return",
@@ -1174,4 +1176,104 @@ test("dispatch suggestion can be confirmed without an optional request body", as
     staff_id: null,
     task_status: "PENDING",
   });
+});
+
+test("missing action request bodies are rejected without server errors", async () => {
+  const [[before]] = await pool.query("SELECT COUNT(*) count FROM audit_logs");
+  for (const path of [
+    "/api/dispatches/999/assign",
+    "/api/maintenance/999/assign",
+    "/api/maintenance/999/complete",
+    "/api/risks/999/acknowledge",
+  ]) {
+    const response = await fetch(base + path, {
+      method: "POST",
+      headers: { Cookie: adminCookie },
+    });
+    assert.equal(response.status, 400, path);
+    assert.equal((await response.json()).code, "INVALID_INPUT", path);
+  }
+  for (const action of ["start", "complete", "cancel"]) {
+    const response = await fetch(base + `/api/dispatches/999/${action}`, {
+      method: "POST",
+      headers: { Cookie: adminCookie },
+    });
+    assert.equal(response.status, 404, action);
+    assert.equal((await response.json()).code, "NOT_FOUND", action);
+  }
+  const [[after]] = await pool.query("SELECT COUNT(*) count FROM audit_logs");
+  assert.equal(after.count, before.count);
+});
+
+test("numeric inputs reject boolean and array coercions", async () => {
+  const cases = [
+    ["/api/rides/start", { bike_id: true }, studentCookie],
+    ["/api/rides/start", { bike_id: [1] }, studentCookie],
+    [
+      "/api/maintenance",
+      { bike_id: true, fault_type: "BRAKE", description: "测试故障" },
+      studentCookie,
+    ],
+    ["/api/dispatches/999/assign", { staff_id: true }, adminCookie],
+    ["/api/analytics/suggestions", { days: 7, startHour: true }, adminCookie],
+    [
+      "/api/admin/roads",
+      {
+        id: true,
+        direction: "BOTH",
+        status: "OPEN",
+        slope_percent: 0,
+        surface: "SMOOTH",
+        shade_level: 1,
+        lighting_level: 1,
+        traffic_mix: "MIXED",
+        intersection_risk: 1,
+      },
+      adminCookie,
+    ],
+    [
+      "/api/admin/roads",
+      {
+        id: 1,
+        direction: "BOTH",
+        status: "OPEN",
+        slope_percent: false,
+        surface: "SMOOTH",
+        shade_level: 1,
+        lighting_level: 1,
+        traffic_mix: "MIXED",
+        intersection_risk: 1,
+      },
+      adminCookie,
+    ],
+  ];
+  const [[before]] = await pool.query("SELECT COUNT(*) count FROM audit_logs");
+  for (const [path, body, cookie] of cases) {
+    const response = await request(path, body, cookie);
+    assert.equal(response.status, 400, path);
+    assert.equal(response.data.code, "INVALID_INPUT", path);
+  }
+  for (const [path, body] of [
+    ["/api/dispatches/999/assign", { staff_id: "1" }],
+    [
+      "/api/admin/roads",
+      {
+        id: "999",
+        direction: "BOTH",
+        status: "OPEN",
+        slope_percent: "1.25",
+        surface: "SMOOTH",
+        shade_level: "1",
+        lighting_level: "1",
+        traffic_mix: "MIXED",
+        intersection_risk: "1",
+      },
+    ],
+  ]) {
+    const response = await request(path, body, adminCookie);
+    assert.equal(response.status, 404, path);
+    assert.equal(response.data.code, "NOT_FOUND", path);
+  }
+  const [[after]] = await pool.query("SELECT COUNT(*) count FROM audit_logs");
+  assert.equal(after.count, before.count);
 });
