@@ -771,6 +771,62 @@ test("cross origin writes rejected before mutation", async () => {
   assert.equal(r.status, 403);
   assert.equal(r.data.code, "INVALID_ORIGIN");
 });
+test("same-site writes from another local port are rejected", async () => {
+  for (const origin of ["http://127.0.0.1:5189", "http://localhost:5189"]) {
+    const result = await request("/api/auth/logout", {}, studentCookie, {
+      origin,
+      "sec-fetch-site": "same-site",
+    });
+    assert.equal(result.status, 403);
+    assert.equal(result.data.code, "INVALID_ORIGIN");
+    assert.equal(result.cookie, null);
+  }
+  const sameOrigin = await request("/api/auth/logout", {}, studentCookie, {
+    origin: base,
+    "sec-fetch-site": "same-origin",
+  });
+  assert.equal(sameOrigin.status, 200);
+});
+test("development proxy preserves the browser origin for writes", async () => {
+  const { createServer, loadConfigFromFile } = await import("vite");
+  const configPath = fileURLToPath(
+    new URL("../frontend/vite.config.ts", import.meta.url),
+  );
+  const loaded = await loadConfigFromFile(
+    { command: "serve", mode: "development" },
+    configPath,
+  );
+  const configured = loaded.config.server.proxy["/api"];
+  const proxy =
+    typeof configured === "string" ? base : { ...configured, target: base };
+  const vite = await createServer({
+    configFile: false,
+    root: loaded.config.root,
+    logLevel: "silent",
+    server: {
+      host: "127.0.0.1",
+      port: 0,
+      strictPort: false,
+      proxy: { "/api": proxy },
+    },
+  });
+  try {
+    await vite.listen();
+    const origin = `http://127.0.0.1:${vite.httpServer.address().port}`;
+    const response = await fetch(`${origin}/api/auth/login`, {
+      method: "POST",
+      headers: { origin, "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "student@http.local",
+        password: "Qingxing2026!",
+      }),
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).user.id, 2);
+  } finally {
+    await vite.close();
+  }
+});
 test("HTTP lifecycle has private orders and one payment", async () => {
   const started = await request(
     "/api/rides/start",

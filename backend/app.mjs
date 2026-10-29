@@ -74,13 +74,9 @@ export function createApp(pool) {
   app.use("/api", (req, res, next) => {
     res.set("Cache-Control", "no-store");
     if (!["GET", "HEAD", "OPTIONS"].includes(req.method)) {
-      const allowed = new Set([
-        "http://" + req.get("host"),
-        "http://127.0.0.1:5189",
-        "http://localhost:5189",
-      ]);
       if (
-        (req.get("origin") && !allowed.has(req.get("origin"))) ||
+        (req.get("origin") &&
+          req.get("origin") !== "http://" + req.get("host")) ||
         req.get("sec-fetch-site") === "cross-site"
       )
         return res
