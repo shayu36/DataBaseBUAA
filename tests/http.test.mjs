@@ -837,6 +837,29 @@ test("HTTP lifecycle has private orders and one payment", async () => {
   const id = started.data.id;
   const adminView = await request("/api/dashboard", undefined, adminCookie);
   assert.equal(adminView.data.rides.length, 0);
+  for (const captured_at of [
+    "+010000-01-01T00:00:00.000Z",
+    "0999-12-31T23:59:59.999Z",
+  ]) {
+    const invalidTime = await request(
+      "/api/rides/" + id + "/return",
+      {
+        zone_id: 2,
+        x: 500,
+        y: 100,
+        captured_at,
+        location_source: "DEVICE_GPS",
+      },
+      studentCookie,
+    );
+    assert.equal(invalidTime.status, 400);
+    assert.equal(invalidTime.data.code, "INVALID_INPUT");
+  }
+  const [[attemptCount]] = await pool.query(
+    "SELECT COUNT(*) count FROM return_attempts WHERE order_id=?",
+    [id],
+  );
+  assert.equal(attemptCount.count, 0);
   const noGpsTime = await request(
     "/api/rides/" + id + "/return",
     { zone_id: 2, x: 500, y: 100, location_source: "DEVICE_GPS" },

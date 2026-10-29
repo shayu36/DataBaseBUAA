@@ -69,7 +69,14 @@ export async function returnRide(pool, user, id, input) {
       y: coord.optional(),
       captured_at: z.preprocess(
         (value) => (value === null ? undefined : value),
-        z.coerce.date().optional(),
+        z.coerce
+          .date()
+          .refine(
+            (value) =>
+              value.getUTCFullYear() >= 1000 && value.getUTCFullYear() <= 9999,
+            "定位时间超出数据库支持范围",
+          )
+          .optional(),
       ),
       location_source: z
         .enum(["MAP_SIMULATION", "DEVICE_GPS", "MANUAL"])

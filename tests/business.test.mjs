@@ -126,6 +126,32 @@ test("outside geofence rejection commits violation but leaves order running", as
   );
   assert.equal(v.n, 1);
 });
+test("representable datetime boundaries are retained in stale location evidence", async () => {
+  const { id } = await business.startRide(pool, user, { bike_id: 1 });
+  for (const captured_at of [
+    "1000-01-01T08:00:00.000+08:00",
+    "9999-12-31T23:59:59.999Z",
+  ]) {
+    await assert.rejects(
+      business.returnRide(pool, user, id, {
+        zone_id: 2,
+        x: 500,
+        y: 100,
+        captured_at,
+        location_source: "DEVICE_GPS",
+      }),
+      { code: "LOCATION_STALE" },
+    );
+  }
+  const [rows] = await pool.query(
+    "SELECT DATE_FORMAT(location_captured_at,'%Y-%m-%d %H:%i:%s.%f') captured FROM return_attempts WHERE order_id=? ORDER BY id",
+    [id],
+  );
+  assert.deepEqual(
+    rows.map((row) => row.captured),
+    ["1000-01-01 00:00:00.000000", "9999-12-31 23:59:59.999000"],
+  );
+});
 test("geofence decisions use the same precision as stored evidence", async () => {
   const { id } = await business.startRide(pool, user, { bike_id: 1 });
   await assert.rejects(
