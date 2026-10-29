@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import bcrypt from "bcryptjs";
-import { createPool } from "../backend/db.mjs";
+import { createPool, ledgerTransaction } from "../backend/db.mjs";
 import { campusDefinition } from "../backend/campus-data.mjs";
 import { applySchema } from "../scripts/sql.mjs";
 import * as business from "../backend/business.mjs";
@@ -349,6 +349,157 @@ test("large dispatch allocations are split into executable suggestions", async (
     "SELECT COUNT(DISTINCT task_id) tasks,COUNT(*) bikes FROM dispatch_bikes",
   );
   assert.deepEqual(totals, { tasks: 3, bikes: 250 });
+});
+
+test("saved suggestion ids preserve order across batch boundaries and nonconsecutive ids", async () => {
+  const connection = await pool.getConnection();
+  const [[settings]] = await connection.query(
+    "SELECT @@SESSION.auto_increment_increment AS increment_value,@@SESSION.auto_increment_offset AS offset_value",
+  );
+  try {
+    await connection.query(
+      "SET SESSION auto_increment_increment=7, SESSION auto_increment_offset=3",
+    );
+    for (const size of [0, 1, 99, 100, 101, 199, 200, 201]) {
+      const input = Array.from({ length: size }, (_, index) => ({
+        source_zone_id: 1,
+        target_zone_id: 2,
+        quantity: 1,
+        source_available: 10,
+        target_occupied: 0,
+        target_capacity: 10,
+        target_reserved: 0,
+        borrow_count: 0,
+        return_count: 0,
+        desired_inventory: 4,
+        reason: `批次-${index}`,
+      }));
+      await connection.beginTransaction();
+      try {
+        const [result] = await connection.query(
+          "CALL sp_save_dispatch_suggestions(?,?,?,?,?)",
+          [admin.id, "{}", "2026-10-01", "2026-10-02", JSON.stringify(input)],
+        );
+        const rows = result[0];
+        const [stored] = await connection.query(
+          "SELECT id,reason FROM dispatch_suggestions ORDER BY id",
+        );
+        const [[audit]] = await connection.query(
+          "SELECT JSON_EXTRACT(detail,'$.count') AS count FROM audit_logs WHERE action='SUGGESTIONS_GENERATE' ORDER BY id DESC LIMIT 1",
+        );
+        assert.equal(rows.length, size);
+        assert.equal(Number(audit.count), size);
+        assert.deepEqual(
+          rows.map((row) => row.reason),
+          input.map((item) => item.reason),
+        );
+        assert.deepEqual(
+          rows.map((row) => row.id),
+          stored.map((row) => row.id),
+        );
+        assert.deepEqual(
+          stored.map((row) => row.reason),
+          input.map((item) => item.reason),
+        );
+        for (let index = 1; index < rows.length; index++)
+          assert.equal(rows[index].id - rows[index - 1].id, 7);
+      } finally {
+        await connection.rollback();
+      }
+    }
+  } finally {
+    await connection.query(
+      "SET SESSION auto_increment_increment=?, SESSION auto_increment_offset=?",
+      [settings.increment_value, settings.offset_value],
+    );
+    connection.release();
+  }
+});
+
+test("failure after a suggestion batch rolls back rows and audit", async () => {
+  const input = Array.from({ length: 101 }, (_, index) => ({
+    source_zone_id: 1,
+    target_zone_id: index === 100 ? 999999 : 2,
+    quantity: 1,
+    source_available: 10,
+    target_occupied: 0,
+    target_capacity: 10,
+    target_reserved: 0,
+    borrow_count: 0,
+    return_count: 0,
+    desired_inventory: 4,
+    reason: `批次-${index}`,
+  }));
+  await assert.rejects(
+    ledgerTransaction(pool, (connection) =>
+      connection.query("CALL sp_save_dispatch_suggestions(?,?,?,?,?)", [
+        admin.id,
+        "{}",
+        "2026-10-01",
+        "2026-10-02",
+        JSON.stringify(input),
+      ]),
+    ),
+    { code: "ER_NO_REFERENCED_ROW_2" },
+  );
+  const [[state]] = await pool.query(
+    "SELECT (SELECT COUNT(*) FROM dispatch_suggestions) AS suggestions,(SELECT COUNT(*) FROM audit_logs WHERE action='SUGGESTIONS_GENERATE') AS audits",
+  );
+  assert.deepEqual(state, { suggestions: 0, audits: 0 });
+});
+
+test("suggestion batches preserve full unsigned database ids", async () => {
+  await pool.query(
+    "ALTER TABLE dispatch_suggestions AUTO_INCREMENT=18446744073709551000",
+  );
+  const exactPool = createPool({
+    database: "campus_bike_test",
+    user: process.env.DB_ADMIN_USER,
+    password: process.env.DB_ADMIN_PASSWORD,
+    supportBigNumbers: true,
+    bigNumberStrings: true,
+  });
+  const connection = await exactPool.getConnection();
+  try {
+    await connection.query(
+      "SET SESSION auto_increment_increment=1, SESSION auto_increment_offset=1",
+    );
+    const input = Array.from({ length: 201 }, (_, index) => ({
+      source_zone_id: 1,
+      target_zone_id: 2,
+      quantity: 1,
+      source_available: 10,
+      target_occupied: 0,
+      target_capacity: 10,
+      target_reserved: 0,
+      borrow_count: 0,
+      return_count: 0,
+      desired_inventory: 4,
+      reason: `大编号-${index}`,
+    }));
+    await connection.beginTransaction();
+    const [result] = await connection.query(
+      "CALL sp_save_dispatch_suggestions(?,?,?,?,?)",
+      [admin.id, "{}", "2026-10-01", "2026-10-02", JSON.stringify(input)],
+    );
+    const [stored] = await connection.query(
+      "SELECT CAST(id AS CHAR) id,reason FROM dispatch_suggestions ORDER BY id",
+    );
+    assert.equal(result[0].length, 201);
+    assert.deepEqual(
+      result[0].map((row) => row.id),
+      stored.map((row) => row.id),
+    );
+    assert.deepEqual(
+      result[0].map((row) => row.reason),
+      input.map((item) => item.reason),
+    );
+    assert.equal(stored[0].id, "18446744073709551000");
+  } finally {
+    await connection.rollback();
+    connection.release();
+    await exactPool.end();
+  }
 });
 
 test("saved dispatch suggestions remain reachable beyond the first page", async () => {

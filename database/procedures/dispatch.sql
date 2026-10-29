@@ -130,6 +130,8 @@ BEGIN
  DECLARE v_quantity,v_source_available,v_occupied,v_capacity,v_reserved,v_borrow,v_return,v_desired INT;
  DECLARE v_reason VARCHAR(500);
  DECLARE v_ids JSON DEFAULT (JSON_ARRAY());
+ DECLARE v_chunk JSON DEFAULT (JSON_ARRAY());
+ DECLARE v_count BIGINT UNSIGNED DEFAULT 0;
  DECLARE suggestions CURSOR FOR SELECT source,target,quantity,source_available,occupied,capacity,reserved,borrow_count,return_count,desired,reason
  FROM JSON_TABLE(p_suggestions,'$[*]' COLUMNS(position FOR ORDINALITY,source BIGINT UNSIGNED PATH '$.source_zone_id',target BIGINT UNSIGNED PATH '$.target_zone_id',
  quantity INT PATH '$.quantity',source_available INT PATH '$.source_available',occupied INT PATH '$.target_occupied',capacity INT PATH '$.target_capacity',
@@ -141,16 +143,25 @@ BEGIN
   IF done THEN LEAVE suggestion_loop; END IF;
   INSERT INTO dispatch_suggestions(source_zone_id,target_zone_id,quantity,source_available,target_occupied,target_capacity,target_reserved,borrow_count,return_count,desired_inventory,window_start,window_end,reason,algorithm_version,created_by)
   VALUES(v_source,v_target,v_quantity,v_source_available,v_occupied,v_capacity,v_reserved,v_borrow,v_return,v_desired,p_start,p_end,v_reason,'demand-balance-v2',p_actor);
-  SET v_ids=JSON_ARRAY_APPEND(v_ids,'$',LAST_INSERT_ID());
+  -- Keep actual allocated ids; bounded chunks avoid repeatedly copying one growing array.
+  SET v_chunk=JSON_ARRAY_APPEND(v_chunk,'$',LAST_INSERT_ID()),v_count=v_count+1;
+  IF MOD(v_count,100)=0 THEN
+   SET v_ids=JSON_ARRAY_APPEND(v_ids,'$',v_chunk),v_chunk=JSON_ARRAY();
+  END IF;
  END LOOP;
  CLOSE suggestions;
+ IF MOD(v_count,100)<>0 THEN SET v_ids=JSON_ARRAY_APPEND(v_ids,'$',v_chunk); END IF;
  INSERT INTO audit_logs(actor_id,action,entity_type,entity_id,detail)
- VALUES(p_actor,'SUGGESTIONS_GENERATE','dispatch_suggestions',NULL,JSON_OBJECT('filter',p_filter,'count',JSON_LENGTH(v_ids)));
+ VALUES(p_actor,'SUGGESTIONS_GENERATE','dispatch_suggestions',NULL,JSON_OBJECT('filter',p_filter,'count',v_count));
  SELECT s.id,s.source_zone_id,s.target_zone_id,a.name AS source_name,b.name AS target_name,s.quantity,s.desired_inventory,
   s.source_available,s.target_occupied,s.target_capacity,s.target_reserved,s.borrow_count,s.return_count,s.reason,s.status
- FROM JSON_TABLE(v_ids,'$[*]' COLUMNS(position FOR ORDINALITY,id BIGINT UNSIGNED PATH '$')) ids
- JOIN dispatch_suggestions s ON s.id=ids.id JOIN parking_zones a ON a.id=s.source_zone_id JOIN parking_zones b ON b.id=s.target_zone_id
- ORDER BY ids.position;
+ -- Drive joins from the id list to avoid repeatedly materializing JSON_TABLE.
+ FROM JSON_TABLE(v_ids,'$[*]' COLUMNS(chunk_number FOR ORDINALITY,
+  NESTED PATH '$[*]' COLUMNS(position FOR ORDINALITY,id BIGINT UNSIGNED PATH '$'))) ids
+ STRAIGHT_JOIN dispatch_suggestions s ON s.id=ids.id
+ STRAIGHT_JOIN parking_zones a ON a.id=s.source_zone_id
+ STRAIGHT_JOIN parking_zones b ON b.id=s.target_zone_id
+ ORDER BY ids.chunk_number,ids.position;
 END$$
 DELIMITER ;
 
