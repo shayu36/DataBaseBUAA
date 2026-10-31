@@ -162,8 +162,8 @@ export function CampusMap({
       <div className="map-tools">
         <span>
           {role === "STUDENT"
-            ? "选择停车点借车与还车；红色区域禁止骑行"
-            : "点击停车点查看库存、容量和任务状态"}
+            ? "选择停车点借车与还车  红色区域禁止骑行"
+            : "点击停车点查看库存  容量和任务状态"}
         </span>
         <div className="map-zoom">
           <button
@@ -214,7 +214,7 @@ export function CampusMap({
             {label}
           </button>
         ))}
-        <span>路网状态结合数据库和禁行区域；线条不表示行驶方向</span>
+        <span>路网状态结合数据库与禁行区域　线条不表示行驶方向</span>
       </div>
       {layers.roads && !route && !graph && (
         <p className="muted" role="status">
@@ -236,9 +236,9 @@ export function CampusMap({
           viewBox={`0 0 ${maxX} ${maxY}`}
           style={{ width: `${zoom * 100}%`, minWidth: 660 * zoom }}
         >
-          <title>北京航空航天大学学院路校区 · 建筑与停车点</title>
+          <title>北京航空航天大学学院路校区 建筑与停车点</title>
           <desc>
-            北航官网2026年学院路校区平面图。停车点、可骑行路段与禁行范围为课程模拟标注。
+            北航学院路校区建筑、道路、停车点和禁行区域示意图。
           </desc>
           <defs>
             <pattern
@@ -338,7 +338,7 @@ export function CampusMap({
                     y={center.y + 16}
                     textAnchor="middle"
                   >
-                    禁止骑行 · 请沿外围道路绕行
+                    禁止骑行  请沿外围道路绕行
                   </text>
                 </g>
               );
@@ -354,7 +354,7 @@ export function CampusMap({
               北门
             </text>
             <text x="920" y="298" textAnchor="end">
-              东门 · 学院路侧
+              东门  学院路侧
             </text>
             <text x="560" y="962" textAnchor="middle">
               南门
@@ -408,7 +408,7 @@ export function CampusMap({
                 }}
               >
                 <title>
-                  {z.name} · {z.location} · 可借 {z.borrowable} 辆 · 剩余车位{" "}
+                  {z.name}  {z.location}  可借 {z.borrowable} 辆  剩余车位{" "}
                   {remaining} 个
                 </title>
                 {layers.tasks && taskCount > 0 && (
@@ -484,11 +484,11 @@ export function CampusMap({
       </div>
       <div className="map-legend">
         {layers.roads && (
-          <span>路网：青色开放 · 红色短虚线关闭 · 橙色长虚线禁行</span>
+          <span>路网　青色开放　红色短虚线关闭　橙色长虚线禁行</span>
         )}
         <span>
           <i className="legend-academic" />
-          教学 / 科研
+          教学科研
         </span>
         <span>
           <i className="legend-living" />
@@ -500,7 +500,7 @@ export function CampusMap({
         </span>
         <span>
           <i className="legend-culture" />
-          文体 / 场馆
+          文体场馆
         </span>
         <span>
           <i className="legend-station" />
@@ -575,13 +575,13 @@ export function CampusMap({
             </p>
           </div>
         ) : (
-          <span>
-            全校 {zones.length} 个停车点 ·{" "}
-            {zones.reduce((sum, zone) => sum + Number(zone.borrowable), 0)}{" "}
-            辆可借
+          <span className="map-overview-count">
+            <span>全校 {zones.length} 个停车点</span>
+            <span>
+              {zones.reduce((sum, zone) => sum + Number(zone.borrowable), 0)} 辆可借
+            </span>
           </span>
         )}
-        <span className="map-scroll-hint">可缩放 · 窄屏可横向滑动</span>
       </div>
       <p className="map-source">
         <a href={campus.source} target="_blank" rel="noreferrer">
@@ -590,7 +590,6 @@ export function CampusMap({
         <a href={campus.planSource} target="_blank" rel="noreferrer">
           学院路校区平面图 <ExternalLink size={11} />
         </a>
-        <span>{campus.note}</span>
       </p>
     </section>
   );

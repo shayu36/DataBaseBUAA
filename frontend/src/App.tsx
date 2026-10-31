@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { api } from "./api";
 import campusPhoto from "./assets/buaa-xueyuan-main-building.jpg";
+import qingxingLogo from "./assets/qingxing-logo-puhuiti-bold.png";
 import { Field } from "./components";
 import {
   Overview,
@@ -125,12 +126,7 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
           alt="北航学院路校区主楼实景"
         />
         <a className="brand" href="/">
-          <span>
-            <Bike size={29} />
-          </span>
-          <div>
-            青行<small>QINGXING</small>
-          </div>
+          <img className="brand-logo" src={qingxingLogo} alt="青行" />
         </a>
         <div className="login-story-copy">
           <span className="eyebrow">BEIHANG · XUEYUAN ROAD CAMPUS</span>
@@ -143,19 +139,19 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
         </div>
         <small>
           <span>北京航空航天大学 · 学院路校区</span>
-          <a
-            href="https://zs.buaa.edu.cn/xxzl/xyfc.htm"
-            target="_blank"
-            rel="noreferrer"
-          >
-            校园照片：北航招生网 · 主楼盛夏
-          </a>
         </small>
       </section>
       <section className="login-form">
+        <div className="login-art" aria-hidden="true">
+          <span className="login-art-halo" />
+          <span className="login-art-wheel login-art-wheel-back" />
+          <span className="login-art-wheel login-art-wheel-front" />
+          <span className="login-art-core"><img src={qingxingLogo} alt="" /></span>
+          <span className="login-art-shadow" />
+        </div>
         <div>
           <span className="eyebrow">WELCOME TO QINGXING</span>
-          <h2>{register ? "加入青行" : "欢迎回来"}</h2>
+          <h2>{register ? "加入青行" : "欢迎登录青行校园共享自行车系统"}</h2>
           <p className="muted">登录，开启你的绿色校园生活。</p>
           <fieldset className="login-controls" disabled={busy} aria-busy={busy}>
             <div className="tabs">
@@ -284,7 +280,8 @@ export default function App() {
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
-    [initial, setInitial] = useState(true);
+    [initial, setInitial] = useState(true),
+    [entering, setEntering] = useState(false);
   const inFlight = useRef(false);
   const fetchDashboard = async () => {
     try {
@@ -317,6 +314,11 @@ export default function App() {
   useEffect(() => {
     if (user) refresh();
   }, [user]);
+  useEffect(() => {
+    if (!entering) return;
+    const timer = window.setTimeout(() => setEntering(false), 4500);
+    return () => window.clearTimeout(timer);
+  }, [entering]);
   async function run(path: string, body: any) {
     if (inFlight.current) return false;
     inFlight.current = true;
@@ -360,7 +362,10 @@ export default function App() {
     }
   }
   if (initial) return <div className="loading full">正在连接青行…</div>;
-  if (!user) return <Login onLogin={setUser} />;
+  if (!user) return <Login onLogin={(nextUser) => {
+    setEntering(!window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    setUser(nextUser);
+  }} />;
   const roleNavigation = visibleNavigation(user.role);
   const current =
     roleNavigation.find((item) => item.id === page) || roleNavigation[0];
@@ -382,14 +387,40 @@ export default function App() {
   )[activePage];
   return (
     <div className="app">
+      {entering && (
+        <div className="launch-scene" role="status" aria-label="登录成功，正在进入青行">
+          <button className="launch-skip" type="button" onClick={() => setEntering(false)}>跳过</button>
+          <div className="launch-grid" aria-hidden="true" />
+          <div className="launch-particles" aria-hidden="true">
+            {Array.from({ length: 18 }, (_, i) => <i key={i} />)}
+          </div>
+          <div className="launch-rings" aria-hidden="true"><span /><span /><span /></div>
+          <svg className="launch-campus" viewBox="0 0 900 620" aria-hidden="true">
+            <path d="M-30 470 C140 390 175 240 330 300 S555 520 930 215" />
+            <path d="M-30 530 C180 430 200 330 340 365 S595 570 930 300" />
+            <path d="M95 92h180v86H95zM600 85h210v110H600zM640 405h170v95H640z" />
+            <circle cx="170" cy="410" r="10" /><circle cx="515" cy="245" r="10" /><circle cx="755" cy="350" r="10" />
+          </svg>
+          <div className="launch-bike" aria-hidden="true">
+            <svg viewBox="0 0 520 260">
+              <circle className="bike-wheel" cx="125" cy="190" r="58" />
+              <circle className="bike-wheel" cx="397" cy="190" r="58" />
+              <path className="bike-frame" d="M125 190 205 95 280 190 125 190 250 190 315 88 397 190M205 95h-35M315 88l28-38M300 50h38" />
+              <path className="bike-glow" d="M125 190 205 95 280 190 125 190M280 190 315 88 397 190" />
+              <circle className="bike-hub" cx="205" cy="95" r="6" /><circle className="bike-hub" cx="315" cy="88" r="6" />
+            </svg>
+          </div>
+          <div className="launch-route" aria-hidden="true"><span /><span /><span /></div>
+          <div className="launch-brand">
+            <div className="launch-mark"><img src={qingxingLogo} alt="青行" /></div>
+            <strong>CampusRide</strong>
+            <small>智慧骑行 · 绿色校园</small>
+          </div>
+        </div>
+      )}
       <aside className="sidebar" inert={busy}>
         <a className="brand" href="/">
-          <span>
-            <Bike size={29} />
-          </span>
-          <div>
-            青行<small>QINGXING</small>
-          </div>
+          <img className="brand-logo" src={qingxingLogo} alt="青行" />
         </a>
         <span className="nav-label">校园出行 CAMPUS</span>
         <nav>
@@ -397,6 +428,7 @@ export default function App() {
             <button
               key={n.id}
               className={activePage === n.id ? "active" : ""}
+              aria-current={activePage === n.id ? "page" : undefined}
               onClick={() => {
                 setPage(n.id);
                 setNotice("");
@@ -450,6 +482,13 @@ export default function App() {
             <h1>{current.name}</h1>
           </div>
           <div className="header-right">
+            <span className={`role-pill role-${user.role.toLowerCase()}`}>
+              {user.role === "ADMIN"
+                ? "校园管理"
+                : user.role === "OPERATOR"
+                  ? "现场运维"
+                  : "学生骑行"}
+            </span>
             <BeijingDate />
             <button
               className="icon-btn"

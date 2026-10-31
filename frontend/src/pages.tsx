@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Bike } from "lucide-react";
 import { api } from "./api";
+import qingxingLogo from "./assets/qingxing-logo-puhuiti-bold.png";
 import {
   Badge,
   CampusMap,
@@ -104,7 +104,7 @@ export function Overview({ d, user }: Props) {
           <span className="hero-tag">{roleContent.tag}</span>
         </div>
         <div className="hero-bike">
-          <Bike size={190} strokeWidth={1.1} />
+          <img className="hero-logo" src={qingxingLogo} alt="青行" />
           <span>
             QINGXING
             <br />

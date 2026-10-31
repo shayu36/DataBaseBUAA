@@ -1,11 +1,11 @@
 {
   "version": "beihang-xueyuan-3",
-  "name": "北京航空航天大学 · 学院路校区",
+  "name": "北京航空航天大学 学院路校区",
   "width": 940,
   "height": 960,
   "source": "https://www.buaa.edu.cn/xygk/xydt1/xylxq.htm",
   "planSource": "https://www.buaa.edu.cn/images/xylxq20261013.jpg",
-  "note": "底图来自北航官网学院路校区平面图（2026-10-13）；停车点、可骑行路段与禁行范围为课程模拟标注，非官方实时运营数据。",
+  "note": "",
   "restricted_areas": [
     {
       "id": "teaching-core",
