@@ -65,8 +65,8 @@ test.describe("北京时间的运营分析", () => {
   });
 });
 
-test("校园底图在接近视口时才下载", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 360 });
+test("校园底图随地图组件立即渲染以避免页面切换闪烁", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 80 });
   let downloads = 0;
   page.on("request", (request) => {
     if (
@@ -81,13 +81,188 @@ test("校园底图在接近视口时才下载", async ({ page }) => {
   const map = page.locator(".map-shell");
   await expect(map).toBeVisible();
   const viewport = map.locator(".map-viewport");
-  expect((await viewport.boundingBox())!.y).toBeGreaterThan(560);
-  await expect(viewport.locator("svg image")).toHaveCount(0);
-  expect(downloads).toBe(0);
-  await viewport.scrollIntoViewIfNeeded();
   await expect(viewport.locator("svg image")).toHaveCount(1);
   await expect(viewport.locator(".map-image-status")).toHaveCount(0);
   expect(downloads).toBe(1);
+});
+
+test("长内容默认收起并可由用户展开", async ({ page }) => {
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: 1,
+            name: "测试学生",
+            email: "student@test.local",
+            role: "STUDENT",
+            status: "ACTIVE",
+          },
+        },
+      });
+    if (url.pathname === "/api/dashboard")
+      return route.fulfill({ json: regressionDashboard });
+    if (url.pathname === "/api/routes")
+      return route.fulfill({
+        json: routeBundle({
+          distance_m: 400,
+          duration_minutes: 2,
+          nodes: [
+            { id: 1, name: "测试源站", x: 100, y: 100 },
+            { id: 2, name: "测试目标站", x: 200, y: 200 },
+          ],
+          edges: [],
+          path: [1, 2],
+          segments: [
+            {
+              id: 1,
+              from_node_id: 1,
+              to_node_id: 2,
+              direction: "BOTH",
+              status: "OPEN",
+              distance_m: 400,
+              slope_percent: 0,
+              surface: "SMOOTH",
+              traffic_mix: "MIXED",
+              shade_level: 3,
+              lighting_level: 3,
+            },
+          ],
+          attribute_totals: {
+            intersection_risk: 0,
+            motor_heavy_edges: 0,
+            rough_edges: 0,
+            shaded_edges: 0,
+          },
+          explanation: "演示路线",
+        }),
+      });
+    return route.fulfill({ json: {} });
+  });
+
+  await page.goto("/");
+
+  const zones = page.locator("details").filter({ hasText: "停车区一览" });
+  await expect(zones).not.toHaveAttribute("open", "");
+  await expect(zones.locator(".zone-card").first()).toBeHidden();
+  await zones.locator("summary").click();
+  await expect(zones.locator(".zone-card").first()).toBeVisible();
+
+  await page.getByRole("button", { name: "借车与归还", exact: true }).click();
+  const rideMap = page
+    .locator("details")
+    .filter({ hasText: "借车与归还地图" });
+  await expect(rideMap).not.toHaveAttribute("open", "");
+  await expect(rideMap.locator(".map-shell")).toBeHidden();
+  await rideMap.locator("summary").click();
+  await expect(rideMap.locator(".map-shell")).toBeVisible();
+
+  await page.getByRole("button", { name: "路线规划", exact: true }).click();
+  const basis = page
+    .locator("details")
+    .filter({ hasText: "路线依据与途经道路" });
+  await expect(basis).not.toHaveAttribute("open", "");
+  await expect(basis.locator("table")).toBeHidden();
+  await basis.locator("summary").click();
+  await expect(basis.locator("table")).toBeVisible();
+});
+
+test("路线请求期间保留稳定的地图占位区域", async ({ page }) => {
+  let releaseRoute: (() => void) | undefined;
+  const routePending = new Promise<void>((resolve) => {
+    releaseRoute = resolve;
+  });
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: 1,
+            name: "测试学生",
+            email: "student@test.local",
+            role: "STUDENT",
+            status: "ACTIVE",
+          },
+        },
+      });
+    if (url.pathname === "/api/dashboard")
+      return route.fulfill({ json: regressionDashboard });
+    if (url.pathname === "/api/routes") {
+      await routePending;
+      return route.fulfill({
+        json: routeBundle({
+          distance_m: 400,
+          duration_minutes: 2,
+          nodes: [
+            { id: 1, name: "测试源站", x: 100, y: 100 },
+            { id: 2, name: "测试目标站", x: 200, y: 200 },
+          ],
+          edges: [],
+          path: [1, 2],
+          segments: [],
+          attribute_totals: {
+            intersection_risk: 0,
+            motor_heavy_edges: 0,
+            rough_edges: 0,
+            shaded_edges: 0,
+          },
+          explanation: "演示路线",
+        }),
+      });
+    }
+    return route.fulfill({ json: {} });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "路线规划", exact: true }).click();
+  const placeholder = page.getByRole("status", {
+    name: "正在准备路线与地图",
+  });
+  await expect(placeholder).toBeVisible();
+  expect((await placeholder.boundingBox())!.height).toBeGreaterThan(500);
+  releaseRoute?.();
+  await expect(page.locator(".route-result")).toBeVisible();
+});
+
+test("学生界面的可见文案不使用中文句号", async ({ page }) => {
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: 1,
+            name: "测试学生",
+            email: "student@test.local",
+            role: "STUDENT",
+            status: "ACTIVE",
+          },
+        },
+      });
+    return route.fulfill({ json: regressionDashboard });
+  });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "骑行首页" })).toBeVisible();
+
+  const visibleFullStops = await page.evaluate(() => {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const matches: string[] = [];
+    let node = walker.nextNode();
+    while (node) {
+      const value = node.nodeValue?.trim() || "";
+      const parent = node.parentElement;
+      if (value.includes("。") && parent && parent.checkVisibility()) {
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        if (range.getClientRects().length) matches.push(value);
+      }
+      node = walker.nextNode();
+    }
+    return matches;
+  });
+  expect(visibleFullStops).toEqual([]);
 });
 
 test("浏览器不支持可见性检测时仍加载底图并提示失败", async ({ page }) => {
@@ -118,7 +293,7 @@ test("Beihang official map names landmarks and selects parking zones after zoom"
   const map = page.locator(".map-shell");
   await map.locator(".map-viewport").scrollIntoViewIfNeeded();
   await expect(
-    map.getByRole("heading", { name: "北京航空航天大学 · 学院路校区" }),
+    map.getByRole("heading", { name: "北京航空航天大学 学院路校区" }),
   ).toBeVisible();
   for (const name of [
     "主楼",
@@ -135,15 +310,17 @@ test("Beihang official map names landmarks and selects parking zones after zoom"
       map.locator("svg text").filter({ hasText: new RegExp(`^${name}$`) }),
     ).toBeVisible();
   }
-  await expect(
-    map.getByRole("link", { name: "北航官方校区地图" }),
-  ).toHaveAttribute("href", "https://www.buaa.edu.cn/xygk/xydt1/xylxq.htm");
   await expect(map.locator("svg image")).toHaveAttribute(
     "href",
     /buaa-xueyuan-campus-map(?:-[A-Za-z0-9_-]{8})?\.jpg/,
   );
   await expect(map.locator(".map-image-status")).toHaveCount(0);
   await page.getByRole("button", { name: "借车与归还", exact: true }).click();
+  await page
+    .locator("details")
+    .filter({ hasText: "借车与归还地图" })
+    .locator("summary")
+    .click();
   await page.getByRole("button", { name: "放大地图" }).click();
   await expect(map.locator("svg.campus-svg")).toHaveAttribute("style", /125%/);
   const station = page.getByRole("button", { name: /东门.*可借/ });
@@ -185,13 +362,18 @@ test("禁行站点显示实际可借数量并阻止选择车辆", async ({ page 
     }),
   ).toHaveAttribute("disabled", "");
   await page
+    .locator("details")
+    .filter({ hasText: "借车与归还地图" })
+    .locator("summary")
+    .click();
+  await page
     .getByRole("button", {
       name: new RegExp(`${stationName}，可借 0 辆.*禁行区内`),
     })
     .click();
   await expect(
     page
-      .getByText("该停车点位于禁行区内，暂停借车，请联系管理员处理。")
+      .getByText("该停车点位于禁行区内，暂停借车，请联系管理员处理")
       .first(),
   ).toBeVisible();
   await expect(
@@ -234,13 +416,18 @@ test("禁行站点的历史行程仍可选择原出发点归还", async ({ page 
   ).toHaveAttribute("disabled", "");
   await expect(page.getByRole("button", { name: "确认归还" })).toBeEnabled();
   await page
+    .locator("details")
+    .filter({ hasText: "借车与归还地图" })
+    .locator("summary")
+    .click();
+  await page
     .getByRole("button", {
       name: new RegExp(`${otherName}，可借 0 辆.*禁行区内`),
     })
     .click();
   await expect(page.getByRole("button", { name: "确认归还" })).toBeDisabled();
   await expect(
-    page.getByText("该停车点不可归还，请选择其他停车点。"),
+    page.getByText("该停车点不可归还，请选择其他停车点"),
   ).toBeVisible();
 });
 test("生产服务的校园底图重复加载使用浏览器缓存", async ({ page }) => {
@@ -394,7 +581,7 @@ test("demo admin opens dashboard without a database design page", async ({
 }) => {
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: /让校园的每一程，\s*更轻盈。/ }),
+    page.getByRole("heading", { name: /让校园的每一程，\s*更轻盈/ }),
   ).toBeVisible();
   await page.getByRole("button", { name: "管理员 · 贾鑫洋" }).click();
   await page.getByRole("button", { name: "登录青行", exact: true }).click();
@@ -415,12 +602,11 @@ test("login cover uses the official Beihang Xueyuan campus photograph", async ({
   ).toBeVisible();
   await expect(page.locator(".login-photo")).toHaveAttribute(
     "src",
-    /buaa-xueyuan-main-building(?:-[A-Za-z0-9_-]{8})?\.jpg/,
+    /buaa-main-building-full(?:-[A-Za-z0-9_-]{8})?\.png/,
   );
   await expect(
-    page.getByRole("link", { name: /北航招生网.*主楼盛夏/ }),
-  ).toHaveAttribute("href", "https://zs.buaa.edu.cn/xxzl/xyfc.htm");
-  await expect(page.getByText("北京航空航天大学 · 学院路校区")).toBeVisible();
+    page.getByText(/北京航空航天大学\s+学院路校区/),
+  ).toBeVisible();
   await expect(page.getByText("国立中央大学")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "学生 · 欧阳晨" }),
@@ -687,7 +873,7 @@ test("触发器目录缺失时页面明确显示未核验", async ({ page }) => 
     .getByRole("button", { name: "查看数据库结构", exact: true })
     .click();
   await expect(
-    page.getByText("触发器目录暂不可用；请先备份并运行数据库迁移。"),
+    page.getByText("触发器目录暂不可用；请先备份并运行数据库迁移"),
   ).toBeVisible();
   await expect(page.getByText("triggers · 未核验")).toBeVisible();
 });
@@ -874,7 +1060,9 @@ test("admin can manage maintenance and dispatch tasks", async ({ page }) => {
     })
     .last();
   await running.getByRole("button", { name: "确认完成", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("操作已保存");
+  await expect(
+    page.getByRole("status").filter({ hasText: "操作已保存" }),
+  ).toBeVisible();
   await expect(page.getByText("已完成", { exact: true }).last()).toBeVisible();
   const completedTask = page
     .getByRole("row")
@@ -1268,7 +1456,9 @@ test("退出期间阻止重复请求和数据刷新，再登录只显示新账�
     await page.locator('button[aria-label="退出登录"]').dispatchEvent("click");
     await page.getByRole("button", { name: "刷新数据" }).dispatchEvent("click");
     release();
-    await expect(page.getByRole("heading", { name: "欢迎回来" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "欢迎登录青行校园共享自行车系统" }),
+    ).toBeVisible();
     expect(logoutCount).toBe(1);
     expect(dashboardCount).toBe(1);
     await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
@@ -1315,7 +1505,9 @@ test("退出失败后保留当前账户并允许重试", async ({ page }) => {
   await expect(page.getByRole("alert")).toContainText("退出失败");
   await expect(page.locator(".sidebar")).not.toHaveAttribute("inert", "");
   await page.getByRole("button", { name: "退出登录" }).click();
-  await expect(page.getByRole("heading", { name: "欢迎回来" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "欢迎登录青行校园共享自行车系统" }),
+  ).toBeVisible();
   expect(count).toBe(2);
 });
 
@@ -1353,7 +1545,9 @@ for (const viewport of [
       .scrollIntoViewIfNeeded();
     await expect(logout).toBeInViewport();
     await logout.click({ timeout: 2000 });
-    await expect(page.getByRole("heading", { name: "欢迎回来" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "欢迎登录青行校园共享自行车系统" }),
+    ).toBeVisible();
   });
 }
 
@@ -1405,7 +1599,7 @@ test("successful save reports a failed refresh and manual refresh recovers", asy
     page.getByRole("status").filter({ hasText: "操作已保存，但页面刷新失败" }),
   ).toBeVisible();
   await expect(page.getByRole("alert")).toContainText("测试刷新失败");
-  await expect(page.getByText("操作已保存，页面已刷新。")).toHaveCount(0);
+  await expect(page.getByText("操作已保存，页面已刷新")).toHaveCount(0);
   await expect(
     page.getByRole("heading", { name: "新增资料", exact: true }),
   ).toBeVisible();
@@ -1422,11 +1616,11 @@ test("successful save reports a failed refresh and manual refresh recovers", asy
     .getByRole("button", { name: "编辑", exact: true })
     .click();
   await page.getByRole("button", { name: "保存资料", exact: true }).click();
-  await expect(page.getByText("操作已保存，页面已刷新。")).toBeVisible();
+  await expect(page.getByText("操作已保存，页面已刷新")).toBeVisible();
   failRefresh = true;
   await page.getByRole("button", { name: "刷新数据" }).click();
   await expect(page.getByRole("alert")).toContainText("测试刷新失败");
-  await expect(page.getByText("操作已保存，页面已刷新。")).toHaveCount(0);
+  await expect(page.getByText("操作已保存，页面已刷新")).toHaveCount(0);
 });
 
 test("analytics refetches after suggestion creation and manual refresh while retaining selected period", async ({
@@ -1723,6 +1917,11 @@ test("PDF expansion controls expose traceable workflows", async ({ page }) => {
   await page.reload();
   await page.getByRole("button", { name: "路线规划", exact: true }).click();
   await expect(page.getByRole("button", { name: /安全优先/ })).toBeVisible();
+  await page
+    .locator("details")
+    .filter({ hasText: "路线依据与途经道路" })
+    .locator("summary")
+    .click();
   await expect(
     page.getByText("避开封闭及禁骑路段", { exact: true }),
   ).toBeVisible();
@@ -1898,6 +2097,11 @@ test("路线详情按实际行驶方向展示路段、通行规则和坡度", as
   await page.getByRole("button", { name: "路线规划", exact: true }).click();
   await page.getByLabel("出发停车区").selectOption("2");
   await page.getByLabel("目的停车区").selectOption("1");
+  await page
+    .locator("details")
+    .filter({ hasText: "路线依据与途经道路" })
+    .locator("summary")
+    .click();
   const row = page
     .getByRole("row")
     .filter({ hasText: "测试目标站 → 测试源站" });
@@ -2137,7 +2341,7 @@ test("carbon history pagination keeps the qualifying ride count", async ({
   await page.getByRole("button", { name: "碳积分", exact: true }).click();
   await expect(
     page.getByText(
-      "当前模拟减排系数 999999999999.99999999 kg/km · 每公里 0.00000001 分 · 测试版",
+      "当前模拟减排系数 999999999999.99999999 kg/km · 每公里 0.00000001 分",
     ),
   ).toBeVisible();
   const count = page.locator(".stat").filter({ hasText: "绿色行程" });
@@ -2798,10 +3002,10 @@ test("彩色导航、语音提示与旗帜横幅保持一致", async ({ page }) 
   );
   expect(iconColors.length).toBeGreaterThanOrEqual(4);
 
-  const clipPath = await page.locator(".site-footer-banner").evaluate((node) =>
-    getComputedStyle(node).clipPath,
+  await expect(page.locator(".site-footer-banner .footer-flag-image")).toHaveAttribute(
+    "src",
+    /footer-blue-wave-flag(?:-[A-Za-z0-9_-]{8})?\.png/,
   );
-  expect(clipPath).not.toBe("none");
 
   const operationMessages = await page.evaluate(async () => {
     const speech = await import("/src/speech.ts");

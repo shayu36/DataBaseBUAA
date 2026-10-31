@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import {
   Bike,
   MapPin,
@@ -49,8 +49,6 @@ export function CampusMap({
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">(
     "loading",
   );
-  const [loadMap, setLoadMap] = useState(false);
-  const viewport = useRef<HTMLDivElement>(null);
   const [graph, setGraph] = useState<{ nodes: Row[]; edges: Row[] }>();
   const [graphError, setGraphError] = useState("");
   const [layers, setLayers] = useState({
@@ -107,23 +105,6 @@ export function CampusMap({
     onSelect?.(z);
   };
   useEffect(() => setSelected(undefined), [zones.length]);
-  useEffect(() => {
-    if (!("IntersectionObserver" in window)) {
-      setLoadMap(true);
-      return;
-    }
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setLoadMap(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "200px" },
-    );
-    observer.observe(viewport.current!);
-    return () => observer.disconnect();
-  }, []);
   useEffect(() => {
     if (!layers.roads || route) return;
     let active = true;
@@ -217,13 +198,12 @@ export function CampusMap({
       {layers.roads && !route && !graph && (
         <p className="muted" role="status">
           {graphError
-            ? `路网加载失败：${graphError}；可关闭图层后重试。`
+            ? `路网加载失败：${graphError}；可关闭图层后重试`
             : "正在加载路网…"}
         </p>
       )}
       <div
         className="map-viewport"
-        ref={viewport}
         tabIndex={0}
         aria-label="可滚动地图，窄屏可左右滑动查看建筑"
       >
@@ -236,7 +216,7 @@ export function CampusMap({
         >
           <title>北京航空航天大学学院路校区 建筑与停车点</title>
           <desc>
-            北航学院路校区建筑、道路、停车点和禁行区域示意图。
+            北航学院路校区建筑、道路、停车点和禁行区域示意图
           </desc>
           <defs>
             <pattern
@@ -251,18 +231,16 @@ export function CampusMap({
             </pattern>
           </defs>
           <rect width={maxX} height={maxY} fill="#f2f7f7" />
-          {loadMap && (
-            <image
-              href={campusMap}
-              x="-100"
-              y="-150"
-              width="2048"
-              height="1161"
-              aria-label="北航官网学院路校区平面图"
-              onLoad={() => setMapStatus("ready")}
-              onError={() => setMapStatus("error")}
-            />
-          )}
+          <image
+            href={campusMap}
+            x="-100"
+            y="-150"
+            width="2048"
+            height="1161"
+            aria-label="北航官网学院路校区平面图"
+            onLoad={() => setMapStatus("ready")}
+            onError={() => setMapStatus("error")}
+          />
           {layers.roads && (
             <g className="map-roads-on-plan" fill="none" strokeLinecap="round">
               {edges.map((edge) => {
@@ -464,19 +442,14 @@ export function CampusMap({
             );
           })}
         </svg>
-        {loadMap && mapStatus !== "ready" && (
+        {mapStatus === "error" && (
           <div className="map-image-status" role="status">
-            {mapStatus === "loading" ? (
-              <span>正在加载北航学院路校区平面图…</span>
-            ) : (
-              <span>
-                校区图未能加载。请使用右侧停车点列表，或
-                <a href={campus.planSource} target="_blank" rel="noreferrer">
-                  查看北航官网原图
-                </a>
-                。
-              </span>
-            )}
+            <span>
+              校区图未能加载，请使用右侧停车点列表，或
+              <a href={campus.planSource} target="_blank" rel="noreferrer">
+                查看北航官网原图
+              </a>
+            </span>
           </div>
         )}
       </div>
@@ -564,12 +537,12 @@ export function CampusMap({
             </dl>
             <p>
               {Number(selectedZone.restricted)
-                ? "该停车点位于禁行区内，暂停借车，请联系管理员处理。"
+                ? "该停车点位于禁行区内，暂停借车，请联系管理员处理"
                 : role === "STUDENT"
-                  ? "借车前核对车源，归还前核对剩余车位。"
+                  ? "借车前核对车源，归还前核对剩余车位"
                   : role === "ADMIN"
-                    ? "可结合容量、故障与调度状态安排运营处理。"
-                    : "到站前核对工单与调度任务，完成后及时回填。"}
+                    ? "可结合容量、故障与调度状态安排运营处理"
+                    : "到站前核对工单与调度任务，完成后及时回填"}
             </p>
           </div>
         ) : (

@@ -2147,8 +2147,9 @@ td strong {
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
+  background: #254866;
 }
 .login-story .brand,
 .login-story .brand small {
@@ -2179,16 +2180,27 @@ td strong {
   white-space: nowrap;
 }
 .cover-flag {
+  position: relative;
   width: min(650px, 100%);
   overflow: hidden;
-  border: 2px solid #ef795f;
-  border-radius: 14px;
-  background: #174f91;
-  box-shadow: 0 12px 30px rgba(4, 23, 49, .3), inset 0 0 0 1px rgba(255,255,255,.16);
-  clip-path: polygon(0 0, 100% 0, calc(100% - 16px) 50%, 100% 100%, 0 100%, 16px 50%);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  filter: drop-shadow(0 12px 24px rgba(4, 23, 49, .34));
   text-shadow: 0 2px 12px rgba(0, 0, 0, .28);
 }
+.cover-flag-image,
+.footer-flag-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
 .cover-flag-track {
+  position: relative;
+  z-index: 1;
   display: flex;
   width: 200%;
   will-change: transform;
@@ -2201,8 +2213,8 @@ td strong {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #ff5a52;
-  text-shadow: 0 2px 12px rgba(8, 15, 36, .42), 0 0 14px rgba(255, 90, 82, .22);
+  color: #ffffff;
+  text-shadow: 0 2px 12px rgba(8, 28, 62, .56), 0 0 18px rgba(156, 244, 239, .26);
 }
 @keyframes cover-flag-scroll {
   to { transform: translateX(-50%); }
@@ -2491,6 +2503,84 @@ header h1 { color: #24354d; font-size: 30px; letter-spacing: -.02em; }
 .route-option { border: 1px solid var(--qx-line); }
 .route-option.active { border: 2px solid var(--qx-blue); }
 .leaderboard-me { background: #315079; }
+.content-disclosure {
+  margin: 0;
+  overflow: clip;
+  font-size: inherit;
+}
+.content-disclosure > summary {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  list-style: none;
+  color: #263b57;
+  cursor: pointer;
+}
+.content-disclosure > summary::-webkit-details-marker { display: none; }
+.content-disclosure > summary > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+.content-disclosure > summary strong {
+  font-size: 18px;
+  line-height: 1.4;
+}
+.content-disclosure > summary small {
+  color: #738298;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.content-disclosure > summary::after {
+  content: "展开";
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #eaf1fc;
+  color: #315fb6;
+  font-size: 12px;
+  font-weight: 700;
+  transition: transform 300ms cubic-bezier(.22, 1, .36, 1), background 300ms cubic-bezier(.22, 1, .36, 1);
+}
+.content-disclosure > summary:hover::after { transform: translateY(-1px); background: #dce8fb; }
+.content-disclosure > summary:focus-visible {
+  border-radius: 10px;
+  outline: 3px solid #6aa7e8;
+  outline-offset: 4px;
+}
+.content-disclosure[open] > summary::after {
+  content: "收起";
+  background: #edf5f4;
+  color: #25736f;
+}
+.content-disclosure > .disclosure-body { margin-top: 20px; }
+.map-disclosure {
+  padding: 20px 24px;
+  border: 1px solid var(--qx-line);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 3px 15px #26344908;
+}
+.map-disclosure > .disclosure-body { margin: 20px -24px -20px; }
+.map-disclosure .map-shell { border: 0; border-radius: 0 0 16px 16px; box-shadow: none; }
+.route-loading-placeholder {
+  display: grid;
+  min-height: 620px;
+  place-items: center;
+  border: 1px solid var(--qx-line);
+  border-radius: 16px;
+  background: #f4f7fa;
+  color: #58708a;
+}
+.route-loading-placeholder span {
+  padding: 12px 16px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 3px 15px #2634490d;
+}
 .login-form { background: #fff; }
 .login-form h2 { font-size: 36px; color: #263b57; text-wrap: balance; }
 .login-form > div { max-width: 420px; }
@@ -2795,15 +2885,18 @@ header h1 { color: #24354d; font-size: 30px; letter-spacing: -.02em; }
 @media (prefers-reduced-motion: reduce) { .launch-scene { animation: none; } .launch-scene > * { animation: none !important; opacity: 1 !important; } .launch-bike { transform: none; } .launch-skip { display: block; } }
 
 .site-footer-banner {
+  position: relative;
   width: 100%;
   overflow: hidden;
-  border: 2px solid #ef795f;
+  border: 0;
   border-radius: 0;
-  background: #174f91;
-  clip-path: polygon(0 0, 100% 0, calc(100% - 18px) 50%, 100% 100%, 0 100%, 18px 50%);
-  box-shadow: 0 8px 24px rgba(23, 79, 145, .22), inset 0 0 0 1px rgba(255,255,255,.12);
+  background: transparent;
+  filter: drop-shadow(0 8px 16px rgba(23, 79, 145, .22));
 }
+.footer-flag-image { z-index: 0; }
 .footer-marquee-track {
+  position: relative;
+  z-index: 1;
   display: flex;
   width: max-content;
   will-change: transform;

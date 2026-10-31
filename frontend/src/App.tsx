@@ -19,7 +19,8 @@ import {
   speakAnnouncement,
   VOICE_MESSAGES,
 } from "./speech";
-import campusPhoto from "./assets/buaa-xueyuan-main-building.jpg";
+import campusPhoto from "./assets/buaa-main-building-full.png";
+import blueWaveFlag from "./assets/footer-blue-wave-flag.png";
 import qingxingLogo from "./assets/qingxing-logo-puhuiti-bold.png";
 import { Field } from "./components";
 import {
@@ -136,6 +137,7 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
         <div className="login-story-copy">
           <span className="eyebrow">BEIHANG · XUEYUAN ROAD CAMPUS</span>
           <h1 className="cover-flag" aria-label="让校园的每一程，更轻盈">
+            <img className="cover-flag-image" src={blueWaveFlag} alt="" />
             <span className="cover-flag-track">
               <span className="cover-flag-copy">让校园的每一程，更轻盈</span>
               <span className="cover-flag-copy" aria-hidden="true">让校园的每一程，更轻盈</span>
@@ -337,8 +339,8 @@ export default function App() {
       if (announcement) speakAnnouncement(announcement);
       setNotice(
         refreshed
-          ? "操作已保存，页面已刷新。"
-          : "操作已保存，但页面刷新失败；请点击刷新数据获取最新状态。",
+          ? "操作已保存，页面已刷新"
+          : "操作已保存，但页面刷新失败；请点击刷新数据获取最新状态",
       );
       return true;
     } catch (e) {
@@ -539,6 +541,7 @@ export default function App() {
           )}
         </fieldset>
         <footer className="site-footer-banner" aria-label="青行校园共享自行车系统 轻盈出发 自在抵达">
+          <img className="footer-flag-image" src={blueWaveFlag} alt="" />
           <div className="footer-marquee-track">
             <div className="footer-marquee-copy">
               <span className="footer-brand">青行 Qingxing</span>

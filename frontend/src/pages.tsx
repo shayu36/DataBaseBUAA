@@ -22,20 +22,20 @@ export function Overview({ d, user }: Props) {
   const roleContent = {
     STUDENT: {
       eyebrow: "BEIHANG · STUDENT RIDE",
-      title: "从附近出发，\n轻盈抵达校园每一站。",
-      description: "查看可借车辆与剩余车位，规划避开禁行区的校园路线。",
+      title: "从附近出发，\n轻盈抵达校园每一站",
+      description: "查看可借车辆与剩余车位，规划避开禁行区的校园路线",
       tag: "学院路校区 · 安全骑行从青行开始 ↗",
     },
     ADMIN: {
       eyebrow: "BEIHANG · OPERATIONS CENTER",
-      title: "掌握车辆分布，\n让校园运转更有序。",
-      description: "集中查看站点容量、故障车辆与调度任务，及时处理运营异常。",
+      title: "掌握车辆分布，\n让校园运转更有序",
+      description: "集中查看站点容量、故障车辆与调度任务，及时处理运营异常",
       tag: "学院路校区 · 运营状态实时总览 ↗",
     },
     OPERATOR: {
       eyebrow: "BEIHANG · FIELD OPERATIONS",
-      title: "任务清晰到站，\n维护每一次安全出发。",
-      description: "查看分配给你的维修、调度和风险任务，按站点安排现场作业。",
+      title: "任务清晰到站，\n维护每一次安全出发",
+      description: "查看分配给你的维修、调度和风险任务，按站点安排现场作业",
       tag: "学院路校区 · 今日运维任务地图 ↗",
     },
   }[user.role];
@@ -132,34 +132,39 @@ export function Overview({ d, user }: Props) {
           dispatches={d.dispatches}
           graphRefresh={d}
         />
-        <section className="panel">
-          <div className="section-head">
-            <h2>停车区一览</h2>
-            <span>{d.zones.length} 个站点</span>
+        <details className="panel content-disclosure">
+          <summary>
+            <span>
+              <strong>停车区一览</strong>
+              <small>{d.zones.length} 个站点</small>
+            </span>
+          </summary>
+          <div className="disclosure-body">
+            {d.zones.map((z) => (
+              <div className="zone-card" key={z.id}>
+                <div>
+                  <strong>{z.name}</strong>
+                  <small>{z.location}</small>
+                </div>
+                <b>
+                  {z.borrowable}
+                  <small>辆可借</small>
+                </b>
+                <div className="capacity">
+                  <i
+                    style={{
+                      width:
+                        Math.min(100, (z.occupied / z.capacity) * 100) + "%",
+                    }}
+                  />
+                </div>
+                <small>
+                  {z.occupied}/{z.capacity} 已占用 · {z.reserved} 预留
+                </small>
+              </div>
+            ))}
           </div>
-          {d.zones.map((z) => (
-            <div className="zone-card" key={z.id}>
-              <div>
-                <strong>{z.name}</strong>
-                <small>{z.location}</small>
-              </div>
-              <b>
-                {z.borrowable}
-                <small>辆可借</small>
-              </b>
-              <div className="capacity">
-                <i
-                  style={{
-                    width: Math.min(100, (z.occupied / z.capacity) * 100) + "%",
-                  }}
-                />
-              </div>
-              <small>
-                {z.occupied}/{z.capacity} 已占用 · {z.reserved} 预留
-              </small>
-            </div>
-          ))}
-        </section>
+        </details>
       </div>
     </>
   );
@@ -207,7 +212,7 @@ export function Rides({ d, run }: Props) {
         <section className="panel">
           <h2>选择一辆，开始出发</h2>
           <p className="muted">
-            每开始 30 分钟 ¥1.00，最低 ¥1.00。里程由服务器路网估算。
+            每开始 30 分钟 ¥1.00，最低 ¥1.00；里程由服务器路网估算
           </p>
           <Field label="借车停车点">
             <select
@@ -248,8 +253,8 @@ export function Rides({ d, run }: Props) {
           {!borrowableBikes.length && (
             <p className="muted">
               {Number(selectedBorrowZone?.restricted)
-                ? "该停车点位于禁行区内，暂停借车，请联系管理员处理。"
-                : "该停车点暂无可借车辆，请选择其他停车点。"}
+                ? "该停车点位于禁行区内，暂停借车，请联系管理员处理"
+                : "该停车点暂无可借车辆，请选择其他停车点"}
             </p>
           )}
         </section>
@@ -260,7 +265,7 @@ export function Rides({ d, run }: Props) {
               正在骑行 {active.bike_code} · {date(active.started_at)}
             </p>
           ) : (
-            <p className="muted">借车后在这里选择停车点，完成模拟还车。</p>
+            <p className="muted">借车后在这里选择停车点，完成模拟还车</p>
           )}
           <Field label="归还停车点">
             <select
@@ -288,16 +293,20 @@ export function Rides({ d, run }: Props) {
           </Field>
           <p className="muted">
             模拟位置采集于 {date(capturedAt)}
-            。选择停车点会重新采集；定位过期或车位已满时会记录尝试并保留骑行订单。
+            ；选择停车点会重新采集；定位过期或车位已满时会记录尝试并保留骑行订单
           </p>
           {selectedReturnZone && !canReturnTo(selectedReturnZone) && (
-            <p className="muted">该停车点不可归还，请选择其他停车点。</p>
+            <p className="muted">该停车点不可归还，请选择其他停车点</p>
           )}
           <button className="secondary" onClick={capture}>
             重新采集模拟位置
           </button>
           <button
-            disabled={!active || !selectedReturnZone}
+            disabled={
+              !active ||
+              !selectedReturnZone ||
+              !canReturnTo(selectedReturnZone)
+            }
             onClick={() => {
               if (!active || !selectedReturnZone) return;
               if (!canReturnTo(selectedReturnZone)) {
@@ -316,17 +325,27 @@ export function Rides({ d, run }: Props) {
           </button>
         </section>
       </div>
-      <CampusMap
-        zones={d.zones}
-        bikes={d.bikes}
-        graphRefresh={d}
-        onSelect={(z) => {
-          if (active) {
-            setReturnZone(z.id);
-            capture();
-          } else setBorrowZone(z.id);
-        }}
-      />
+      <details className="content-disclosure map-disclosure">
+        <summary>
+          <span>
+            <strong>借车与归还地图</strong>
+            <small>展开后可直接选择停车点</small>
+          </span>
+        </summary>
+        <div className="disclosure-body">
+          <CampusMap
+            zones={d.zones}
+            bikes={d.bikes}
+            graphRefresh={d}
+            onSelect={(z) => {
+              if (active) {
+                setReturnZone(z.id);
+                capture();
+              } else setBorrowZone(z.id);
+            }}
+          />
+        </div>
+      </details>
       <section className="panel">
         <h2>待支付订单</h2>
         {d.actionable_rides
@@ -960,10 +979,12 @@ function Remote({
   path,
   children,
   refreshKey,
+  placeholder,
 }: {
   path: string;
   children: (v: any) => React.ReactNode;
   refreshKey?: unknown;
+  placeholder?: React.ReactNode;
 }) {
   const [data, setData] = useState<{
       path: string;
@@ -1004,7 +1025,7 @@ function Remote({
           {children(current.value)}
         </div>
       ) : !error ? (
-        <div className="loading">正在读取数据…</div>
+        placeholder || <div className="loading">正在读取数据…</div>
       ) : null}
     </>
   );
@@ -1276,7 +1297,7 @@ export function RiskAlerts({ d, run }: Props) {
   return (
     <section className="panel">
       <h2>车辆风险预警与处置</h2>
-      <p className="muted">根据风险告警核对车辆，并记录处理结果。</p>
+      <p className="muted">根据风险告警核对车辆，并记录处理结果</p>
       <Remote path="/risks" refreshKey={d}>
         {(v) => (
           <PaginatedRows
@@ -1326,7 +1347,7 @@ export function Analytics({ d, run }: Props) {
           <div>
             <h2>热点分析条件</h2>
             <p className="muted">
-              北京时间统计；库存持续时长只按有效快照区间计算。
+              北京时间统计；库存持续时长只按有效快照区间计算
             </p>
           </div>
           <div className="tabs">
@@ -1521,8 +1542,8 @@ export function Analytics({ d, run }: Props) {
               />
               <p className="muted">
                 低库存指快照中可用状态车辆不超过容量的
-                20%；满位指已占用达到容量，不含预留车位。历史快照未记录站点是否开放或禁行，不能直接视为实际可借数量。只统计间隔不超过
-                5 分钟的相邻快照，缺失时段不视为正常。
+                20%；满位指已占用达到容量，不含预留车位；历史快照未记录站点是否开放或禁行，不能直接视为实际可借数量；只统计间隔不超过
+                5 分钟的相邻快照，缺失时段不视为正常
               </p>
               <h3>工作日分布</h3>
               <Table
@@ -1543,7 +1564,7 @@ export function Analytics({ d, run }: Props) {
                 <div>
                   <h2>可追溯调度建议</h2>
                   <p className="muted">
-                    保存生成窗口、库存基线、需求量和算法版本，确认时再次校验车位。
+                    保存生成窗口、库存基线、需求量和算法版本，确认时再次校验车位
                   </p>
                 </div>
                 <button onClick={() => run("/analytics/suggestions", filter)}>
@@ -1574,7 +1595,7 @@ export function Analytics({ d, run }: Props) {
                 <div>
                   <h2>车辆风险预警与处置</h2>
                   <p className="muted">
-                    基于报修次数、复发类型与维修间隔的可解释规则，非学习模型。
+                    基于报修次数、复发类型与维修间隔的可解释规则，非学习模型
                   </p>
                 </div>
                 <button onClick={() => run("/risks/refresh", {})}>
@@ -1632,6 +1653,15 @@ export function Routes({ d }: Props) {
       <Remote
         path={"/routes?from=" + from + "&to=" + to + "&mode=all"}
         refreshKey={d}
+        placeholder={
+          <div
+            className="route-loading-placeholder"
+            role="status"
+            aria-label="正在准备路线与地图"
+          >
+            <span>正在准备路线与地图…</span>
+          </div>
+        }
       >
         {(result) => {
           const v = {
@@ -1667,43 +1697,50 @@ export function Routes({ d }: Props) {
               </div>
               <div className="route-result">
                 <strong>{(v.distance_m / 1000).toFixed(2)} km</strong>
-                <span>预计 {v.duration_minutes} 分钟 · Dijkstra 路网估算</span>
+                <span>预计 {v.duration_minutes} 分钟</span>
               </div>
               <CampusMap zones={d.zones} bikes={d.bikes} route={v} />
-              <section className="panel">
-                <h2>路线依据与途经道路</h2>
-                <p>{v.explanation}</p>
-                <div className="route-facts">
+              <details className="panel content-disclosure route-disclosure">
+                <summary>
                   <span>
-                    交叉口风险合计{" "}
-                    <strong>{v.attribute_totals.intersection_risk}</strong>
+                    <strong>路线依据与途经道路</strong>
+                    <small>{v.segments.length} 个路段</small>
                   </span>
-                  <span>
-                    机动车较多路段{" "}
-                    <strong>{v.attribute_totals.motor_heavy_edges}</strong>
-                  </span>
-                  <span>
-                    较粗糙路段 <strong>{v.attribute_totals.rough_edges}</strong>
-                  </span>
-                  <span>
-                    高遮阴路段{" "}
-                    <strong>{v.attribute_totals.shaded_edges}</strong>
-                  </span>
-                </div>
-                <p>
-                  {v.path
-                    .map(
-                      (id: number) =>
-                        v.nodes.find((n: Row) => n.id === id)?.name || id,
-                    )
-                    .join(" → ")}
-                </p>
-                <p className="muted">
-                  道路属性来源：课程演示模拟数据；封闭和禁骑道路不会参与计算。
-                </p>
-                <Table
-                  rows={v.segments}
-                  columns={[
+                </summary>
+                <div className="disclosure-body">
+                  <p>{v.explanation}</p>
+                  <div className="route-facts">
+                    <span>
+                      交叉口风险合计{" "}
+                      <strong>{v.attribute_totals.intersection_risk}</strong>
+                    </span>
+                    <span>
+                      机动车较多路段{" "}
+                      <strong>{v.attribute_totals.motor_heavy_edges}</strong>
+                    </span>
+                    <span>
+                      较粗糙路段{" "}
+                      <strong>{v.attribute_totals.rough_edges}</strong>
+                    </span>
+                    <span>
+                      高遮阴路段{" "}
+                      <strong>{v.attribute_totals.shaded_edges}</strong>
+                    </span>
+                  </div>
+                  <p>
+                    {v.path
+                      .map(
+                        (id: number) =>
+                          v.nodes.find((n: Row) => n.id === id)?.name || id,
+                      )
+                      .join(" → ")}
+                  </p>
+                  <p className="muted">
+                    道路属性来源：课程演示模拟数据；封闭和禁骑道路不会参与计算
+                  </p>
+                  <Table
+                    rows={v.segments}
+                    columns={[
                     {
                       label: "路段",
                       render: (r) =>
@@ -1727,9 +1764,10 @@ export function Routes({ d }: Props) {
                       label: "遮阴 / 照明",
                       render: (r) => `${r.shade_level} / ${r.lighting_level}`,
                     },
-                  ]}
-                />
-              </section>
+                    ]}
+                  />
+                </div>
+              </details>
             </>
           );
         }}
@@ -1750,11 +1788,11 @@ export function Carbon({ d, user, run }: Props) {
           <h2>
             把轻盈的足迹，
             <br />
-            留给更绿的校园。
+            留给更绿的校园
           </h2>
           <p>
             {d.carbon.rule
-              ? `当前模拟减排系数 ${d.carbon.rule.kg_per_km} kg/km · 每公里 ${d.carbon.rule.points_per_km} 分 · ${d.carbon.rule.rule_version}`
+              ? `当前模拟减排系数 ${d.carbon.rule.kg_per_km} kg/km · 每公里 ${d.carbon.rule.points_per_km} 分`
               : "当前积分规则暂不可用"}
           </p>
         </div>
@@ -1783,10 +1821,7 @@ export function Carbon({ d, user, run }: Props) {
       <section className="panel">
         <div className="section-head">
           <div>
-            <h2>自愿参与的校园绿色排行榜</h2>
-            <p className="muted">
-              默认不公开真实姓名；你可以设置公开昵称并随时退出展示。
-            </p>
+            <h2>校园绿色排行榜</h2>
           </div>
           <div className="actions">
             <select
@@ -1874,7 +1909,7 @@ export function Carbon({ d, user, run }: Props) {
       <section className="panel">
         <h2>我的碳积分流水</h2>
         <p className="muted">
-          发放与人工调整均新增流水，不覆盖历史记录；每条记录保留规则版本和原因。
+          发放与人工调整均新增流水，不覆盖历史记录；每条记录保留规则版本和原因
         </p>
         <PaginatedRows
           initialRows={d.carbon.entries}
@@ -1940,7 +1975,7 @@ export function Schema() {
               </a>
             </div>
             <p className="muted">
-              用户、车辆、停车区、骑行订单、支付、员工、调度任务、维护工单。
+              用户、车辆、停车区、骑行订单、支付、员工、调度任务、维护工单
             </p>
             <a href="/docs/ER图.svg" target="_blank" rel="noreferrer">
               打开完整 E-R 图 ↗
@@ -1980,12 +2015,12 @@ export function Schema() {
             {v.trigger_catalogue_source === "SNAPSHOT" && (
               <p className="muted">
                 触发器目录核验于 {date(v.trigger_catalogue_at)}
-                ；外部修改后请重新运行数据库迁移以更新目录。
+                ；外部修改后请重新运行数据库迁移以更新目录
               </p>
             )}
             {v.trigger_catalogue_source === "UNAVAILABLE" && (
               <p className="muted">
-                触发器目录暂不可用；请先备份并运行数据库迁移。
+                触发器目录暂不可用；请先备份并运行数据库迁移
               </p>
             )}
             {Object.entries(v.objects).map(([k, items]: any) => (
@@ -2276,7 +2311,7 @@ export function Admin({ d, user, run }: Props) {
           <div>
             <h2>校园路网属性维护</h2>
             <p className="muted">
-              方向、禁骑状态、坡度、路面、遮阴、照明和混行属性会直接影响三种路线方案。接触或穿越禁行区域的路段不会被选用，即使保存状态为开放。坡度以表中起点至终点为正向；修改坡度等属性后将标为课程模拟数据，仅修改方向或状态时保留原属性来源。
+              方向、禁骑状态、坡度、路面、遮阴、照明和混行属性会直接影响三种路线方案；接触或穿越禁行区域的路段不会被选用，即使保存状态为开放；坡度以表中起点至终点为正向；修改坡度等属性后将标为课程模拟数据，仅修改方向或状态时保留原属性来源
             </p>
           </div>
         </div>
@@ -2490,7 +2525,7 @@ export function Admin({ d, user, run }: Props) {
       <section className="panel">
         <h2>异常行程资格复核</h2>
         <p className="muted">
-          短时间内出现异常长距离的订单不会立即发放积分，经人工确认后再记入流水。
+          短时间内出现异常长距离的订单不会立即发放积分，经人工确认后再记入流水
         </p>
         <PaginatedRows
           initialRows={reviews}
@@ -2569,7 +2604,7 @@ export function Admin({ d, user, run }: Props) {
                 );
               } catch {
                 setAdjustmentError(
-                  "无法保存重试信息，请检查浏览器存储设置后再提交。",
+                  "无法保存重试信息，请检查浏览器存储设置后再提交",
                 );
                 return;
               }
@@ -2584,7 +2619,7 @@ export function Admin({ d, user, run }: Props) {
                 setAdjustCarbon(0);
               } catch {
                 setAdjustmentError(
-                  "操作已保存，但无法清除浏览器中的重试信息；请检查浏览器存储设置。",
+                  "操作已保存，但无法清除浏览器中的重试信息；请检查浏览器存储设置",
                 );
               }
             }
@@ -2592,7 +2627,7 @@ export function Admin({ d, user, run }: Props) {
         >
           {pendingAdjustment && (
             <p className="muted">
-              此次调整的结果尚待确认。可以使用原请求重试；放弃重试前请先核对流水，因为操作可能已经保存。
+              此次调整的结果尚待确认；可以使用原请求重试；放弃重试前请先核对流水，因为操作可能已经保存
             </p>
           )}
           {adjustmentError && (
@@ -2652,7 +2687,7 @@ export function Admin({ d, user, run }: Props) {
                   setAdjustmentError("");
                 } catch {
                   setAdjustmentError(
-                    "无法清除浏览器中的重试信息，请检查浏览器存储设置。",
+                    "无法清除浏览器中的重试信息，请检查浏览器存储设置",
                   );
                 }
               }}
