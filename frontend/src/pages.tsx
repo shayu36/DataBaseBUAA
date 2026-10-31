@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
+import { speakAnnouncement, VOICE_MESSAGES } from "./speech";
 import qingxingLogo from "./assets/qingxing-logo-puhuiti-bold.png";
 import {
   Badge,
@@ -296,18 +297,20 @@ export function Rides({ d, run }: Props) {
             重新采集模拟位置
           </button>
           <button
-            disabled={
-              !active || !selectedReturnZone || !canReturnTo(selectedReturnZone)
-            }
-            onClick={() =>
-              active &&
+            disabled={!active || !selectedReturnZone}
+            onClick={() => {
+              if (!active || !selectedReturnZone) return;
+              if (!canReturnTo(selectedReturnZone)) {
+                speakAnnouncement(VOICE_MESSAGES.returnUnavailable);
+                return;
+              }
               run("/rides/" + active.id + "/return", {
                 zone_id: returnZone,
                 route_mode: mode,
                 captured_at: capturedAt,
                 location_source: "MAP_SIMULATION",
-              })
-            }
+              });
+            }}
           >
             确认归还
           </button>
@@ -1103,9 +1106,6 @@ function InventoryChart({ series, zones }: { series: Row[]; zones: Row[] }) {
           </span>
         ))}
       </div>
-      <p className="muted">
-        折线表示各停车区快照中的可借车辆数；断档不补值，详细覆盖率见下表。
-      </p>
     </div>
   );
 }
@@ -1478,11 +1478,6 @@ export function Analytics({ d, run }: Props) {
                 series={v.inventory_series || []}
                 zones={d.zones}
               />
-              {(v.inventory_series || []).length < v.snapshot_count && (
-                <p className="muted">
-                  曲线为保留区间极值的抽样；统计和覆盖率使用全部快照。
-                </p>
-              )}
               <div className="inventory-strip">
                 {(v.hotspots || []).slice(0, 6).map((h: any) => (
                   <article key={h.zone_id}>

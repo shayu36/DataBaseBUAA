@@ -14,6 +14,11 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { api } from "./api";
+import {
+  announcementForOperation,
+  speakAnnouncement,
+  VOICE_MESSAGES,
+} from "./speech";
 import campusPhoto from "./assets/buaa-xueyuan-main-building.jpg";
 import qingxingLogo from "./assets/qingxing-logo-puhuiti-bold.png";
 import { Field } from "./components";
@@ -130,15 +135,16 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
         </a>
         <div className="login-story-copy">
           <span className="eyebrow">BEIHANG · XUEYUAN ROAD CAMPUS</span>
-          <h1>
-            让校园的每一程，
-            <br />
-            更轻盈。
+          <h1 className="cover-flag" aria-label="让校园的每一程，更轻盈">
+            <span className="cover-flag-track">
+              <span className="cover-flag-copy">让校园的每一程，更轻盈</span>
+              <span className="cover-flag-copy" aria-hidden="true">让校园的每一程，更轻盈</span>
+            </span>
           </h1>
-          <p>从主楼到新主楼，一辆自行车连接校园里的每一站。</p>
+          <p>从大运村到北区学生公寓，一辆自行车连接校园里的每一站</p>
         </div>
         <small>
-          <span>北京航空航天大学 · 学院路校区</span>
+          <span>北京航空航天大学　学院路校区</span>
         </small>
       </section>
       <section className="login-form">
@@ -152,7 +158,6 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
         <div>
           <span className="eyebrow">WELCOME TO QINGXING</span>
           <h2>{register ? "加入青行" : "欢迎登录青行校园共享自行车系统"}</h2>
-          <p className="muted">登录，开启你的绿色校园生活。</p>
           <fieldset className="login-controls" disabled={busy} aria-busy={busy}>
             <div className="tabs">
               <button
@@ -246,7 +251,7 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
               </button>
             </form>
             <div className="demo">
-              <span>课堂演示 · 选择身份后点击登录</span>
+              <span>课堂展示专用入口</span>
               {[
                 ["jia", "管理员 · 贾鑫洋"],
                 ["ouyang", "学生 · 欧阳晨"],
@@ -328,6 +333,8 @@ export default function App() {
     try {
       await api(path, body);
       const refreshed = await fetchDashboard();
+      const announcement = announcementForOperation(path, true);
+      if (announcement) speakAnnouncement(announcement);
       setNotice(
         refreshed
           ? "操作已保存，页面已刷新。"
@@ -336,6 +343,8 @@ export default function App() {
       return true;
     } catch (e) {
       await fetchDashboard();
+      const announcement = announcementForOperation(path, false);
+      if (announcement) speakAnnouncement(announcement);
       setError((e as Error).message);
       return false;
     } finally {
@@ -351,6 +360,7 @@ export default function App() {
     setNotice("");
     try {
       await api("/auth/logout", {});
+      speakAnnouncement(VOICE_MESSAGES.logout);
       setUser(undefined);
       setD(undefined);
       setPage("overview");
@@ -364,6 +374,7 @@ export default function App() {
   if (initial) return <div className="loading full">正在连接青行…</div>;
   if (!user) return <Login onLogin={(nextUser) => {
     setEntering(!window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    speakAnnouncement(VOICE_MESSAGES.login);
     setUser(nextUser);
   }} />;
   const roleNavigation = visibleNavigation(user.role);
@@ -427,7 +438,7 @@ export default function App() {
           {roleNavigation.map((n) => (
             <button
               key={n.id}
-              className={activePage === n.id ? "active" : ""}
+              className={`nav-${n.id}${activePage === n.id ? " active" : ""}`}
               aria-current={activePage === n.id ? "page" : undefined}
               onClick={() => {
                 setPage(n.id);
@@ -435,7 +446,7 @@ export default function App() {
                 setError("");
               }}
             >
-              <n.icon size={19} />
+              <n.icon size={21} />
               {n.name}
               {activePage === n.id && <span className="nav-dot" />}
             </button>
@@ -449,7 +460,6 @@ export default function App() {
               <br />
               都是绿色的选择
             </strong>
-            <small>让校园，也让生活更轻盈。</small>
           </div>
           <div className="user-card">
             <span className="avatar">{user.name.slice(-1)}</span>
@@ -528,8 +538,19 @@ export default function App() {
             <div className="loading">正在读取校园数据…</div>
           )}
         </fieldset>
-        <footer>
-          青行 Qingxing · 校园共享自行车系统<span>轻盈出发，自在抵达。</span>
+        <footer className="site-footer-banner" aria-label="青行校园共享自行车系统 轻盈出发 自在抵达">
+          <div className="footer-marquee-track">
+            <div className="footer-marquee-copy">
+              <span className="footer-brand">青行 Qingxing</span>
+              <span className="footer-system">校园共享自行车系统</span>
+              <span className="footer-slogan">轻盈出发　自在抵达</span>
+            </div>
+            <div className="footer-marquee-copy" aria-hidden="true">
+              <span className="footer-brand">青行 Qingxing</span>
+              <span className="footer-system">校园共享自行车系统</span>
+              <span className="footer-slogan">轻盈出发　自在抵达</span>
+            </div>
+          </div>
         </footer>
       </main>
     </div>

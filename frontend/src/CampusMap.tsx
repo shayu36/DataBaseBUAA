@@ -5,7 +5,6 @@ import {
   Minus,
   Plus,
   RotateCcw,
-  ExternalLink,
 } from "lucide-react";
 import campus from "../../database/campus-map.json";
 import campusMap from "./assets/buaa-xueyuan-campus-map.jpg";
@@ -214,7 +213,6 @@ export function CampusMap({
             {label}
           </button>
         ))}
-        <span>路网状态结合数据库与禁行区域　线条不表示行驶方向</span>
       </div>
       {layers.roads && !route && !graph && (
         <p className="muted" role="status">
@@ -583,14 +581,6 @@ export function CampusMap({
           </span>
         )}
       </div>
-      <p className="map-source">
-        <a href={campus.source} target="_blank" rel="noreferrer">
-          北航官方校区地图 <ExternalLink size={11} />
-        </a>
-        <a href={campus.planSource} target="_blank" rel="noreferrer">
-          学院路校区平面图 <ExternalLink size={11} />
-        </a>
-      </p>
     </section>
   );
 }

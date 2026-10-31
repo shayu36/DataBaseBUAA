@@ -785,13 +785,7 @@ summary {
   }
 }
 footer {
-  display: flex;
-  justify-content: space-between;
-  color: #a7ae9d;
-  font-size: 9px;
-  margin-top: 33px;
-  padding-top: 18px;
-  border-top: 1px solid #e5e9dc;
+  margin-top: 32px;
 }
 .login-page {
   display: grid;
@@ -1145,9 +1139,6 @@ footer {
   .actions select {
     padding: 8px;
     font-size: 11px;
-  }
-  footer span {
-    display: none;
   }
 }
 
@@ -2169,7 +2160,8 @@ td strong {
 }
 .login-story-copy {
   max-width: 650px;
-  margin: auto 0 48px;
+  margin: auto auto 48px;
+  text-align: center;
   text-shadow: 0 2px 16px rgba(6, 26, 43, 0.34);
 }
 .login-story-copy .eyebrow {
@@ -2178,12 +2170,42 @@ td strong {
   letter-spacing: 0.16em;
 }
 .login-story-copy h1 {
-  max-width: 11em;
-  margin: 20px 0 14px;
+  max-width: 650px;
+  margin: 20px auto 14px;
   color: #fff;
-  font-size: clamp(38px, 3.7vw, 64px);
+  font-size: clamp(26px, 2.5vw, 40px);
   font-weight: 700;
   line-height: 1.34;
+  white-space: nowrap;
+}
+.cover-flag {
+  width: min(650px, 100%);
+  overflow: hidden;
+  border: 2px solid #ef795f;
+  border-radius: 14px;
+  background: #174f91;
+  box-shadow: 0 12px 30px rgba(4, 23, 49, .3), inset 0 0 0 1px rgba(255,255,255,.16);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 16px) 50%, 100% 100%, 0 100%, 16px 50%);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .28);
+}
+.cover-flag-track {
+  display: flex;
+  width: 200%;
+  will-change: transform;
+  animation: cover-flag-scroll 12s linear infinite;
+}
+.cover-flag-copy {
+  flex: 0 0 50%;
+  min-height: 68px;
+  padding: 8px 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ff5a52;
+  text-shadow: 0 2px 12px rgba(8, 15, 36, .42), 0 0 14px rgba(255, 90, 82, .22);
+}
+@keyframes cover-flag-scroll {
+  to { transform: translateX(-50%); }
 }
 .login-story-copy p {
   color: #eef8fb;
@@ -2193,8 +2215,9 @@ td strong {
 .login-story > small {
   display: flex;
   margin-top: 0;
-  justify-content: space-between;
+  justify-content: center;
   gap: 16px;
+  text-align: center;
   color: #edf5f8;
   font-size: 12px;
   letter-spacing: 0.05em;
@@ -2265,14 +2288,15 @@ td strong {
     object-position: center 45%;
   }
   .login-story-copy {
-    margin: auto 0 0;
+    margin: auto auto 0;
   }
   .login-story-copy .eyebrow {
     font-size: 9px;
   }
   .login-story-copy h1 {
     margin: 9px 0 5px;
-    font-size: 29px;
+    font-size: clamp(22px, 6.6vw, 29px);
+    white-space: normal;
   }
   .login-story-copy p {
     margin: 0;
@@ -2340,7 +2364,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   color: #607087;
   border: 1px solid transparent;
   border-radius: 10px;
-  font-size: 13px;
+  font-size: 15px;
+  font-weight: 650;
   transition: transform 500ms cubic-bezier(.22,1,.36,1), background-color 300ms, color 300ms;
 }
 .sidebar nav button:hover { background: #f2f5fa; color: #294a81; }
@@ -2351,14 +2376,27 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   box-shadow: inset 3px 0 #315fbb;
 }
 .sidebar nav button.active svg { color: var(--qx-blue); }
+.sidebar nav button.nav-overview svg { color: #3273dc; }
+.sidebar nav button.nav-rides svg { color: #00a6a6; }
+.sidebar nav button.nav-orders svg { color: #f28c28; }
+.sidebar nav button.nav-routes svg { color: #805ad5; }
+.sidebar nav button.nav-carbon svg { color: #20a464; }
+.sidebar nav button.nav-maintenance svg { color: #e05757; }
+.sidebar nav button.nav-dispatch svg { color: #0d9ed4; }
+.sidebar nav button.nav-analytics svg { color: #526ed3; }
+.sidebar nav button.nav-risks svg { color: #db6b22; }
+.sidebar nav button.nav-admin svg { color: #68778d; }
 .nav-dot { background: var(--qx-blue); }
 .green-note {
   background: #edf6f5;
   color: #176b71;
   border: 1px solid #d9ebea;
   border-radius: 14px;
+  display: grid;
+  justify-items: center;
+  text-align: center;
 }
-.green-note small { color: #5a8084; }
+.green-note strong { text-align: center; }
 .user-card { border-color: var(--qx-line); color: var(--qx-ink); }
 .avatar { background: #dfeaf7; color: #315f91; }
 .user-card small, .user-card button { color: #708097; }
@@ -2755,3 +2793,61 @@ header h1 { color: #24354d; font-size: 30px; letter-spacing: -.02em; }
 @keyframes launch-brand-tech { 0%, 68% { opacity: 0; transform: translateY(25px) scale(.82); } 76%, 92% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-24px) scale(.94); } }
 @media (max-width: 760px) { .launch-skip { top: 16px; right: 16px; } .launch-bike { width: 92vw; } .launch-campus { width: 125vw; } .launch-brand small { letter-spacing: .18em; } }
 @media (prefers-reduced-motion: reduce) { .launch-scene { animation: none; } .launch-scene > * { animation: none !important; opacity: 1 !important; } .launch-bike { transform: none; } .launch-skip { display: block; } }
+
+.site-footer-banner {
+  width: 100%;
+  overflow: hidden;
+  border: 2px solid #ef795f;
+  border-radius: 0;
+  background: #174f91;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 18px) 50%, 100% 100%, 0 100%, 18px 50%);
+  box-shadow: 0 8px 24px rgba(23, 79, 145, .22), inset 0 0 0 1px rgba(255,255,255,.12);
+}
+.footer-marquee-track {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: footer-marquee 18s linear infinite;
+}
+.footer-marquee-copy {
+  width: 100vw;
+  flex: 0 0 100vw;
+  min-height: 48px;
+  padding: 8px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 48px;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+.footer-marquee-copy span {
+  display: inline-block;
+  animation: footer-banner-float 3.4s cubic-bezier(.22, 1, .36, 1) infinite alternate;
+}
+.footer-marquee-copy span:nth-child(2) { animation-delay: -.9s; }
+.footer-marquee-copy span:nth-child(3) { animation-delay: -1.8s; }
+.footer-brand { color: #ffffff; }
+.footer-system { color: #9cf4ef; }
+.footer-slogan { color: #ffd1bf; }
+@keyframes footer-marquee {
+  to { transform: translateX(-50%); }
+}
+@keyframes footer-banner-float {
+  from { transform: translateY(-2px); opacity: .78; }
+  to { transform: translateY(2px); opacity: 1; }
+}
+@media (max-width: 760px) {
+  .cover-flag-copy {
+    min-height: 54px;
+    padding-inline: 22px;
+  }
+  .footer-marquee-copy {
+    min-height: 44px;
+    padding-inline: 20px;
+    gap: 32px;
+    font-size: 12px;
+  }
+}

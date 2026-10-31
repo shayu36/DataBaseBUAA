@@ -2743,3 +2743,82 @@ test("a new rider sees an unranked private summary", async ({ page }) => {
   await expect(page.getByText("仅自己可见", { exact: true })).toBeVisible();
   await expect(page.getByText("我的排名 #null")).toHaveCount(0);
 });
+
+test("彩色导航、语音提示与旗帜横幅保持一致", async ({ page }) => {
+  await page.addInitScript(() => {
+    const spoken: string[] = [];
+    class MockUtterance {
+      text: string;
+      lang = "";
+      rate = 1;
+      pitch = 1;
+      volume = 1;
+      voice: SpeechSynthesisVoice | null = null;
+      constructor(text: string) {
+        this.text = text;
+      }
+    }
+    Object.defineProperty(window, "SpeechSynthesisUtterance", {
+      configurable: true,
+      value: MockUtterance,
+    });
+    Object.defineProperty(window, "speechSynthesis", {
+      configurable: true,
+      value: {
+        cancel() {},
+        getVoices: () => [
+          { name: "Microsoft Xiaoxiao Online (Natural)", lang: "zh-CN" },
+        ],
+        speak: (utterance: MockUtterance) => spoken.push(utterance.text),
+      },
+    });
+    (window as any).__spoken = spoken;
+  });
+
+  await page.goto("/");
+  await expect(
+    page.getByText("从大运村到北区学生公寓，一辆自行车连接校园里的每一站"),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  await page.getByRole("button", { name: "跳过", exact: true }).click();
+
+  await expect.poll(() =>
+    page.evaluate(() => (window as any).__spoken),
+  ).toContain("欢迎使用北京航空航天大学青行校园共享自行车管理系统");
+
+  const navigation = page.locator(".sidebar nav button");
+  expect(
+    Number.parseFloat(await navigation.first().evaluate((node) =>
+      getComputedStyle(node).fontSize,
+    )),
+  ).toBeGreaterThanOrEqual(15);
+  const iconColors = await navigation.locator("svg").evaluateAll((icons) =>
+    [...new Set(icons.map((icon) => getComputedStyle(icon).color))],
+  );
+  expect(iconColors.length).toBeGreaterThanOrEqual(4);
+
+  const clipPath = await page.locator(".site-footer-banner").evaluate((node) =>
+    getComputedStyle(node).clipPath,
+  );
+  expect(clipPath).not.toBe("none");
+
+  const operationMessages = await page.evaluate(async () => {
+    const speech = await import("/src/speech.ts");
+    return [
+      speech.announcementForOperation("/rides/start", true),
+      speech.announcementForOperation("/rides/8/return", true),
+      speech.announcementForOperation("/rides/8/return", false),
+    ];
+  });
+  expect(operationMessages).toEqual([
+    "开锁成功，祝您骑行愉快",
+    "还车成功，感谢您的使用",
+    "当前位置无法还车，请前往指定停车点归还",
+  ]);
+
+  await page.getByRole("button", { name: "退出登录" }).click();
+  await expect.poll(() =>
+    page.evaluate(() => (window as any).__spoken),
+  ).toContain("感谢使用青行校园共享自行车管理系统，期待您下次使用");
+});
