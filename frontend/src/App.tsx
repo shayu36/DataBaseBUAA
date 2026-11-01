@@ -140,7 +140,9 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
             <img className="cover-flag-image" src={blueWaveFlag} alt="" />
             <span className="cover-flag-track">
               <span className="cover-flag-copy">让校园的每一程，更轻盈</span>
-              <span className="cover-flag-copy" aria-hidden="true">让校园的每一程，更轻盈</span>
+              <span className="cover-flag-copy" aria-hidden="true">
+                让校园的每一程，更轻盈
+              </span>
             </span>
           </h1>
           <p>从大运村到北区学生公寓，一辆自行车连接校园里的每一站</p>
@@ -154,7 +156,9 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
           <span className="login-art-halo" />
           <span className="login-art-wheel login-art-wheel-back" />
           <span className="login-art-wheel login-art-wheel-front" />
-          <span className="login-art-core"><img src={qingxingLogo} alt="" /></span>
+          <span className="login-art-core">
+            <img src={qingxingLogo} alt="" />
+          </span>
           <span className="login-art-shadow" />
         </div>
         <div>
@@ -374,11 +378,18 @@ export default function App() {
     }
   }
   if (initial) return <div className="loading full">正在连接青行…</div>;
-  if (!user) return <Login onLogin={(nextUser) => {
-    setEntering(!window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-    speakAnnouncement(VOICE_MESSAGES.login);
-    setUser(nextUser);
-  }} />;
+  if (!user)
+    return (
+      <Login
+        onLogin={(nextUser) => {
+          setEntering(
+            !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+          );
+          speakAnnouncement(VOICE_MESSAGES.login);
+          setUser(nextUser);
+        }}
+      />
+    );
   const roleNavigation = visibleNavigation(user.role);
   const current =
     roleNavigation.find((item) => item.id === page) || roleNavigation[0];
@@ -401,31 +412,66 @@ export default function App() {
   return (
     <div className="app">
       {entering && (
-        <div className="launch-scene" role="status" aria-label="登录成功，正在进入青行">
-          <button className="launch-skip" type="button" onClick={() => setEntering(false)}>跳过</button>
+        <div
+          className="launch-scene"
+          role="status"
+          aria-label="登录成功，正在进入青行"
+        >
+          <button
+            className="launch-skip"
+            type="button"
+            onClick={() => setEntering(false)}
+          >
+            跳过
+          </button>
           <div className="launch-grid" aria-hidden="true" />
           <div className="launch-particles" aria-hidden="true">
-            {Array.from({ length: 18 }, (_, i) => <i key={i} />)}
+            {Array.from({ length: 18 }, (_, i) => (
+              <i key={i} />
+            ))}
           </div>
-          <div className="launch-rings" aria-hidden="true"><span /><span /><span /></div>
-          <svg className="launch-campus" viewBox="0 0 900 620" aria-hidden="true">
+          <div className="launch-rings" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+          <svg
+            className="launch-campus"
+            viewBox="0 0 900 620"
+            aria-hidden="true"
+          >
             <path d="M-30 470 C140 390 175 240 330 300 S555 520 930 215" />
             <path d="M-30 530 C180 430 200 330 340 365 S595 570 930 300" />
             <path d="M95 92h180v86H95zM600 85h210v110H600zM640 405h170v95H640z" />
-            <circle cx="170" cy="410" r="10" /><circle cx="515" cy="245" r="10" /><circle cx="755" cy="350" r="10" />
+            <circle cx="170" cy="410" r="10" />
+            <circle cx="515" cy="245" r="10" />
+            <circle cx="755" cy="350" r="10" />
           </svg>
           <div className="launch-bike" aria-hidden="true">
             <svg viewBox="0 0 520 260">
               <circle className="bike-wheel" cx="125" cy="190" r="58" />
               <circle className="bike-wheel" cx="397" cy="190" r="58" />
-              <path className="bike-frame" d="M125 190 205 95 280 190 125 190 250 190 315 88 397 190M205 95h-35M315 88l28-38M300 50h38" />
-              <path className="bike-glow" d="M125 190 205 95 280 190 125 190M280 190 315 88 397 190" />
-              <circle className="bike-hub" cx="205" cy="95" r="6" /><circle className="bike-hub" cx="315" cy="88" r="6" />
+              <path
+                className="bike-frame"
+                d="M125 190 205 95 280 190 125 190 250 190 315 88 397 190M205 95h-35M315 88l28-38M300 50h38"
+              />
+              <path
+                className="bike-glow"
+                d="M125 190 205 95 280 190 125 190M280 190 315 88 397 190"
+              />
+              <circle className="bike-hub" cx="205" cy="95" r="6" />
+              <circle className="bike-hub" cx="315" cy="88" r="6" />
             </svg>
           </div>
-          <div className="launch-route" aria-hidden="true"><span /><span /><span /></div>
+          <div className="launch-route" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
           <div className="launch-brand">
-            <div className="launch-mark"><img src={qingxingLogo} alt="青行" /></div>
+            <div className="launch-mark">
+              <img src={qingxingLogo} alt="青行" />
+            </div>
             <strong>CampusRide</strong>
             <small>智慧骑行 · 绿色校园</small>
           </div>
@@ -540,7 +586,10 @@ export default function App() {
             <div className="loading">正在读取校园数据…</div>
           )}
         </fieldset>
-        <footer className="site-footer-banner" aria-label="青行校园共享自行车系统 轻盈出发 自在抵达">
+        <footer
+          className="site-footer-banner"
+          aria-label="青行校园共享自行车系统 轻盈出发 自在抵达"
+        >
           <img className="footer-flag-image" src={blueWaveFlag} alt="" />
           <div className="footer-marquee-track">
             <div className="footer-marquee-copy">

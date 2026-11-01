@@ -150,9 +150,7 @@ test("长内容默认收起并可由用户展开", async ({ page }) => {
   await expect(zones.locator(".zone-card").first()).toBeVisible();
 
   await page.getByRole("button", { name: "借车与归还", exact: true }).click();
-  const rideMap = page
-    .locator("details")
-    .filter({ hasText: "借车与归还地图" });
+  const rideMap = page.locator("details").filter({ hasText: "借车与归还地图" });
   await expect(rideMap).not.toHaveAttribute("open", "");
   await expect(rideMap.locator(".map-shell")).toBeHidden();
   await rideMap.locator("summary").click();
@@ -247,7 +245,10 @@ test("学生界面的可见文案不使用中文句号", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "骑行首页" })).toBeVisible();
 
   const visibleFullStops = await page.evaluate(() => {
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT,
+    );
     const matches: string[] = [];
     let node = walker.nextNode();
     while (node) {
@@ -372,9 +373,7 @@ test("禁行站点显示实际可借数量并阻止选择车辆", async ({ page 
     })
     .click();
   await expect(
-    page
-      .getByText("该停车点位于禁行区内，暂停借车，请联系管理员处理")
-      .first(),
+    page.getByText("该停车点位于禁行区内，暂停借车，请联系管理员处理").first(),
   ).toBeVisible();
   await expect(
     page.locator(".bike-card").filter({ hasText: bikeCode }),
@@ -604,9 +603,7 @@ test("login cover uses the official Beihang Xueyuan campus photograph", async ({
     "src",
     /buaa-main-building-full(?:-[A-Za-z0-9_-]{8})?\.png/,
   );
-  await expect(
-    page.getByText(/北京航空航天大学\s+学院路校区/),
-  ).toBeVisible();
+  await expect(page.getByText(/北京航空航天大学\s+学院路校区/)).toBeVisible();
   await expect(page.getByText("国立中央大学")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "学生 · 欧阳晨" }),
@@ -2987,25 +2984,28 @@ test("彩色导航、语音提示与旗帜横幅保持一致", async ({ page }) 
   await page.getByRole("button", { name: "登录青行", exact: true }).click();
   await page.getByRole("button", { name: "跳过", exact: true }).click();
 
-  await expect.poll(() =>
-    page.evaluate(() => (window as any).__spoken),
-  ).toContain("欢迎使用北京航空航天大学青行校园共享自行车管理系统");
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__spoken))
+    .toContain("欢迎使用北京航空航天大学青行校园共享自行车管理系统");
 
   const navigation = page.locator(".sidebar nav button");
   expect(
-    Number.parseFloat(await navigation.first().evaluate((node) =>
-      getComputedStyle(node).fontSize,
-    )),
+    Number.parseFloat(
+      await navigation
+        .first()
+        .evaluate((node) => getComputedStyle(node).fontSize),
+    ),
   ).toBeGreaterThanOrEqual(15);
-  const iconColors = await navigation.locator("svg").evaluateAll((icons) =>
-    [...new Set(icons.map((icon) => getComputedStyle(icon).color))],
-  );
+  const iconColors = await navigation
+    .locator("svg")
+    .evaluateAll((icons) => [
+      ...new Set(icons.map((icon) => getComputedStyle(icon).color)),
+    ]);
   expect(iconColors.length).toBeGreaterThanOrEqual(4);
 
-  await expect(page.locator(".site-footer-banner .footer-flag-image")).toHaveAttribute(
-    "src",
-    /footer-blue-wave-flag(?:-[A-Za-z0-9_-]{8})?\.png/,
-  );
+  await expect(
+    page.locator(".site-footer-banner .footer-flag-image"),
+  ).toHaveAttribute("src", /footer-blue-wave-flag(?:-[A-Za-z0-9_-]{8})?\.png/);
 
   const operationMessages = await page.evaluate(async () => {
     const speech = await import("/src/speech.ts");
@@ -3022,7 +3022,7 @@ test("彩色导航、语音提示与旗帜横幅保持一致", async ({ page }) 
   ]);
 
   await page.getByRole("button", { name: "退出登录" }).click();
-  await expect.poll(() =>
-    page.evaluate(() => (window as any).__spoken),
-  ).toContain("感谢使用青行校园共享自行车管理系统，期待您下次使用");
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__spoken))
+    .toContain("感谢使用青行校园共享自行车管理系统，期待您下次使用");
 });

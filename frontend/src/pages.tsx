@@ -303,9 +303,7 @@ export function Rides({ d, run }: Props) {
           </button>
           <button
             disabled={
-              !active ||
-              !selectedReturnZone ||
-              !canReturnTo(selectedReturnZone)
+              !active || !selectedReturnZone || !canReturnTo(selectedReturnZone)
             }
             onClick={() => {
               if (!active || !selectedReturnZone) return;
@@ -1741,29 +1739,29 @@ export function Routes({ d }: Props) {
                   <Table
                     rows={v.segments}
                     columns={[
-                    {
-                      label: "路段",
-                      render: (r) =>
-                        `${v.nodes.find((n: Row) => n.id === r.from_node_id)?.name} → ${v.nodes.find((n: Row) => n.id === r.to_node_id)?.name}`,
-                    },
-                    {
-                      label: "方向 / 状态",
-                      render: (r) =>
-                        `${r.direction === "BOTH" ? "双向" : "单向"} / ${r.status === "OPEN" ? "开放" : r.status}`,
-                    },
-                    {
-                      label: "长度 / 坡度",
-                      render: (r) =>
-                        `${r.distance_m} m / ${Number(r.slope_percent).toFixed(2)}%`,
-                    },
-                    {
-                      label: "路面 / 交通",
-                      render: (r) => `${r.surface} / ${r.traffic_mix}`,
-                    },
-                    {
-                      label: "遮阴 / 照明",
-                      render: (r) => `${r.shade_level} / ${r.lighting_level}`,
-                    },
+                      {
+                        label: "路段",
+                        render: (r) =>
+                          `${v.nodes.find((n: Row) => n.id === r.from_node_id)?.name} → ${v.nodes.find((n: Row) => n.id === r.to_node_id)?.name}`,
+                      },
+                      {
+                        label: "方向 / 状态",
+                        render: (r) =>
+                          `${r.direction === "BOTH" ? "双向" : "单向"} / ${r.status === "OPEN" ? "开放" : r.status}`,
+                      },
+                      {
+                        label: "长度 / 坡度",
+                        render: (r) =>
+                          `${r.distance_m} m / ${Number(r.slope_percent).toFixed(2)}%`,
+                      },
+                      {
+                        label: "路面 / 交通",
+                        render: (r) => `${r.surface} / ${r.traffic_mix}`,
+                      },
+                      {
+                        label: "遮阴 / 照明",
+                        render: (r) => `${r.shade_level} / ${r.lighting_level}`,
+                      },
                     ]}
                   />
                 </div>
