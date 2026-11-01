@@ -1,4 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
+import { serviceConfig } from "./config/services.mjs";
+const { frontendURL } = serviceConfig();
 const productionURL = process.env.QINGXING_E2E_URL;
 export default defineConfig({
   testDir: "./tests",
@@ -8,7 +10,7 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   use: {
-    baseURL: productionURL || "http://127.0.0.1:5189",
+    baseURL: productionURL || frontendURL,
     trace: "retain-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
@@ -16,7 +18,7 @@ export default defineConfig({
     ? undefined
     : {
         command: "npm run dev",
-        url: "http://127.0.0.1:5189",
+        url: frontendURL,
         reuseExistingServer: true,
         timeout: 60000,
       },

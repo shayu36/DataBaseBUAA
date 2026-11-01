@@ -9,11 +9,13 @@ import { sessionSecret } from "./config.mjs";
 import { sql } from "./sql-statements.mjs";
 import { campus, campusDefinition } from "./campus-data.mjs";
 import { createSnapshotRunner } from "./snapshot-runner.mjs";
+import { serviceConfig } from "../config/services.mjs";
 import {
   loadProcedureSources,
   procedureRevision,
 } from "./procedure-revision.mjs";
 sessionSecret();
+const { backendHost: host, backendPort: port } = serviceConfig();
 const pool = createPool();
 const versionError =
   "SCHEMA_VERSION_MISMATCH：数据库结构或存储过程版本不匹配，请先核对 README 中的初始化和迁移说明。";
@@ -46,8 +48,6 @@ try {
     throw new Error(versionError, { cause: error });
   throw error;
 }
-const host = process.env.HOST || "127.0.0.1",
-  port = Number(process.env.PORT || 5188);
 const server = createApp(pool).listen(port, host, () =>
   console.log(
     "Qingxing ready at http://" +

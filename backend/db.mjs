@@ -1,7 +1,6 @@
 import mysql from "mysql2/promise";
-import dotenv from "dotenv";
 import { sql } from "./sql-statements.mjs";
-dotenv.config({ path: new URL("../.env", import.meta.url), quiet: true });
+import "../config/services.mjs";
 
 export function createPool(overrides = {}) {
   return mysql.createPool({
