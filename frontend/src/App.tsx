@@ -20,7 +20,6 @@ import {
   VOICE_MESSAGES,
 } from "./speech";
 import campusPhoto from "./assets/buaa-main-building-full.png";
-import blueWaveFlag from "./assets/footer-blue-wave-flag.png";
 import qingxingLogo from "./assets/qingxing-logo-puhuiti-bold.png";
 import { Field } from "./components";
 import {
@@ -131,35 +130,15 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
           src={campusPhoto}
           alt="北航学院路校区主楼实景"
         />
-        <a className="brand" href="/">
-          <img className="brand-logo" src={qingxingLogo} alt="青行" />
-        </a>
-        <div className="login-story-copy">
-          <span className="eyebrow">BEIHANG · XUEYUAN ROAD CAMPUS</span>
-          <h1 className="cover-flag" aria-label="让校园的每一程，更轻盈">
-            <img className="cover-flag-image" src={blueWaveFlag} alt="" />
-            <span className="cover-flag-track">
-              <span className="cover-flag-copy">让校园的每一程，更轻盈</span>
-              <span className="cover-flag-copy" aria-hidden="true">让校园的每一程，更轻盈</span>
-            </span>
-          </h1>
-          <p>从大运村到北区学生公寓，一辆自行车连接校园里的每一站</p>
-        </div>
-        <small>
-          <span>北京航空航天大学　学院路校区</span>
-        </small>
       </section>
       <section className="login-form">
-        <div className="login-art" aria-hidden="true">
-          <span className="login-art-halo" />
-          <span className="login-art-wheel login-art-wheel-back" />
-          <span className="login-art-wheel login-art-wheel-front" />
-          <span className="login-art-core"><img src={qingxingLogo} alt="" /></span>
-          <span className="login-art-shadow" />
-        </div>
-        <div>
-          <span className="eyebrow">WELCOME TO QINGXING</span>
-          <h2>{register ? "加入青行" : "欢迎登录青行校园共享自行车系统"}</h2>
+        <div className="login-card">
+          <header className="login-card-brand">
+            <img src={qingxingLogo} alt="青行商标" />
+            <h1>欢迎使用青行校园共享自行车系统</h1>
+            <p>北京航空航天大学 · 学院路校区</p>
+          </header>
+          <h2>{register ? "注册学生账户" : "账号登录"}</h2>
           <fieldset className="login-controls" disabled={busy} aria-busy={busy}>
             <div className="tabs">
               <button
@@ -252,28 +231,30 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
                 <ArrowRight size={18} />
               </button>
             </form>
-            <div className="demo">
-              <span>课堂展示专用入口</span>
-              {[
-                ["jia", "管理员 · 贾鑫洋"],
-                ["ouyang", "学生 · 欧阳晨"],
-                ["zheng", "运营员 · 郑一凡"],
-                ["wang", "学生 · 王奕"],
-              ].map(([id, label]) => (
-                <button
-                  className="secondary"
-                  key={id}
-                  onClick={() => {
-                    setEmail(id + "@qingxing.local");
-                    setPassword("Qingxing2026!");
-                    setRegister(false);
-                    setError("");
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <details className="demo">
+              <summary>选择演示账号</summary>
+              <div className="demo-accounts">
+                {[
+                  ["jia", "管理员 · 贾鑫洋"],
+                  ["ouyang", "学生 · 欧阳晨"],
+                  ["zheng", "运营员 · 郑一凡"],
+                  ["wang", "学生 · 王奕"],
+                ].map(([id, label]) => (
+                  <button
+                    className="secondary"
+                    key={id}
+                    onClick={() => {
+                      setEmail(id + "@qingxing.local");
+                      setPassword("Qingxing2026!");
+                      setRegister(false);
+                      setError("");
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </details>
           </fieldset>
         </div>
       </section>
@@ -374,16 +355,23 @@ export default function App() {
     }
   }
   if (initial) return <div className="loading full">正在连接青行…</div>;
-  if (!user) return <Login onLogin={(nextUser) => {
-    setEntering(!window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-    speakAnnouncement(VOICE_MESSAGES.login);
-    setUser(nextUser);
-  }} />;
+  if (!user)
+    return (
+      <Login
+        onLogin={(nextUser) => {
+          setEntering(
+            !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+          );
+          speakAnnouncement(VOICE_MESSAGES.login);
+          setUser(nextUser);
+        }}
+      />
+    );
   const roleNavigation = visibleNavigation(user.role);
   const current =
     roleNavigation.find((item) => item.id === page) || roleNavigation[0];
   const activePage = current.id;
-  const props = d ? { d, user, run } : undefined;
+  const props = d ? { d, user, run, onNavigate: setPage } : undefined;
   const Page = (
     {
       overview: Overview,
@@ -401,31 +389,66 @@ export default function App() {
   return (
     <div className="app">
       {entering && (
-        <div className="launch-scene" role="status" aria-label="登录成功，正在进入青行">
-          <button className="launch-skip" type="button" onClick={() => setEntering(false)}>跳过</button>
+        <div
+          className="launch-scene"
+          role="status"
+          aria-label="登录成功，正在进入青行"
+        >
+          <button
+            className="launch-skip"
+            type="button"
+            onClick={() => setEntering(false)}
+          >
+            跳过
+          </button>
           <div className="launch-grid" aria-hidden="true" />
           <div className="launch-particles" aria-hidden="true">
-            {Array.from({ length: 18 }, (_, i) => <i key={i} />)}
+            {Array.from({ length: 18 }, (_, i) => (
+              <i key={i} />
+            ))}
           </div>
-          <div className="launch-rings" aria-hidden="true"><span /><span /><span /></div>
-          <svg className="launch-campus" viewBox="0 0 900 620" aria-hidden="true">
+          <div className="launch-rings" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+          <svg
+            className="launch-campus"
+            viewBox="0 0 900 620"
+            aria-hidden="true"
+          >
             <path d="M-30 470 C140 390 175 240 330 300 S555 520 930 215" />
             <path d="M-30 530 C180 430 200 330 340 365 S595 570 930 300" />
             <path d="M95 92h180v86H95zM600 85h210v110H600zM640 405h170v95H640z" />
-            <circle cx="170" cy="410" r="10" /><circle cx="515" cy="245" r="10" /><circle cx="755" cy="350" r="10" />
+            <circle cx="170" cy="410" r="10" />
+            <circle cx="515" cy="245" r="10" />
+            <circle cx="755" cy="350" r="10" />
           </svg>
           <div className="launch-bike" aria-hidden="true">
             <svg viewBox="0 0 520 260">
               <circle className="bike-wheel" cx="125" cy="190" r="58" />
               <circle className="bike-wheel" cx="397" cy="190" r="58" />
-              <path className="bike-frame" d="M125 190 205 95 280 190 125 190 250 190 315 88 397 190M205 95h-35M315 88l28-38M300 50h38" />
-              <path className="bike-glow" d="M125 190 205 95 280 190 125 190M280 190 315 88 397 190" />
-              <circle className="bike-hub" cx="205" cy="95" r="6" /><circle className="bike-hub" cx="315" cy="88" r="6" />
+              <path
+                className="bike-frame"
+                d="M125 190 205 95 280 190 125 190 250 190 315 88 397 190M205 95h-35M315 88l28-38M300 50h38"
+              />
+              <path
+                className="bike-glow"
+                d="M125 190 205 95 280 190 125 190M280 190 315 88 397 190"
+              />
+              <circle className="bike-hub" cx="205" cy="95" r="6" />
+              <circle className="bike-hub" cx="315" cy="88" r="6" />
             </svg>
           </div>
-          <div className="launch-route" aria-hidden="true"><span /><span /><span /></div>
+          <div className="launch-route" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
           <div className="launch-brand">
-            <div className="launch-mark"><img src={qingxingLogo} alt="青行" /></div>
+            <div className="launch-mark">
+              <img src={qingxingLogo} alt="青行" />
+            </div>
             <strong>CampusRide</strong>
             <small>智慧骑行 · 绿色校园</small>
           </div>
@@ -540,19 +563,19 @@ export default function App() {
             <div className="loading">正在读取校园数据…</div>
           )}
         </fieldset>
-        <footer className="site-footer-banner" aria-label="青行校园共享自行车系统 轻盈出发 自在抵达">
-          <img className="footer-flag-image" src={blueWaveFlag} alt="" />
-          <div className="footer-marquee-track">
-            <div className="footer-marquee-copy">
-              <span className="footer-brand">青行 Qingxing</span>
-              <span className="footer-system">校园共享自行车系统</span>
-              <span className="footer-slogan">轻盈出发　自在抵达</span>
-            </div>
-            <div className="footer-marquee-copy" aria-hidden="true">
-              <span className="footer-brand">青行 Qingxing</span>
-              <span className="footer-system">校园共享自行车系统</span>
-              <span className="footer-slogan">轻盈出发　自在抵达</span>
-            </div>
+        <footer
+          className="site-footer-banner"
+          aria-label="青行 Qingxing 校园共享自行车系统 轻盈出发 自在抵达"
+        >
+          <div className="site-footer-marquee-track" aria-hidden="true">
+            {Array.from({ length: 4 }, (_, index) => (
+              <div className="site-footer-marquee-group" key={index}>
+                <span className="footer-brand">青行 Qingxing</span>
+                <span className="footer-system">校园共享自行车系统</span>
+                <span className="footer-slogan">轻盈出发 · 自在抵达</span>
+                <span className="footer-separator">✦</span>
+              </div>
+            ))}
           </div>
         </footer>
       </main>

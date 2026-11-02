@@ -21,9 +21,22 @@ const labels: Record<string, string> = {
   SUSPENDED: "已停用",
   OPEN: "待分配",
   ASSIGNED: "已分配",
+  HIGH: "高风险",
+  MEDIUM: "中风险",
+  LOW: "低风险",
+  ACKNOWLEDGED: "已确认",
+  RESOLVED: "已解决",
+  DISMISSED: "已排除",
+  CONFIRMED: "已确认",
+  PREVIEW: "待评估",
+  ADJUSTMENT: "人工调整",
 };
-export function Badge({ value }: { value: string }) {
-  return <span className={"badge s-" + value}>{labels[value] || value}</span>;
+export function Badge({ value, label }: { value: string; label?: string }) {
+  return (
+    <span className={"badge s-" + value}>
+      {label || labels[value] || value}
+    </span>
+  );
 }
 export function Empty({ text = "暂无记录" }: { text?: string }) {
   return (

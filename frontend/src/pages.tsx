@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { speakAnnouncement, VOICE_MESSAGES } from "./speech";
-import qingxingLogo from "./assets/qingxing-logo-puhuiti-bold.png";
 import {
   Badge,
   CampusMap,
@@ -17,8 +16,9 @@ type Props = {
   d: Dashboard;
   user: User;
   run: (path: string, body: any) => Promise<boolean>;
+  onNavigate?: (page: string) => void;
 };
-export function Overview({ d, user }: Props) {
+export function Overview({ d, user, onNavigate }: Props) {
   const roleContent = {
     STUDENT: {
       eyebrow: "BEIHANG · STUDENT RIDE",
@@ -104,14 +104,6 @@ export function Overview({ d, user }: Props) {
           <p>{roleContent.description}</p>
           <span className="hero-tag">{roleContent.tag}</span>
         </div>
-        <div className="hero-bike">
-          <img className="hero-logo" src={qingxingLogo} alt="青行" />
-          <span>
-            QINGXING
-            <br />
-            CAMPUS CYCLING
-          </span>
-        </div>
       </div>
       <div className="stats">
         {stats.map(([label, value, detail]) => (
@@ -132,39 +124,93 @@ export function Overview({ d, user }: Props) {
           dispatches={d.dispatches}
           graphRefresh={d}
         />
-        <details className="panel content-disclosure">
-          <summary>
-            <span>
-              <strong>停车区一览</strong>
-              <small>{d.zones.length} 个站点</small>
-            </span>
-          </summary>
-          <div className="disclosure-body">
-            {d.zones.map((z) => (
-              <div className="zone-card" key={z.id}>
-                <div>
-                  <strong>{z.name}</strong>
-                  <small>{z.location}</small>
-                </div>
-                <b>
-                  {z.borrowable}
-                  <small>辆可借</small>
-                </b>
-                <div className="capacity">
-                  <i
-                    style={{
-                      width:
-                        Math.min(100, (z.occupied / z.capacity) * 100) + "%",
-                    }}
-                  />
-                </div>
-                <small>
-                  {z.occupied}/{z.capacity} 已占用 · {z.reserved} 预留
-                </small>
-              </div>
-            ))}
+        <aside className="overview-side">
+          <div className="panel overview-side-summary">
+            <h2>校园停车点</h2>
+            <div>
+              <strong>{d.zones.length}</strong>
+              <span>个停车点</span>
+            </div>
+            <div>
+              <strong>{d.summary.available_bikes}</strong>
+              <span>辆可借车辆</span>
+            </div>
+            <div>
+              <strong>
+                {
+                  d.zones.filter(
+                    (z) =>
+                      Number(z.occupied) + Number(z.reserved) >=
+                      Number(z.capacity),
+                  ).length
+                }
+              </strong>
+              <span>处车位已满</span>
+            </div>
           </div>
-        </details>
+          <details className="panel content-disclosure">
+            <summary>
+              <span>
+                <strong>停车区一览</strong>
+                <small>{d.zones.length} 个站点</small>
+              </span>
+            </summary>
+            <div className="disclosure-body">
+              {d.zones.map((z) => (
+                <div className="zone-card" key={z.id}>
+                  <div>
+                    <strong>{z.name}</strong>
+                    <small>{z.location}</small>
+                  </div>
+                  <b>
+                    {z.borrowable}
+                    <small>辆可借</small>
+                  </b>
+                  <div className="capacity">
+                    <i
+                      style={{
+                        width:
+                          Math.min(100, (z.occupied / z.capacity) * 100) + "%",
+                      }}
+                    />
+                  </div>
+                  <small>
+                    {z.occupied}/{z.capacity} 已占用 · {z.reserved} 预留
+                  </small>
+                </div>
+              ))}
+            </div>
+          </details>
+          <section className="panel overview-shortcuts">
+            <h2>{user.role === "STUDENT" ? "我的出行" : "当前待办"}</h2>
+            <p className="muted">
+              {user.role === "STUDENT"
+                ? `进行中 ${d.actionable_rides.filter((r) => r.status === "RUNNING").length} 单 · 待支付 ${d.actionable_rides.filter((r) => r.status === "UNPAID").length} 单`
+                : `维修 ${activeTickets.length} 项 · 调度 ${activeDispatches.length} 项`}
+            </p>
+            {onNavigate && (
+              <div className="overview-quick-actions">
+                <button
+                  onClick={() =>
+                    onNavigate(
+                      user.role === "STUDENT" ? "rides" : "maintenance",
+                    )
+                  }
+                >
+                  {user.role === "STUDENT" ? "前往借还车" : "处理维修"}
+                </button>
+                <button
+                  className="secondary"
+                  onClick={() =>
+                    onNavigate(user.role === "STUDENT" ? "routes" : "dispatch")
+                  }
+                >
+                  {user.role === "STUDENT" ? "规划路线" : "查看调度"}
+                </button>
+              </div>
+            )}
+          </section>
+        </aside>
       </div>
     </>
   );
@@ -236,9 +282,12 @@ export function Rides({ d, run }: Props) {
           <div className="bike-grid">
             {borrowableBikes.map((b) => (
               <article className="bike-card" key={b.id}>
-                <span className="bike-symbol">🚲</span>
+                <span className="bike-symbol" aria-hidden="true">
+                  ●
+                </span>
                 <strong>{b.code}</strong>
-                <small>{b.zone_name}</small>
+                <small>停放于 {b.zone_name}</small>
+                <small>状态良好 · 可立即借用</small>
                 <button
                   disabled={!!active}
                   onClick={async () => {
@@ -303,9 +352,7 @@ export function Rides({ d, run }: Props) {
           </button>
           <button
             disabled={
-              !active ||
-              !selectedReturnZone ||
-              !canReturnTo(selectedReturnZone)
+              !active || !selectedReturnZone || !canReturnTo(selectedReturnZone)
             }
             onClick={() => {
               if (!active || !selectedReturnZone) return;
@@ -487,6 +534,42 @@ function PaginatedRows({
   );
 }
 
+function CompactHistoryTable({
+  rows,
+  columns,
+  label,
+  visible = 8,
+}: {
+  rows: Row[];
+  columns: { label: string; render: (r: Row) => React.ReactNode }[];
+  label: string;
+  visible?: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const previousLength = useRef(rows.length);
+  useEffect(() => {
+    if (rows.length > previousLength.current) setExpanded(true);
+    previousLength.current = rows.length;
+  }, [rows.length]);
+  return (
+    <>
+      <Table rows={rows.slice(0, visible)} columns={columns} />
+      {rows.length > visible && (
+        <details
+          className="compact-history"
+          open={expanded}
+          onToggle={(event) => setExpanded(event.currentTarget.open)}
+        >
+          <summary>
+            {label} · {rows.length - visible} 条
+          </summary>
+          <Table rows={rows.slice(visible)} columns={columns} />
+        </details>
+      )}
+    </>
+  );
+}
+
 function RideHistoryRows({
   rows,
   before,
@@ -505,8 +588,9 @@ function RideHistoryRows({
       label="加载更早订单"
     >
       {(rides) => (
-        <Table
+        <CompactHistoryTable
           rows={rides}
+          label="查看更早骑行订单"
           columns={[
             {
               label: "订单 / 车辆",
@@ -711,54 +795,91 @@ export function Maintenance({ d, user, run }: Props) {
           label="加载更早工单"
         >
           {(tickets) => (
-            <Table
-              rows={tickets}
-              columns={[
-                {
-                  label: "车辆 / 故障",
-                  render: (r) => r.bike_code + " · " + r.fault_type,
-                },
-                { label: "描述", render: (r) => r.description },
-                { label: "负责人", render: (r) => r.staff_name || "待分配" },
-                { label: "状态", render: (r) => <Badge value={r.status} /> },
-                {
-                  label: "结果 / 操作",
-                  render: (r) => (
-                    <div className="actions">
-                      {r.result}
-                      {user.role === "ADMIN" &&
-                        !["COMPLETED", "CANCELLED"].includes(r.status) && (
-                          <button
-                            className="tiny"
-                            onClick={() =>
-                              run("/maintenance/" + r.id + "/assign", {
-                                staff_id: staff,
-                              })
-                            }
-                          >
-                            分配
-                          </button>
-                        )}
-                      {user.role !== "STUDENT" &&
-                        r.staff_id &&
-                        r.status !== "COMPLETED" && (
-                          <button
-                            className="tiny"
-                            disabled={!result.trim()}
-                            onClick={() =>
-                              run("/maintenance/" + r.id + "/complete", {
-                                result,
-                              })
-                            }
-                          >
-                            完成维修
-                          </button>
-                        )}
-                    </div>
-                  ),
-                },
-              ]}
-            />
+            <>
+              <Table
+                rows={tickets.filter(
+                  (r) => !["COMPLETED", "CANCELLED"].includes(r.status),
+                )}
+                columns={[
+                  {
+                    label: "车辆 / 故障",
+                    render: (r) => r.bike_code + " · " + r.fault_type,
+                  },
+                  { label: "描述", render: (r) => r.description },
+                  { label: "负责人", render: (r) => r.staff_name || "待分配" },
+                  { label: "状态", render: (r) => <Badge value={r.status} /> },
+                  {
+                    label: "结果 / 操作",
+                    render: (r) => (
+                      <div className="actions">
+                        {r.result}
+                        {user.role === "ADMIN" &&
+                          !["COMPLETED", "CANCELLED"].includes(r.status) && (
+                            <button
+                              className="tiny"
+                              onClick={() =>
+                                run("/maintenance/" + r.id + "/assign", {
+                                  staff_id: staff,
+                                })
+                              }
+                            >
+                              分配
+                            </button>
+                          )}
+                        {user.role !== "STUDENT" &&
+                          r.staff_id &&
+                          r.status !== "COMPLETED" && (
+                            <button
+                              className="tiny"
+                              disabled={!result.trim()}
+                              onClick={() =>
+                                run("/maintenance/" + r.id + "/complete", {
+                                  result,
+                                })
+                              }
+                            >
+                              完成维修
+                            </button>
+                          )}
+                      </div>
+                    ),
+                  },
+                ]}
+              />
+              {tickets.some((r) =>
+                ["COMPLETED", "CANCELLED"].includes(r.status),
+              ) && (
+                <details className="compact-history">
+                  <summary>
+                    查看历史工单 ·{" "}
+                    {
+                      tickets.filter((r) =>
+                        ["COMPLETED", "CANCELLED"].includes(r.status),
+                      ).length
+                    }{" "}
+                    条
+                  </summary>
+                  <Table
+                    rows={tickets.filter((r) =>
+                      ["COMPLETED", "CANCELLED"].includes(r.status),
+                    )}
+                    columns={[
+                      {
+                        label: "车辆 / 故障",
+                        render: (r) => r.bike_code + " · " + r.fault_type,
+                      },
+                      { label: "描述", render: (r) => r.description },
+                      { label: "负责人", render: (r) => r.staff_name || "—" },
+                      {
+                        label: "状态",
+                        render: (r) => <Badge value={r.status} />,
+                      },
+                      { label: "维修结果", render: (r) => r.result || "—" },
+                    ]}
+                  />
+                </details>
+              )}
+            </>
           )}
         </PaginatedRows>
       </section>
@@ -903,72 +1024,113 @@ export function Dispatch({ d, user, run }: Props) {
           label="加载更早调度任务"
         >
           {(dispatches) => (
-            <Table
-              rows={dispatches}
-              columns={[
-                { label: "任务", render: (r) => "#" + r.id },
-                {
-                  label: "路径",
-                  render: (r) => r.source_name + " → " + r.target_name,
-                },
-                { label: "车辆", render: (r) => r.bike_ids.join(", ") },
-                { label: "负责人", render: (r) => r.staff_name || "待分配" },
-                { label: "状态", render: (r) => <Badge value={r.status} /> },
-                {
-                  label: "两站库存",
-                  render: (r) => <DispatchInventory task={r} />,
-                },
-                {
-                  label: "操作",
-                  render: (r) => (
-                    <div className="actions">
-                      {user.role === "ADMIN" && r.status === "PENDING" && (
-                        <button
-                          className="tiny"
-                          onClick={() =>
-                            run("/dispatches/" + r.id + "/assign", {
-                              staff_id: staff,
-                            })
-                          }
-                        >
-                          分配员工
-                        </button>
-                      )}
-                      {r.status === "PENDING" && (
-                        <button
-                          className="tiny"
-                          onClick={() =>
-                            run("/dispatches/" + r.id + "/start", {})
-                          }
-                        >
-                          开始执行
-                        </button>
-                      )}
-                      {r.status === "IN_PROGRESS" && (
-                        <button
-                          className="tiny"
-                          onClick={() =>
-                            run("/dispatches/" + r.id + "/complete", {})
-                          }
-                        >
-                          确认完成
-                        </button>
-                      )}
-                      {user.role === "ADMIN" && r.status === "PENDING" && (
-                        <button
-                          className="tiny secondary"
-                          onClick={() =>
-                            run("/dispatches/" + r.id + "/cancel", {})
-                          }
-                        >
-                          取消
-                        </button>
-                      )}
-                    </div>
-                  ),
-                },
-              ]}
-            />
+            <>
+              <Table
+                rows={dispatches.filter((r) =>
+                  ["PENDING", "IN_PROGRESS"].includes(r.status),
+                )}
+                columns={[
+                  { label: "任务", render: (r) => "#" + r.id },
+                  {
+                    label: "路径",
+                    render: (r) => r.source_name + " → " + r.target_name,
+                  },
+                  { label: "车辆", render: (r) => r.bike_ids.join(", ") },
+                  { label: "负责人", render: (r) => r.staff_name || "待分配" },
+                  { label: "状态", render: (r) => <Badge value={r.status} /> },
+                  {
+                    label: "两站库存",
+                    render: (r) => <DispatchInventory task={r} />,
+                  },
+                  {
+                    label: "操作",
+                    render: (r) => (
+                      <div className="actions">
+                        {user.role === "ADMIN" && r.status === "PENDING" && (
+                          <button
+                            className="tiny"
+                            onClick={() =>
+                              run("/dispatches/" + r.id + "/assign", {
+                                staff_id: staff,
+                              })
+                            }
+                          >
+                            分配员工
+                          </button>
+                        )}
+                        {r.status === "PENDING" && (
+                          <button
+                            className="tiny"
+                            onClick={() =>
+                              run("/dispatches/" + r.id + "/start", {})
+                            }
+                          >
+                            开始执行
+                          </button>
+                        )}
+                        {r.status === "IN_PROGRESS" && (
+                          <button
+                            className="tiny"
+                            onClick={() =>
+                              run("/dispatches/" + r.id + "/complete", {})
+                            }
+                          >
+                            确认完成
+                          </button>
+                        )}
+                        {user.role === "ADMIN" && r.status === "PENDING" && (
+                          <button
+                            className="tiny secondary"
+                            onClick={() =>
+                              run("/dispatches/" + r.id + "/cancel", {})
+                            }
+                          >
+                            取消
+                          </button>
+                        )}
+                      </div>
+                    ),
+                  },
+                ]}
+              />
+              {dispatches.some(
+                (r) => !["PENDING", "IN_PROGRESS"].includes(r.status),
+              ) && (
+                <details className="compact-history">
+                  <summary>
+                    查看历史调度 ·{" "}
+                    {
+                      dispatches.filter(
+                        (r) => !["PENDING", "IN_PROGRESS"].includes(r.status),
+                      ).length
+                    }{" "}
+                    条
+                  </summary>
+                  <Table
+                    rows={dispatches.filter(
+                      (r) => !["PENDING", "IN_PROGRESS"].includes(r.status),
+                    )}
+                    columns={[
+                      { label: "任务", render: (r) => "#" + r.id },
+                      {
+                        label: "路径",
+                        render: (r) => r.source_name + " → " + r.target_name,
+                      },
+                      { label: "车辆", render: (r) => r.bike_ids.join(", ") },
+                      { label: "负责人", render: (r) => r.staff_name || "—" },
+                      {
+                        label: "状态",
+                        render: (r) => <Badge value={r.status} />,
+                      },
+                      {
+                        label: "两站库存",
+                        render: (r) => <DispatchInventory task={r} />,
+                      },
+                    ]}
+                  />
+                </details>
+              )}
+            </>
           )}
         </PaginatedRows>
       </section>
@@ -1190,8 +1352,10 @@ function SavedSuggestions({
       label="加载更早建议"
     >
       {(rows) => (
-        <Table
+        <CompactHistoryTable
           rows={rows}
+          visible={5}
+          label="查看其余已保存建议"
           columns={[
             {
               label: "建议",
@@ -1223,7 +1387,7 @@ function SavedSuggestions({
 function RiskActions({ risk, run }: { risk: Row; run: Props["run"] }) {
   const [note, setNote] = useState("已核对风险规则与历史工单");
   return (
-    <div className="actions">
+    <div className="actions risk-actions">
       <input
         aria-label={`风险 ${risk.id} 处置说明`}
         value={note}
@@ -1240,7 +1404,14 @@ function RiskActions({ risk, run }: { risk: Row; run: Props["run"] }) {
       ).map(([action, label]) => (
         <button
           key={action}
-          className="tiny secondary"
+          className={`tiny ${
+            (risk.status === "OPEN" && action === "acknowledge") ||
+            (risk.status === "ACKNOWLEDGED" &&
+              action ===
+                (risk.maintenance_ticket_id ? "resolve" : "create_ticket"))
+              ? "primary-action"
+              : "secondary"
+          }`}
           disabled={note.trim().length < 2}
           onClick={() => run(`/risks/${risk.id}/${action}`, { note })}
         >
@@ -1252,8 +1423,15 @@ function RiskActions({ risk, run }: { risk: Row; run: Props["run"] }) {
 }
 function RiskTable({ risks, run }: { risks: Row[]; run: Props["run"] }) {
   return (
-    <Table
-      rows={risks}
+    <CompactHistoryTable
+      rows={[...risks].sort(
+        (a, b) =>
+          Number(["RESOLVED", "DISMISSED"].includes(a.status)) -
+            Number(["RESOLVED", "DISMISSED"].includes(b.status)) ||
+          Number(b.score) - Number(a.score),
+      )}
+      visible={5}
+      label="查看其余风险记录"
       columns={[
         { label: "车辆", render: (r) => r.bike_code },
         { label: "风险分", render: (r) => r.score },
@@ -1261,7 +1439,11 @@ function RiskTable({ risks, run }: { risks: Row[]; run: Props["run"] }) {
           label: "等级 / 状态",
           render: (r) => (
             <>
-              <Badge value={r.level} /> <Badge value={r.status} />
+              <Badge value={r.level} />{" "}
+              <Badge
+                value={r.status}
+                label={r.status === "OPEN" ? "待确认" : undefined}
+              />
             </>
           ),
         },
@@ -1325,7 +1507,8 @@ export function Analytics({ d, run }: Props) {
     [dayType, setDayType] = useState("ALL"),
     [startHour, setStartHour] = useState(0),
     [endHour, setEndHour] = useState(24),
-    [zoneId, setZoneId] = useState(0);
+    [zoneId, setZoneId] = useState(0),
+    [section, setSection] = useState("overview");
   const filter =
       scope === "preset"
         ? { days }
@@ -1439,127 +1622,202 @@ export function Analytics({ d, run }: Props) {
       </section>
       <Remote path={"/analytics?" + query} refreshKey={d}>
         {(v) => (
-          <>
-            <section className="panel">
-              <h2>借还车小时分布</h2>
-              <p className="muted">北京时间 · {v.snapshot_count} 条库存快照</p>
-              <div className="chart">
-                {v.hourly.map((h: any) => (
-                  <div
-                    key={h.hour}
-                    title={
-                      h.hour +
-                      "时：借 " +
-                      h.borrow_count +
-                      " / 还 " +
-                      h.return_count
-                    }
-                  >
-                    <div className="bars">
+          <div className="analytics-content">
+            <section className="analytics-summary" aria-label="分析摘要">
+              <article>
+                <span>借车高峰</span>
+                <strong>
+                  {
+                    v.hourly.reduce(
+                      (best: any, current: any) =>
+                        current.borrow_count > best.borrow_count
+                          ? current
+                          : best,
+                      { hour: "—", borrow_count: 0 },
+                    ).hour
+                  }{" "}
+                  时
+                </strong>
+                <small>按小时借车量</small>
+              </article>
+              <article>
+                <span>待关注风险</span>
+                <strong>
+                  {
+                    (v.risk_alerts || []).filter(
+                      (r: Row) => !["RESOLVED", "DISMISSED"].includes(r.status),
+                    ).length
+                  }
+                </strong>
+                <small>开放与已确认</small>
+              </article>
+              <article>
+                <span>可执行调度建议</span>
+                <strong>{v.suggestions.length}</strong>
+                <small>确认前校验车位</small>
+              </article>
+            </section>
+            <div
+              className="tabs analytics-tabs"
+              role="tablist"
+              aria-label="运营分析分区"
+            >
+              {[
+                ["overview", "热点概览"],
+                ["dispatch", "调度建议"],
+                ["risks", "车辆风险"],
+              ].map(([key, label]) => (
+                <button
+                  key={key}
+                  role="tab"
+                  aria-selected={section === key}
+                  className={section === key ? "" : "secondary"}
+                  onClick={() => setSection(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="analytics-stack" hidden={section !== "overview"}>
+              <section className="panel">
+                <h2>借还车小时分布</h2>
+                <p className="muted">
+                  北京时间 · {v.snapshot_count} 条库存快照
+                </p>
+                <div className="chart">
+                  {v.hourly.map((h: any) => (
+                    <div
+                      key={h.hour}
+                      title={
+                        h.hour +
+                        "时：借 " +
+                        h.borrow_count +
+                        " / 还 " +
+                        h.return_count
+                      }
+                    >
+                      <div className="bars">
+                        <i
+                          style={{
+                            height:
+                              h.borrow_count === 0
+                                ? 0
+                                : Math.max(
+                                    2,
+                                    (h.borrow_count /
+                                      Math.max(
+                                        1,
+                                        ...v.hourly.map((x: any) =>
+                                          Math.max(
+                                            x.borrow_count,
+                                            x.return_count,
+                                          ),
+                                        ),
+                                      )) *
+                                      140,
+                                  ),
+                          }}
+                        />
+                        <b
+                          style={{
+                            height:
+                              h.return_count === 0
+                                ? 0
+                                : Math.max(
+                                    2,
+                                    (h.return_count /
+                                      Math.max(
+                                        1,
+                                        ...v.hourly.map((x: any) =>
+                                          Math.max(
+                                            x.borrow_count,
+                                            x.return_count,
+                                          ),
+                                        ),
+                                      )) *
+                                      140,
+                                  ),
+                          }}
+                        />
+                      </div>
+                      <small>{h.hour}</small>
+                    </div>
+                  ))}
+                </div>
+                <p className="muted">蓝色：借车 · 青色：还车</p>
+              </section>
+              <section className="panel">
+                <h2>停车区热点与覆盖</h2>
+                <InventoryChart
+                  series={v.inventory_series || []}
+                  zones={d.zones}
+                />
+                <div className="inventory-strip">
+                  {(v.hotspots || []).slice(0, 6).map((h: any) => (
+                    <article key={h.zone_id}>
+                      <strong>{h.name}</strong>
+                      <span>
+                        {h.borrow_count} 借 / {h.return_count} 还
+                      </span>
                       <i
                         style={{
-                          height: Math.max(
-                            2,
-                            (h.borrow_count /
-                              Math.max(
-                                1,
-                                ...v.hourly.map((x: any) =>
-                                  Math.max(x.borrow_count, x.return_count),
-                                ),
-                              )) *
-                              140,
-                          ),
+                          width: Math.min(100, h.coverage_ratio * 100) + "%",
                         }}
                       />
-                      <b
-                        style={{
-                          height: Math.max(
-                            2,
-                            (h.return_count /
-                              Math.max(
-                                1,
-                                ...v.hourly.map((x: any) =>
-                                  Math.max(x.borrow_count, x.return_count),
-                                ),
-                              )) *
-                              140,
-                          ),
-                        }}
-                      />
-                    </div>
-                    <small>{h.hour}</small>
-                  </div>
-                ))}
-              </div>
-              <p className="muted">深绿：借车 · 浅绿：还车</p>
-            </section>
-            <section className="panel">
-              <h2>停车区热点与覆盖</h2>
-              <InventoryChart
-                series={v.inventory_series || []}
-                zones={d.zones}
-              />
-              <div className="inventory-strip">
-                {(v.hotspots || []).slice(0, 6).map((h: any) => (
-                  <article key={h.zone_id}>
-                    <strong>{h.name}</strong>
-                    <span>
-                      {h.borrow_count} 借 / {h.return_count} 还
-                    </span>
-                    <i
-                      style={{
-                        width: Math.min(100, h.coverage_ratio * 100) + "%",
-                      }}
-                    />
-                    <small>
-                      快照覆盖率 {(h.coverage_ratio * 100).toFixed(0)}%
-                    </small>
-                  </article>
-                ))}
-              </div>
-              <Table
-                rows={v.hotspots}
-                columns={[
-                  { label: "站点", render: (r) => r.name },
-                  {
-                    label: "借 / 还",
-                    render: (r) => r.borrow_count + " / " + r.return_count,
-                  },
-                  {
-                    label: "高峰小时",
-                    render: (r) =>
-                      r.peak_hour === null ? "无记录" : r.peak_hour + " 时",
-                  },
-                  {
-                    label: "低库存 / 满位（分钟）",
-                    render: (r) => r.shortage_minutes + " / " + r.full_minutes,
-                  },
-                  {
-                    label: "采样覆盖（分钟）",
-                    render: (r) => r.coverage_minutes,
-                  },
-                ]}
-              />
-              <p className="muted">
-                低库存指快照中可用状态车辆不超过容量的
-                20%；满位指已占用达到容量，不含预留车位；历史快照未记录站点是否开放或禁行，不能直接视为实际可借数量；只统计间隔不超过
-                5 分钟的相邻快照，缺失时段不视为正常
-              </p>
-              <h3>工作日分布</h3>
-              <Table
-                rows={v.weekday}
-                columns={[
-                  {
-                    label: "星期",
-                    render: (r) =>
-                      ["日", "一", "二", "三", "四", "五", "六"][r.weekday],
-                  },
-                  { label: "借车", render: (r) => r.borrow_count },
-                  { label: "还车", render: (r) => r.return_count },
-                ]}
-              />
-            </section>
-            <section className="panel">
+                      <small>
+                        快照覆盖率 {(h.coverage_ratio * 100).toFixed(0)}%
+                      </small>
+                    </article>
+                  ))}
+                </div>
+                <details className="compact-history analytics-detail">
+                  <summary>查看各停车区详细统计与工作日分布</summary>
+                  <Table
+                    rows={v.hotspots}
+                    columns={[
+                      { label: "站点", render: (r) => r.name },
+                      {
+                        label: "借 / 还",
+                        render: (r) => r.borrow_count + " / " + r.return_count,
+                      },
+                      {
+                        label: "高峰小时",
+                        render: (r) =>
+                          r.peak_hour === null ? "无记录" : r.peak_hour + " 时",
+                      },
+                      {
+                        label: "低库存 / 满位（分钟）",
+                        render: (r) =>
+                          r.shortage_minutes + " / " + r.full_minutes,
+                      },
+                      {
+                        label: "采样覆盖（分钟）",
+                        render: (r) => r.coverage_minutes,
+                      },
+                    ]}
+                  />
+                  <p className="muted">
+                    低库存指快照中可用状态车辆不超过容量的
+                    20%；满位指已占用达到容量，不含预留车位；历史快照未记录站点是否开放或禁行，不能直接视为实际可借数量；只统计间隔不超过
+                    5 分钟的相邻快照，缺失时段不视为正常
+                  </p>
+                  <h3>工作日分布</h3>
+                  <Table
+                    rows={v.weekday}
+                    columns={[
+                      {
+                        label: "星期",
+                        render: (r) =>
+                          ["日", "一", "二", "三", "四", "五", "六"][r.weekday],
+                      },
+                      { label: "借车", render: (r) => r.borrow_count },
+                      { label: "还车", render: (r) => r.return_count },
+                    ]}
+                  />
+                </details>
+              </section>
+            </div>
+            <section className="panel" hidden={section !== "dispatch"}>
               <div className="section-head">
                 <div>
                   <h2>可追溯调度建议</h2>
@@ -1590,7 +1848,7 @@ export function Analytics({ d, run }: Props) {
                 run={run}
               />
             </section>
-            <section className="panel">
+            <section className="panel" hidden={section !== "risks"}>
               <div className="section-head">
                 <div>
                   <h2>车辆风险预警与处置</h2>
@@ -1612,7 +1870,7 @@ export function Analytics({ d, run }: Props) {
                 {(risks) => <RiskTable risks={risks} run={run} />}
               </PaginatedRows>
             </section>
-          </>
+          </div>
         )}
       </Remote>
     </>
@@ -1666,6 +1924,7 @@ export function Routes({ d }: Props) {
         {(result) => {
           const v = {
             ...result.routes[mode],
+            mode,
             nodes: result.nodes,
             edges: result.edges,
           };
@@ -1690,6 +1949,13 @@ export function Routes({ d }: Props) {
                       <strong>{(route.distance_m / 1000).toFixed(2)} km</strong>
                       <small>
                         {route.duration_minutes} 分钟 · {detail}
+                      </small>
+                      <small className="route-tradeoff">
+                        {key === "shortest"
+                          ? `距离优先 · 交叉口风险 ${route.attribute_totals.intersection_risk}`
+                          : key === "safe"
+                            ? `风险 ${route.attribute_totals.intersection_risk} · 机动车较多路段 ${route.attribute_totals.motor_heavy_edges}`
+                            : `粗糙路段 ${route.attribute_totals.rough_edges} · 高遮阴路段 ${route.attribute_totals.shaded_edges}`}
                       </small>
                     </button>
                   );
@@ -1741,29 +2007,29 @@ export function Routes({ d }: Props) {
                   <Table
                     rows={v.segments}
                     columns={[
-                    {
-                      label: "路段",
-                      render: (r) =>
-                        `${v.nodes.find((n: Row) => n.id === r.from_node_id)?.name} → ${v.nodes.find((n: Row) => n.id === r.to_node_id)?.name}`,
-                    },
-                    {
-                      label: "方向 / 状态",
-                      render: (r) =>
-                        `${r.direction === "BOTH" ? "双向" : "单向"} / ${r.status === "OPEN" ? "开放" : r.status}`,
-                    },
-                    {
-                      label: "长度 / 坡度",
-                      render: (r) =>
-                        `${r.distance_m} m / ${Number(r.slope_percent).toFixed(2)}%`,
-                    },
-                    {
-                      label: "路面 / 交通",
-                      render: (r) => `${r.surface} / ${r.traffic_mix}`,
-                    },
-                    {
-                      label: "遮阴 / 照明",
-                      render: (r) => `${r.shade_level} / ${r.lighting_level}`,
-                    },
+                      {
+                        label: "路段",
+                        render: (r) =>
+                          `${v.nodes.find((n: Row) => n.id === r.from_node_id)?.name} → ${v.nodes.find((n: Row) => n.id === r.to_node_id)?.name}`,
+                      },
+                      {
+                        label: "方向 / 状态",
+                        render: (r) =>
+                          `${r.direction === "BOTH" ? "双向" : "单向"} / ${r.status === "OPEN" ? "开放" : r.status}`,
+                      },
+                      {
+                        label: "长度 / 坡度",
+                        render: (r) =>
+                          `${r.distance_m} m / ${Number(r.slope_percent).toFixed(2)}%`,
+                      },
+                      {
+                        label: "路面 / 交通",
+                        render: (r) => `${r.surface} / ${r.traffic_mix}`,
+                      },
+                      {
+                        label: "遮阴 / 照明",
+                        render: (r) => `${r.shade_level} / ${r.lighting_level}`,
+                      },
                     ]}
                   />
                 </div>
@@ -1792,7 +2058,7 @@ export function Carbon({ d, user, run }: Props) {
           </h2>
           <p>
             {d.carbon.rule
-              ? `当前模拟减排系数 ${d.carbon.rule.kg_per_km} kg/km · 每公里 ${d.carbon.rule.points_per_km} 分`
+              ? `当前模拟减排系数 ${d.carbon.rule.kg_per_km} kg/km`
               : "当前积分规则暂不可用"}
           </p>
         </div>
@@ -1919,8 +2185,9 @@ export function Carbon({ d, user, run }: Props) {
           label="加载更早积分流水"
         >
           {(entries) => (
-            <Table
+            <CompactHistoryTable
               rows={entries}
+              label="查看更早积分流水"
               columns={[
                 { label: "关联订单", render: (r) => "#" + r.order_id },
                 {
@@ -2049,6 +2316,8 @@ type PendingAdjustment = {
 
 export function Admin({ d, user, run }: Props) {
   const [showSchema, setShowSchema] = useState(false);
+  const [module, setModule] = useState("inventory");
+  const [roadFilter, setRoadFilter] = useState("");
   const adjustmentStorageKey = `qingxing-adjustment-${user.id}`;
   const [pendingAdjustment, setPendingAdjustment] =
     useState<PendingAdjustment | null>(() => {
@@ -2122,581 +2391,647 @@ export function Admin({ d, user, run }: Props) {
   };
   return (
     <>
-      <section className="panel">
-        <button
-          className="secondary"
-          onClick={() => setShowSchema(!showSchema)}
-        >
-          {showSchema ? "收起数据库结构" : "查看数据库结构"}
-        </button>
-      </section>
-      {showSchema && <Schema />}
-      <section className="panel">
-        <div className="tabs">
+      <section className="panel admin-module-bar">
+        <div className="section-head">
+          <div>
+            <h2>基础资料</h2>
+            <p className="muted">按业务模块查看与维护资料</p>
+          </div>
+          <button
+            className="secondary"
+            onClick={() => setShowSchema(!showSchema)}
+          >
+            {showSchema ? "收起数据库结构" : "查看数据库结构"}
+          </button>
+        </div>
+        <div className="tabs" role="tablist" aria-label="基础资料模块">
           {[
-            ["zones", "停车区"],
-            ["bikes", "车辆"],
-            ["staff", "员工"],
-          ].map(([k, v]) => (
+            ["inventory", "停车区与车辆"],
+            ["users", "用户账户"],
+            ["roads", "校园路网"],
+            ["reviews", "异常复核"],
+            ["carbon", "碳积分调整"],
+          ].map(([key, label]) => (
             <button
-              key={k}
-              className={kind === k ? "" : "secondary"}
-              onClick={() => {
-                setKind(k);
-                setEdit({});
-              }}
+              key={key}
+              role="tab"
+              aria-selected={module === key}
+              className={module === key ? "" : "secondary"}
+              onClick={() => setModule(key)}
             >
-              {v}管理
+              {label}
             </button>
           ))}
         </div>
-        <h2>{edit.id ? "编辑 #" + edit.id : "新增资料"}</h2>
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            const payload = { ...defaults[kind], ...edit };
-            if (kind === "bikes" && payload.deployed_at) {
-              payload.deployed_at = String(payload.deployed_at).slice(0, 10);
-            }
-            if (kind === "staff" && edit.id && !payload.password) {
-              delete payload.password;
-            }
-            if (await run("/admin/" + kind, payload)) setEdit({});
-          }}
-        >
-          <div className="form-row">
-            {fields.map((f) => (
-              <Field
-                key={f}
-                label={
-                  (
-                    {
-                      name: "名称",
-                      location: "位置说明",
-                      x: "横坐标（米）",
-                      y: "纵坐标（米）",
-                      radius: "围栏半径（米）",
-                      capacity: "容量",
-                      code: "车辆编号",
-                      zone_id: "所在停车区 ID",
-                      phone: "电话",
-                      email: "登录邮箱",
-                      password: "密码（编辑时可留空）",
-                    } as any
-                  )[f]
-                }
+      </section>
+      {showSchema && <Schema />}
+      <div hidden={module !== "inventory"}>
+        <section className="panel">
+          <div className="tabs">
+            {[
+              ["zones", "停车区"],
+              ["bikes", "车辆"],
+              ["staff", "员工"],
+            ].map(([k, v]) => (
+              <button
+                key={k}
+                className={kind === k ? "" : "secondary"}
+                onClick={() => {
+                  setKind(k);
+                  setEdit({});
+                }}
               >
-                <input
-                  required={f !== "password" || !edit.id}
-                  type={
-                    ["x", "y", "radius", "capacity", "zone_id"].includes(f)
-                      ? "number"
-                      : f === "password"
-                        ? "password"
-                        : f === "email"
-                          ? "email"
-                          : "text"
-                  }
-                  value={edit[f] ?? defaults[kind][f] ?? ""}
-                  onChange={(e) =>
-                    setEdit({
-                      ...edit,
-                      [f]: ["x", "y", "radius", "capacity", "zone_id"].includes(
-                        f,
-                      )
-                        ? Number(e.target.value)
-                        : e.target.value,
-                    })
-                  }
-                />
-              </Field>
+                {v}管理
+              </button>
             ))}
-            <Field label="状态">
-              <select
-                value={edit.status || defaults[kind].status}
-                onChange={(e) => setEdit({ ...edit, status: e.target.value })}
-              >
-                {(kind === "zones"
-                  ? ["ACTIVE", "CLOSED"]
-                  : kind === "bikes"
-                    ? ["AVAILABLE", "RETIRED"]
-                    : ["ACTIVE", "OFF_DUTY"]
-                ).map((s) => (
-                  <option key={s}>{s}</option>
-                ))}
-              </select>
-            </Field>
-            {kind === "staff" && (
-              <Field label="岗位">
-                <select
-                  value={edit.job || "BOTH"}
-                  onChange={(e) => setEdit({ ...edit, job: e.target.value })}
+          </div>
+          <h2>{edit.id ? "编辑 #" + edit.id : "新增资料"}</h2>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const payload = { ...defaults[kind], ...edit };
+              if (kind === "bikes" && payload.deployed_at) {
+                payload.deployed_at = String(payload.deployed_at).slice(0, 10);
+              }
+              if (kind === "staff" && edit.id && !payload.password) {
+                delete payload.password;
+              }
+              if (await run("/admin/" + kind, payload)) setEdit({});
+            }}
+          >
+            <div className="form-row">
+              {fields.map((f) => (
+                <Field
+                  key={f}
+                  label={
+                    (
+                      {
+                        name: "名称",
+                        location: "位置说明",
+                        x: "横坐标（米）",
+                        y: "纵坐标（米）",
+                        radius: "围栏半径（米）",
+                        capacity: "容量",
+                        code: "车辆编号",
+                        zone_id: "所在停车区 ID",
+                        phone: "电话",
+                        email: "登录邮箱",
+                        password: "密码（编辑时可留空）",
+                      } as any
+                    )[f]
+                  }
                 >
-                  {["DISPATCH", "MAINTENANCE", "BOTH"].map((s) => (
+                  <input
+                    required={f !== "password" || !edit.id}
+                    type={
+                      ["x", "y", "radius", "capacity", "zone_id"].includes(f)
+                        ? "number"
+                        : f === "password"
+                          ? "password"
+                          : f === "email"
+                            ? "email"
+                            : "text"
+                    }
+                    value={edit[f] ?? defaults[kind][f] ?? ""}
+                    onChange={(e) =>
+                      setEdit({
+                        ...edit,
+                        [f]: [
+                          "x",
+                          "y",
+                          "radius",
+                          "capacity",
+                          "zone_id",
+                        ].includes(f)
+                          ? Number(e.target.value)
+                          : e.target.value,
+                      })
+                    }
+                  />
+                </Field>
+              ))}
+              <Field label="状态">
+                <select
+                  value={edit.status || defaults[kind].status}
+                  onChange={(e) => setEdit({ ...edit, status: e.target.value })}
+                >
+                  {(kind === "zones"
+                    ? ["ACTIVE", "CLOSED"]
+                    : kind === "bikes"
+                      ? ["AVAILABLE", "RETIRED"]
+                      : ["ACTIVE", "OFF_DUTY"]
+                  ).map((s) => (
                     <option key={s}>{s}</option>
                   ))}
                 </select>
               </Field>
-            )}
-          </div>
-          <button>保存资料</button>
-        </form>
-        <Table
-          rows={
-            kind === "zones" ? d.zones : kind === "bikes" ? d.bikes : d.staff
-          }
-          columns={[
-            { label: "编号", render: (r) => r.id },
-            { label: "名称", render: (r) => r.name || r.code },
-            { label: "状态", render: (r) => <Badge value={r.status} /> },
-            {
-              label: "操作",
-              render: (r) => (
-                <button
-                  className="tiny secondary"
-                  onClick={() => setEdit({ ...r, zone_id: r.current_zone_id })}
-                >
-                  编辑
-                </button>
-              ),
-            },
-          ]}
-        />
-      </section>
-      <section className="panel">
-        <h2>用户账户管理</h2>
-        {userError && (
-          <div className="error" role="alert">
-            {userError}
-          </div>
-        )}
-        <PaginatedRows
-          initialRows={users}
-          initialBefore={usersBefore}
-          path="/admin/users"
-          field="users"
-          label="加载更早账户"
-        >
-          {(rows) => (
-            <Table
-              rows={rows}
-              columns={[
-                { label: "姓名", render: (r) => r.name },
-                { label: "邮箱", render: (r) => r.email },
-                { label: "角色", render: (r) => r.role },
-                { label: "状态", render: (r) => <Badge value={r.status} /> },
-                {
-                  label: "操作",
-                  render: (r) => (
-                    <button
-                      className="tiny secondary"
-                      onClick={() =>
-                        run("/admin/users/" + r.id + "/status", {
-                          status:
-                            r.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE",
-                        })
-                      }
-                    >
-                      {r.status === "ACTIVE" ? "停用" : "启用"}
-                    </button>
-                  ),
-                },
-              ]}
-            />
-          )}
-        </PaginatedRows>
-      </section>
-      <section className="panel">
-        <div className="section-head">
-          <div>
-            <h2>校园路网属性维护</h2>
-            <p className="muted">
-              方向、禁骑状态、坡度、路面、遮阴、照明和混行属性会直接影响三种路线方案；接触或穿越禁行区域的路段不会被选用，即使保存状态为开放；坡度以表中起点至终点为正向；修改坡度等属性后将标为课程模拟数据，仅修改方向或状态时保留原属性来源
-            </p>
-          </div>
-        </div>
-        {road && (
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              if (await run("/admin/roads", road)) setRoad(undefined);
-            }}
-          >
-            <h3>
-              编辑路段 #{road.id} · {road.from_name} → {road.to_name}
-            </h3>
-            <div className="form-row">
-              <Field label="方向">
-                <select
-                  value={road.direction}
-                  onChange={(e) =>
-                    setRoad({ ...road, direction: e.target.value })
-                  }
-                >
-                  {["BOTH", "FORWARD", "REVERSE"].map((v) => (
-                    <option key={v}>{v}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="通行状态">
-                <select
-                  value={road.status}
-                  onChange={(e) => setRoad({ ...road, status: e.target.value })}
-                >
-                  {["OPEN", "CLOSED", "NO_RIDE"].map((v) => (
-                    <option key={v}>{v}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="坡度 %">
-                <input
-                  type="number"
-                  step="0.01"
-                  min="-30"
-                  max="30"
-                  value={road.slope_percent}
-                  onChange={(e) =>
-                    setRoad({ ...road, slope_percent: Number(e.target.value) })
-                  }
-                />
-              </Field>
-              <Field label="路面">
-                <select
-                  value={road.surface}
-                  onChange={(e) =>
-                    setRoad({ ...road, surface: e.target.value })
-                  }
-                >
-                  {["SMOOTH", "AVERAGE", "ROUGH"].map((v) => (
-                    <option key={v}>{v}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="遮阴 0–5">
-                <input
-                  type="number"
-                  min="0"
-                  max="5"
-                  value={road.shade_level}
-                  onChange={(e) =>
-                    setRoad({ ...road, shade_level: Number(e.target.value) })
-                  }
-                />
-              </Field>
-              <Field label="照明 0–5">
-                <input
-                  type="number"
-                  min="0"
-                  max="5"
-                  value={road.lighting_level}
-                  onChange={(e) =>
-                    setRoad({ ...road, lighting_level: Number(e.target.value) })
-                  }
-                />
-              </Field>
-              <Field label="交通混行">
-                <select
-                  value={road.traffic_mix}
-                  onChange={(e) =>
-                    setRoad({ ...road, traffic_mix: e.target.value })
-                  }
-                >
-                  {["BIKE_ONLY", "MIXED", "MOTOR_HEAVY"].map((v) => (
-                    <option key={v}>{v}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="交叉口风险 0–5">
-                <input
-                  type="number"
-                  min="0"
-                  max="5"
-                  value={road.intersection_risk}
-                  onChange={(e) =>
-                    setRoad({
-                      ...road,
-                      intersection_risk: Number(e.target.value),
-                    })
-                  }
-                />
-              </Field>
+              {kind === "staff" && (
+                <Field label="岗位">
+                  <select
+                    value={edit.job || "BOTH"}
+                    onChange={(e) => setEdit({ ...edit, job: e.target.value })}
+                  >
+                    {["DISPATCH", "MAINTENANCE", "BOTH"].map((s) => (
+                      <option key={s}>{s}</option>
+                    ))}
+                  </select>
+                </Field>
+              )}
             </div>
-            <button>保存路网属性</button>
+            <button>保存资料</button>
           </form>
-        )}
-        <Table
-          rows={roads}
-          columns={[
-            { label: "路段", render: (r) => `${r.from_name} → ${r.to_name}` },
-            {
-              label: "方向 / 状态",
-              render: (r) => `${r.direction} / ${r.status}`,
-            },
-            {
-              label: "坡度 / 路面",
-              render: (r) =>
-                `${Number(r.slope_percent).toFixed(2)}% / ${r.surface}`,
-            },
-            {
-              label: "交通 / 风险",
-              render: (r) => `${r.traffic_mix} / ${r.intersection_risk}`,
-            },
-            { label: "属性来源", render: (r) => r.attribute_source },
-            {
-              label: "操作",
-              render: (r) => (
-                <button
-                  className="tiny secondary"
-                  onClick={() => setRoad({ ...r })}
-                >
-                  编辑
-                </button>
-              ),
-            },
-          ]}
-        />
-      </section>
-      <section className="panel">
-        <h2>电子围栏违规复核</h2>
-        <PaginatedRows
-          initialRows={attempts}
-          initialBefore={attemptsBefore}
-          path="/return-attempts?scope=all"
-          field="attempts"
-          label="加载更早归还记录"
-        >
-          {(attempts) => (
-            <Table
-              rows={attempts}
-              columns={[
-                {
-                  label: "订单 / 车辆",
-                  render: (r) => `#${r.order_id} · ${r.bike_code}`,
-                },
-                {
-                  label: "停车区 / 坐标",
-                  render: (r) => `${r.zone_name} · ${r.x}, ${r.y}`,
-                },
-                {
-                  label: "原因 / 来源",
-                  render: (r) => `${r.reason} / ${r.location_source || "历史"}`,
-                },
-                {
-                  label: "状态",
-                  render: (r) => <Badge value={r.review_status} />,
-                },
-                {
-                  label: "操作",
-                  render: (r) =>
-                    r.review_status === "PENDING" ? (
+          <Table
+            rows={
+              kind === "zones" ? d.zones : kind === "bikes" ? d.bikes : d.staff
+            }
+            columns={[
+              { label: "编号", render: (r) => r.id },
+              { label: "名称", render: (r) => r.name || r.code },
+              { label: "状态", render: (r) => <Badge value={r.status} /> },
+              {
+                label: "操作",
+                render: (r) => (
+                  <button
+                    className="tiny secondary"
+                    onClick={() =>
+                      setEdit({ ...r, zone_id: r.current_zone_id })
+                    }
+                  >
+                    编辑
+                  </button>
+                ),
+              },
+            ]}
+          />
+        </section>
+      </div>
+      <div hidden={module !== "users"}>
+        <section className="panel">
+          <h2>用户账户管理</h2>
+          {userError && (
+            <div className="error" role="alert">
+              {userError}
+            </div>
+          )}
+          <PaginatedRows
+            initialRows={users}
+            initialBefore={usersBefore}
+            path="/admin/users"
+            field="users"
+            label="加载更早账户"
+          >
+            {(rows) => (
+              <Table
+                rows={rows}
+                columns={[
+                  { label: "姓名", render: (r) => r.name },
+                  { label: "邮箱", render: (r) => r.email },
+                  { label: "角色", render: (r) => r.role },
+                  { label: "状态", render: (r) => <Badge value={r.status} /> },
+                  {
+                    label: "操作",
+                    render: (r) => (
+                      <button
+                        className="tiny secondary"
+                        onClick={() =>
+                          run("/admin/users/" + r.id + "/status", {
+                            status:
+                              r.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE",
+                          })
+                        }
+                      >
+                        {r.status === "ACTIVE" ? "停用" : "启用"}
+                      </button>
+                    ),
+                  },
+                ]}
+              />
+            )}
+          </PaginatedRows>
+        </section>
+      </div>
+      <div hidden={module !== "roads"}>
+        <section className="panel">
+          <div className="section-head">
+            <div>
+              <h2>校园路网属性维护</h2>
+              <p className="muted">
+                方向、禁骑状态、坡度、路面、遮阴、照明和混行属性会直接影响三种路线方案；接触或穿越禁行区域的路段不会被选用，即使保存状态为开放；坡度以表中起点至终点为正向；修改坡度等属性后将标为课程模拟数据，仅修改方向或状态时保留原属性来源
+              </p>
+            </div>
+          </div>
+          {road && (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (await run("/admin/roads", road)) setRoad(undefined);
+              }}
+            >
+              <h3>
+                编辑路段 #{road.id} · {road.from_name} → {road.to_name}
+              </h3>
+              <div className="form-row">
+                <Field label="方向">
+                  <select
+                    value={road.direction}
+                    onChange={(e) =>
+                      setRoad({ ...road, direction: e.target.value })
+                    }
+                  >
+                    {["BOTH", "FORWARD", "REVERSE"].map((v) => (
+                      <option key={v}>{v}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="通行状态">
+                  <select
+                    value={road.status}
+                    onChange={(e) =>
+                      setRoad({ ...road, status: e.target.value })
+                    }
+                  >
+                    {["OPEN", "CLOSED", "NO_RIDE"].map((v) => (
+                      <option key={v}>{v}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="坡度 %">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="-30"
+                    max="30"
+                    value={road.slope_percent}
+                    onChange={(e) =>
+                      setRoad({
+                        ...road,
+                        slope_percent: Number(e.target.value),
+                      })
+                    }
+                  />
+                </Field>
+                <Field label="路面">
+                  <select
+                    value={road.surface}
+                    onChange={(e) =>
+                      setRoad({ ...road, surface: e.target.value })
+                    }
+                  >
+                    {["SMOOTH", "AVERAGE", "ROUGH"].map((v) => (
+                      <option key={v}>{v}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="遮阴 0–5">
+                  <input
+                    type="number"
+                    min="0"
+                    max="5"
+                    value={road.shade_level}
+                    onChange={(e) =>
+                      setRoad({ ...road, shade_level: Number(e.target.value) })
+                    }
+                  />
+                </Field>
+                <Field label="照明 0–5">
+                  <input
+                    type="number"
+                    min="0"
+                    max="5"
+                    value={road.lighting_level}
+                    onChange={(e) =>
+                      setRoad({
+                        ...road,
+                        lighting_level: Number(e.target.value),
+                      })
+                    }
+                  />
+                </Field>
+                <Field label="交通混行">
+                  <select
+                    value={road.traffic_mix}
+                    onChange={(e) =>
+                      setRoad({ ...road, traffic_mix: e.target.value })
+                    }
+                  >
+                    {["BIKE_ONLY", "MIXED", "MOTOR_HEAVY"].map((v) => (
+                      <option key={v}>{v}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="交叉口风险 0–5">
+                  <input
+                    type="number"
+                    min="0"
+                    max="5"
+                    value={road.intersection_risk}
+                    onChange={(e) =>
+                      setRoad({
+                        ...road,
+                        intersection_risk: Number(e.target.value),
+                      })
+                    }
+                  />
+                </Field>
+              </div>
+              <button>保存路网属性</button>
+            </form>
+          )}
+          <Field label="筛选路段">
+            <input
+              value={roadFilter}
+              onChange={(e) => setRoadFilter(e.target.value)}
+              placeholder="按路段名称、通行状态或交通类型筛选"
+            />
+          </Field>
+          <CompactHistoryTable
+            visible={12}
+            label="查看更多路段"
+            rows={roads.filter((r) =>
+              `${r.from_name} ${r.to_name} ${r.status} ${r.traffic_mix}`
+                .toLowerCase()
+                .includes(roadFilter.toLowerCase()),
+            )}
+            columns={[
+              { label: "路段", render: (r) => `${r.from_name} → ${r.to_name}` },
+              {
+                label: "方向 / 状态",
+                render: (r) => `${r.direction} / ${r.status}`,
+              },
+              {
+                label: "坡度 / 路面",
+                render: (r) =>
+                  `${Number(r.slope_percent).toFixed(2)}% / ${r.surface}`,
+              },
+              {
+                label: "交通 / 风险",
+                render: (r) => `${r.traffic_mix} / ${r.intersection_risk}`,
+              },
+              { label: "属性来源", render: (r) => r.attribute_source },
+              {
+                label: "操作",
+                render: (r) => (
+                  <button
+                    className="tiny secondary"
+                    onClick={() => setRoad({ ...r })}
+                  >
+                    编辑
+                  </button>
+                ),
+              },
+            ]}
+          />
+        </section>
+      </div>
+      <div hidden={module !== "reviews"}>
+        <section className="panel">
+          <h2>电子围栏违规复核</h2>
+          <PaginatedRows
+            initialRows={attempts}
+            initialBefore={attemptsBefore}
+            path="/return-attempts?scope=all"
+            field="attempts"
+            label="加载更早归还记录"
+          >
+            {(attempts) => (
+              <Table
+                rows={attempts}
+                columns={[
+                  {
+                    label: "订单 / 车辆",
+                    render: (r) => `#${r.order_id} · ${r.bike_code}`,
+                  },
+                  {
+                    label: "停车区 / 坐标",
+                    render: (r) => `${r.zone_name} · ${r.x}, ${r.y}`,
+                  },
+                  {
+                    label: "原因 / 来源",
+                    render: (r) =>
+                      `${r.reason} / ${r.location_source || "历史"}`,
+                  },
+                  {
+                    label: "状态",
+                    render: (r) => <Badge value={r.review_status} />,
+                  },
+                  {
+                    label: "操作",
+                    render: (r) =>
+                      r.review_status === "PENDING" ? (
+                        <div className="actions">
+                          <button
+                            className="tiny"
+                            onClick={() =>
+                              run("/returns/" + r.id + "/review", {
+                                action: "RESOLVE",
+                                note: "已核对定位时间、坐标与停车区范围",
+                              })
+                            }
+                          >
+                            标记已处理
+                          </button>
+                          <button
+                            className="tiny secondary"
+                            onClick={() =>
+                              run("/returns/" + r.id + "/review", {
+                                action: "DISMISS",
+                                note: "复核后确认该记录无需继续处理",
+                              })
+                            }
+                          >
+                            撤销记录
+                          </button>
+                        </div>
+                      ) : (
+                        r.review_note
+                      ),
+                  },
+                ]}
+              />
+            )}
+          </PaginatedRows>
+        </section>
+        <section className="panel">
+          <h2>异常行程资格复核</h2>
+          <p className="muted">
+            短时间内出现异常长距离的订单不会立即发放积分，经人工确认后再记入流水
+          </p>
+          <PaginatedRows
+            initialRows={reviews}
+            initialBefore={reviewsBefore}
+            path="/admin/orders/review"
+            field="orders"
+            label="加载更早待复核订单"
+          >
+            {(rows) => (
+              <Table
+                rows={rows}
+                columns={[
+                  {
+                    label: "订单 / 用户",
+                    render: (r) => `#${r.id} · ${r.user_name}`,
+                  },
+                  {
+                    label: "车辆 / 里程",
+                    render: (r) =>
+                      `${r.bike_code} · ${(r.distance_m / 1000).toFixed(2)} km`,
+                  },
+                  {
+                    label: "异常依据",
+                    render: (r) => r.qualification_reason,
+                  },
+                  {
+                    label: "操作",
+                    render: (r) => (
                       <div className="actions">
                         <button
                           className="tiny"
                           onClick={() =>
-                            run("/returns/" + r.id + "/review", {
-                              action: "RESOLVE",
-                              note: "已核对定位时间、坐标与停车区范围",
+                            run("/orders/" + r.id + "/qualification", {
+                              decision: "VALID",
+                              reason: "人工复核确认行程数据有效",
                             })
                           }
                         >
-                          标记已处理
+                          确认有效
                         </button>
                         <button
                           className="tiny secondary"
                           onClick={() =>
-                            run("/returns/" + r.id + "/review", {
-                              action: "DISMISS",
-                              note: "复核后确认该记录无需继续处理",
+                            run("/orders/" + r.id + "/qualification", {
+                              decision: "EXCLUDED",
+                              reason: "人工复核确认不参与积分统计",
                             })
                           }
                         >
-                          撤销记录
+                          排除
                         </button>
                       </div>
-                    ) : (
-                      r.review_note
                     ),
-                },
-              ]}
-            />
-          )}
-        </PaginatedRows>
-      </section>
-      <section className="panel">
-        <h2>异常行程资格复核</h2>
-        <p className="muted">
-          短时间内出现异常长距离的订单不会立即发放积分，经人工确认后再记入流水
-        </p>
-        <PaginatedRows
-          initialRows={reviews}
-          initialBefore={reviewsBefore}
-          path="/admin/orders/review"
-          field="orders"
-          label="加载更早待复核订单"
-        >
-          {(rows) => (
-            <Table
-              rows={rows}
-              columns={[
-                {
-                  label: "订单 / 用户",
-                  render: (r) => `#${r.id} · ${r.user_name}`,
-                },
-                {
-                  label: "车辆 / 里程",
-                  render: (r) =>
-                    `${r.bike_code} · ${(r.distance_m / 1000).toFixed(2)} km`,
-                },
-                { label: "异常依据", render: (r) => r.qualification_reason },
-                {
-                  label: "操作",
-                  render: (r) => (
-                    <div className="actions">
-                      <button
-                        className="tiny"
-                        onClick={() =>
-                          run("/orders/" + r.id + "/qualification", {
-                            decision: "VALID",
-                            reason: "人工复核确认行程数据有效",
-                          })
-                        }
-                      >
-                        确认有效
-                      </button>
-                      <button
-                        className="tiny secondary"
-                        onClick={() =>
-                          run("/orders/" + r.id + "/qualification", {
-                            decision: "EXCLUDED",
-                            reason: "人工复核确认不参与积分统计",
-                          })
-                        }
-                      >
-                        排除
-                      </button>
-                    </div>
-                  ),
-                },
-              ]}
-            />
-          )}
-        </PaginatedRows>
-      </section>
-      <section className="panel">
-        <h2>碳积分人工调整</h2>
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            let request = pendingAdjustment;
-            if (!request) {
-              try {
-                const random = crypto.getRandomValues(new Uint8Array(16));
-                request = {
-                  order_id: Number(adjustOrder),
-                  points_change: adjustPoints,
-                  carbon_kg_change: adjustCarbon,
-                  reason: adjustReason,
-                  idempotency_key: `manual-${Array.from(random, (n) => n.toString(16).padStart(2, "0")).join("")}`,
-                };
-                sessionStorage.setItem(
-                  adjustmentStorageKey,
-                  JSON.stringify(request),
-                );
-              } catch {
-                setAdjustmentError(
-                  "无法保存重试信息，请检查浏览器存储设置后再提交",
-                );
-                return;
+                  },
+                ]}
+              />
+            )}
+          </PaginatedRows>
+        </section>
+      </div>
+      <div hidden={module !== "carbon"}>
+        <section className="panel">
+          <h2>碳积分人工调整</h2>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              let request = pendingAdjustment;
+              if (!request) {
+                try {
+                  const random = crypto.getRandomValues(new Uint8Array(16));
+                  request = {
+                    order_id: Number(adjustOrder),
+                    points_change: adjustPoints,
+                    carbon_kg_change: adjustCarbon,
+                    reason: adjustReason,
+                    idempotency_key: `manual-${Array.from(random, (n) => n.toString(16).padStart(2, "0")).join("")}`,
+                  };
+                  sessionStorage.setItem(
+                    adjustmentStorageKey,
+                    JSON.stringify(request),
+                  );
+                } catch {
+                  setAdjustmentError(
+                    "无法保存重试信息，请检查浏览器存储设置后再提交",
+                  );
+                  return;
+                }
+                setPendingAdjustment(request);
               }
-              setPendingAdjustment(request);
-            }
-            setAdjustmentError("");
-            if (await run("/carbon/adjustments", request)) {
-              try {
-                sessionStorage.removeItem(adjustmentStorageKey);
-                setPendingAdjustment(null);
-                setAdjustPoints(0);
-                setAdjustCarbon(0);
-              } catch {
-                setAdjustmentError(
-                  "操作已保存，但无法清除浏览器中的重试信息；请检查浏览器存储设置",
-                );
-              }
-            }
-          }}
-        >
-          {pendingAdjustment && (
-            <p className="muted">
-              此次调整的结果尚待确认；可以使用原请求重试；放弃重试前请先核对流水，因为操作可能已经保存
-            </p>
-          )}
-          {adjustmentError && (
-            <div className="error" role="alert">
-              {adjustmentError}
-            </div>
-          )}
-          <div className="form-row">
-            <Field label="已支付订单 ID">
-              <input
-                required
-                type="number"
-                min="1"
-                disabled={!!pendingAdjustment}
-                value={adjustOrder}
-                onChange={(e) => setAdjustOrder(e.target.value)}
-              />
-            </Field>
-            <Field label="积分变动">
-              <input
-                type="number"
-                disabled={!!pendingAdjustment}
-                value={adjustPoints}
-                onChange={(e) => setAdjustPoints(Number(e.target.value))}
-              />
-            </Field>
-            <Field label="减排变动 kg">
-              <input
-                type="number"
-                step="0.0001"
-                disabled={!!pendingAdjustment}
-                value={adjustCarbon}
-                onChange={(e) => setAdjustCarbon(Number(e.target.value))}
-              />
-            </Field>
-            <Field label="调整原因">
-              <input
-                required
-                minLength={2}
-                disabled={!!pendingAdjustment}
-                value={adjustReason}
-                onChange={(e) => setAdjustReason(e.target.value)}
-              />
-            </Field>
-          </div>
-          <button disabled={adjustPoints === 0 && adjustCarbon === 0}>
-            {pendingAdjustment ? "重试调整" : "新增调整流水"}
-          </button>
-          {pendingAdjustment && (
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => {
+              setAdjustmentError("");
+              if (await run("/carbon/adjustments", request)) {
                 try {
                   sessionStorage.removeItem(adjustmentStorageKey);
                   setPendingAdjustment(null);
-                  setAdjustmentError("");
+                  setAdjustPoints(0);
+                  setAdjustCarbon(0);
                 } catch {
                   setAdjustmentError(
-                    "无法清除浏览器中的重试信息，请检查浏览器存储设置",
+                    "操作已保存，但无法清除浏览器中的重试信息；请检查浏览器存储设置",
                   );
                 }
-              }}
-            >
-              放弃重试
+              }
+            }}
+          >
+            {pendingAdjustment && (
+              <p className="muted">
+                此次调整的结果尚待确认；可以使用原请求重试；放弃重试前请先核对流水，因为操作可能已经保存
+              </p>
+            )}
+            {adjustmentError && (
+              <div className="error" role="alert">
+                {adjustmentError}
+              </div>
+            )}
+            <div className="form-row">
+              <Field label="已支付订单 ID">
+                <input
+                  required
+                  type="number"
+                  min="1"
+                  disabled={!!pendingAdjustment}
+                  value={adjustOrder}
+                  onChange={(e) => setAdjustOrder(e.target.value)}
+                />
+              </Field>
+              <Field label="积分变动">
+                <input
+                  type="number"
+                  disabled={!!pendingAdjustment}
+                  value={adjustPoints}
+                  onChange={(e) => setAdjustPoints(Number(e.target.value))}
+                />
+              </Field>
+              <Field label="减排变动 kg">
+                <input
+                  type="number"
+                  step="0.0001"
+                  disabled={!!pendingAdjustment}
+                  value={adjustCarbon}
+                  onChange={(e) => setAdjustCarbon(Number(e.target.value))}
+                />
+              </Field>
+              <Field label="调整原因">
+                <input
+                  required
+                  minLength={2}
+                  disabled={!!pendingAdjustment}
+                  value={adjustReason}
+                  onChange={(e) => setAdjustReason(e.target.value)}
+                />
+              </Field>
+            </div>
+            <button disabled={adjustPoints === 0 && adjustCarbon === 0}>
+              {pendingAdjustment ? "重试调整" : "新增调整流水"}
             </button>
-          )}
-        </form>
-      </section>
+            {pendingAdjustment && (
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  try {
+                    sessionStorage.removeItem(adjustmentStorageKey);
+                    setPendingAdjustment(null);
+                    setAdjustmentError("");
+                  } catch {
+                    setAdjustmentError(
+                      "无法清除浏览器中的重试信息，请检查浏览器存储设置",
+                    );
+                  }
+                }}
+              >
+                放弃重试
+              </button>
+            )}
+          </form>
+        </section>
+      </div>
     </>
   );
 }

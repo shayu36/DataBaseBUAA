@@ -1,11 +1,5 @@
 import { useEffect, useId, useState } from "react";
-import {
-  Bike,
-  MapPin,
-  Minus,
-  Plus,
-  RotateCcw,
-} from "lucide-react";
+import { Bike, MapPin, Minus, Plus, RotateCcw } from "lucide-react";
 import campus from "../../database/campus-map.json";
 import campusMap from "./assets/buaa-xueyuan-campus-map.jpg";
 import { api } from "./api";
@@ -215,9 +209,7 @@ export function CampusMap({
           style={{ width: `${zoom * 100}%`, minWidth: 660 * zoom }}
         >
           <title>北京航空航天大学学院路校区 建筑与停车点</title>
-          <desc>
-            北航学院路校区建筑、道路、停车点和禁行区域示意图
-          </desc>
+          <desc>北航学院路校区建筑、道路、停车点和禁行区域示意图</desc>
           <defs>
             <pattern
               id={`${id}-restricted`}
@@ -277,6 +269,13 @@ export function CampusMap({
             {landmarks.map((place) => (
               <g
                 key={place.name}
+                className={
+                  ["主楼", "三号教学楼", "图书馆", "新主楼", "家属区"].includes(
+                    place.name,
+                  )
+                    ? "landmark-primary"
+                    : "landmark-secondary"
+                }
                 transform={"translate(" + place.x + " " + place.y + ")"}
               >
                 <rect x="-74" y="-18" width="148" height="33" rx="13" />
@@ -314,7 +313,7 @@ export function CampusMap({
                     y={center.y + 16}
                     textAnchor="middle"
                   >
-                    禁止骑行  请沿外围道路绕行
+                    禁止骑行 请沿外围道路绕行
                   </text>
                 </g>
               );
@@ -330,7 +329,7 @@ export function CampusMap({
               北门
             </text>
             <text x="920" y="298" textAnchor="end">
-              东门  学院路侧
+              东门 学院路侧
             </text>
             <text x="560" y="962" textAnchor="middle">
               南门
@@ -350,97 +349,107 @@ export function CampusMap({
                 className="map-route"
                 points={points}
                 fill="none"
-                stroke="#f07837"
+                stroke={
+                  route?.mode === "safe"
+                    ? "#278e77"
+                    : route?.mode === "comfortable"
+                      ? "#8d64be"
+                      : "#db7538"
+                }
                 strokeWidth="8"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
             </>
           )}
-          {zones.map((z) => {
-            const state = stationState(z);
-            const remaining = Math.max(
-              0,
-              Number(z.capacity) - Number(z.occupied) - Number(z.reserved),
-            );
-            const taskCount = taskZones.get(Number(z.id)) || 0;
-            return (
-              <g
-                key={z.id}
-                className={`map-station station-${state}${selected === z.id ? " is-selected" : ""}`}
-                tabIndex={0}
-                role="button"
-                aria-pressed={selected === z.id}
-                aria-label={`${z.name}，可借 ${z.borrowable} 辆，剩余车位 ${remaining} 个${Number(z.restricted) ? "，禁行区内" : ""}${taskCount ? `，关联任务 ${taskCount} 项` : ""}`}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
+          {[...zones]
+            .sort(
+              (a, b) => Number(a.id === selected) - Number(b.id === selected),
+            )
+            .map((z) => {
+              const state = stationState(z);
+              const remaining = Math.max(
+                0,
+                Number(z.capacity) - Number(z.occupied) - Number(z.reserved),
+              );
+              const taskCount = taskZones.get(Number(z.id)) || 0;
+              return (
+                <g
+                  key={z.id}
+                  className={`map-station station-${state}${selected === z.id ? " is-selected" : ""}`}
+                  tabIndex={0}
+                  role="button"
+                  aria-pressed={selected === z.id}
+                  aria-label={`${z.name}，可借 ${z.borrowable} 辆，剩余车位 ${remaining} 个${Number(z.restricted) ? "，禁行区内" : ""}${taskCount ? `，关联任务 ${taskCount} 项` : ""}`}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      select(z);
+                    }
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
                     select(z);
-                  }
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  select(z);
-                }}
-              >
-                <title>
-                  {z.name}  {z.location}  可借 {z.borrowable} 辆  剩余车位{" "}
-                  {remaining} 个
-                </title>
-                {layers.tasks && taskCount > 0 && (
-                  <>
-                    <circle
-                      className="station-task-halo"
-                      cx={z.x}
-                      cy={z.y}
-                      r="31"
-                    />
-                    <text
-                      className="station-task-count"
-                      x={Number(z.x) + 25}
-                      y={Number(z.y) - 21}
-                    >
-                      {taskCount}
-                    </text>
-                  </>
-                )}
-                <circle
-                  className="station-fence"
-                  cx={z.x}
-                  cy={z.y}
-                  r={z.radius}
-                />
-                <circle className="station-marker" cx={z.x} cy={z.y} r="21" />
-                <text
-                  x={z.x}
-                  y={Number(z.y) + 7}
-                  textAnchor="middle"
-                  fontSize="20"
-                  fontWeight="700"
-                  fill="#fff"
+                  }}
                 >
-                  {z.borrowable}
-                </text>
-                <rect
-                  className="station-label"
-                  x={Number(z.x) - Math.max(58, z.name.length * 10 + 9)}
-                  y={Number(z.y) + 28}
-                  width={Math.max(116, z.name.length * 20 + 18)}
-                  height="31"
-                  rx="8"
-                />
-                <text
-                  x={z.x}
-                  y={Number(z.y) + 50}
-                  textAnchor="middle"
-                  fontSize="19"
-                  fill="#254778"
-                >
-                  {z.name}
-                </text>
-              </g>
-            );
-          })}
+                  <title>
+                    {z.name} {z.location} 可借 {z.borrowable} 辆 剩余车位{" "}
+                    {remaining} 个
+                  </title>
+                  {layers.tasks && taskCount > 0 && (
+                    <>
+                      <circle
+                        className="station-task-halo"
+                        cx={z.x}
+                        cy={z.y}
+                        r="31"
+                      />
+                      <text
+                        className="station-task-count"
+                        x={Number(z.x) + 25}
+                        y={Number(z.y) - 21}
+                      >
+                        {taskCount}
+                      </text>
+                    </>
+                  )}
+                  <circle
+                    className="station-fence"
+                    cx={z.x}
+                    cy={z.y}
+                    r={z.radius}
+                  />
+                  <circle className="station-marker" cx={z.x} cy={z.y} r="21" />
+                  <text
+                    x={z.x}
+                    y={Number(z.y) + 7}
+                    textAnchor="middle"
+                    fontSize="20"
+                    fontWeight="700"
+                    fill="#fff"
+                  >
+                    {z.borrowable}
+                  </text>
+                  <rect
+                    className="station-label"
+                    x={Number(z.x) - Math.max(58, z.name.length * 10 + 9)}
+                    y={Number(z.y) + 28}
+                    width={Math.max(116, z.name.length * 20 + 18)}
+                    height="31"
+                    rx="8"
+                  />
+                  <text
+                    x={z.x}
+                    y={Number(z.y) + 50}
+                    textAnchor="middle"
+                    fontSize="19"
+                    fill="#254778"
+                  >
+                    {z.name}
+                  </text>
+                </g>
+              );
+            })}
         </svg>
         {mapStatus === "error" && (
           <div className="map-image-status" role="status">
@@ -549,7 +558,8 @@ export function CampusMap({
           <span className="map-overview-count">
             <span>全校 {zones.length} 个停车点</span>
             <span>
-              {zones.reduce((sum, zone) => sum + Number(zone.borrowable), 0)} 辆可借
+              {zones.reduce((sum, zone) => sum + Number(zone.borrowable), 0)}{" "}
+              辆可借
             </span>
           </span>
         )}
