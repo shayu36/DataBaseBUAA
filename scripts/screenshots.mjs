@@ -1,16 +1,17 @@
 import { chromium, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { serviceConfig } from "../config/services.mjs";
 const output = fileURLToPath(new URL("../docs/screenshots/", import.meta.url));
 await mkdir(output, { recursive: true });
 await writeFile(
   output + "visual-checks.json",
   JSON.stringify({ completed: false, started_at: new Date().toISOString() }),
 );
+const base = process.env.QINGXING_E2E_URL || serviceConfig().backendURL;
 const browser = await chromium.launch({ headless: true });
 const errors = [],
   checks = [];
-const base = process.env.QINGXING_E2E_URL || "http://127.0.0.1:5188";
 try {
   const page = await browser.newPage({
     viewport: { width: 1440, height: 1000 },
@@ -20,7 +21,7 @@ try {
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(base);
   await page
-    .getByRole("heading", { name: /让校园的每一程，\s*更轻盈。/ })
+    .getByRole("heading", { name: /让校园的每一程，\s*更轻盈/ })
     .waitFor();
   await page.screenshot({
     path: output + "01-login-desktop.png",

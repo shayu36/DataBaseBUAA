@@ -794,13 +794,21 @@ test("development proxy preserves the browser origin for writes", async () => {
   const configPath = fileURLToPath(
     new URL("../frontend/vite.config.ts", import.meta.url),
   );
-  const loaded = await loadConfigFromFile(
-    { command: "serve", mode: "development" },
-    configPath,
-  );
-  const configured = loaded.config.server.proxy["/api"];
-  const proxy =
-    typeof configured === "string" ? base : { ...configured, target: base };
+  const previous = process.env.PORT;
+  let loaded;
+  process.env.PORT = new URL(base).port;
+  try {
+    loaded = await loadConfigFromFile(
+      { command: "serve", mode: "development" },
+      configPath,
+    );
+  } finally {
+    if (previous === undefined) delete process.env.PORT;
+    else process.env.PORT = previous;
+  }
+  const proxy = loaded.config.server.proxy;
+  assert.equal(proxy["/api"].target, base);
+  assert.equal(proxy["/docs"].target, base);
   const vite = await createServer({
     configFile: false,
     root: loaded.config.root,
@@ -809,7 +817,7 @@ test("development proxy preserves the browser origin for writes", async () => {
       host: "127.0.0.1",
       port: 0,
       strictPort: false,
-      proxy: { "/api": proxy },
+      proxy,
     },
   });
   try {

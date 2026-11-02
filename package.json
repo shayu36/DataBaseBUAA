@@ -20,7 +20,7 @@
     "check": "node scripts/check.mjs",
     "report": "node scripts/render-report.mjs",
     "screenshots": "node scripts/screenshots.mjs",
-    "format:check": "prettier --check \"frontend/**/*.{ts,tsx,css}\" \"backend/**/*.mjs\" \"scripts/**/*.mjs\" \"tests/*.{mjs,ts}\""
+    "format:check": "prettier --check \"frontend/**/*.{ts,tsx,css}\" \"backend/**/*.mjs\" \"config/**/*.mjs\" \"scripts/**/*.mjs\" \"tests/*.{mjs,ts}\""
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { announcementForOperation } from "../frontend/src/speech";
 
 test.describe("北京时间的运营分析", () => {
   test.use({ timezoneId: "America/Los_Angeles" });
@@ -3078,7 +3079,7 @@ test("a new rider sees an unranked private summary", async ({ page }) => {
   await expect(page.getByText("我的排名 #null")).toHaveCount(0);
 });
 
-test("彩色导航、语音提示与旗帜横幅保持一致", async ({ page }) => {
+test("彩色导航、语音提示与滚动横幅保持一致", async ({ page }) => {
   await page.addInitScript(() => {
     const spoken: string[] = [];
     class MockUtterance {
@@ -3137,18 +3138,16 @@ test("彩色导航、语音提示与旗帜横幅保持一致", async ({ page }) 
     ]);
   expect(iconColors.length).toBeGreaterThanOrEqual(4);
 
+  await expect(page.locator(".site-footer-banner")).toContainText("青行 Qingxing");
   await expect(page.locator(".site-footer-banner")).toContainText(
-    "青行 Qingxing · 校园共享自行车系统",
+    "校园共享自行车系统",
   );
 
-  const operationMessages = await page.evaluate(async () => {
-    const speech = await import("/src/speech.ts");
-    return [
-      speech.announcementForOperation("/rides/start", true),
-      speech.announcementForOperation("/rides/8/return", true),
-      speech.announcementForOperation("/rides/8/return", false),
-    ];
-  });
+  const operationMessages = [
+    announcementForOperation("/rides/start", true),
+    announcementForOperation("/rides/8/return", true),
+    announcementForOperation("/rides/8/return", false),
+  ];
   expect(operationMessages).toEqual([
     "开锁成功，祝您骑行愉快",
     "还车成功，感谢您的使用",

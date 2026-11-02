@@ -28,6 +28,7 @@ SOURCE_EXTENSIONS = {
         ".woff2",
     },
     "backend": {".mjs"},
+    "config": {".mjs"},
     "scripts": {".mjs", ".py"},
     "database": {".sql", ".json"},
     "tests": {".mjs", ".ts", ".py"},
@@ -67,6 +68,7 @@ ROOT_FILES = (
 REQUIRED_SOURCES = (
     "frontend/src/main.tsx",
     "backend/index.mjs",
+    "config/services.mjs",
     "database/schema.sql",
     "scripts/sql.mjs",
 )
