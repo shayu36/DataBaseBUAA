@@ -155,3 +155,5 @@ GRANT SELECT, INSERT, UPDATE, DELETE, EXECUTE ON campus_bike.* TO 'qingxing_app'
 SELECT VERSION() AS version;
 -- name: call_seed_procedure
 CALL ??(?,?,?);
+-- name: call_simulation_procedure
+CALL ??(?,?,?,?);

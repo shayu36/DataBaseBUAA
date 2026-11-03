@@ -1,0 +1,1202 @@
+[
+  {
+    "id": 1,
+    "code": "QX-001",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 2,
+    "code": "QX-002",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 3,
+    "code": "QX-003",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 4,
+    "code": "QX-004",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 5,
+    "code": "QX-005",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 6,
+    "code": "QX-006",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 7,
+    "code": "QX-007",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 8,
+    "code": "QX-008",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 9,
+    "code": "QX-009",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 10,
+    "code": "QX-010",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 11,
+    "code": "QX-011",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 12,
+    "code": "QX-012",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 13,
+    "code": "QX-013",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 14,
+    "code": "QX-014",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 15,
+    "code": "QX-015",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 16,
+    "code": "QX-016",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 17,
+    "code": "QX-017",
+    "zone_id": 2,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 18,
+    "code": "QX-018",
+    "zone_id": 2,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 19,
+    "code": "QX-019",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 20,
+    "code": "QX-020",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 21,
+    "code": "QX-021",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 22,
+    "code": "QX-022",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 23,
+    "code": "QX-023",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 24,
+    "code": "QX-024",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 25,
+    "code": "QX-025",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 26,
+    "code": "QX-026",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 27,
+    "code": "QX-027",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 28,
+    "code": "QX-028",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 29,
+    "code": "QX-029",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 30,
+    "code": "QX-030",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 31,
+    "code": "QX-031",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 32,
+    "code": "QX-032",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 33,
+    "code": "QX-033",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 34,
+    "code": "QX-034",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 35,
+    "code": "QX-035",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 36,
+    "code": "QX-036",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 37,
+    "code": "QX-037",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 38,
+    "code": "QX-038",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 39,
+    "code": "QX-039",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 40,
+    "code": "QX-040",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 41,
+    "code": "QX-041",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 42,
+    "code": "QX-042",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 43,
+    "code": "QX-043",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 44,
+    "code": "QX-044",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 45,
+    "code": "QX-045",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 46,
+    "code": "QX-046",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 47,
+    "code": "QX-047",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 48,
+    "code": "QX-048",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 49,
+    "code": "QX-049",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 50,
+    "code": "QX-050",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 51,
+    "code": "QX-051",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 52,
+    "code": "QX-052",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 53,
+    "code": "QX-053",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 54,
+    "code": "QX-054",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 55,
+    "code": "QX-055",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 56,
+    "code": "QX-056",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 57,
+    "code": "QX-057",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 58,
+    "code": "QX-058",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 59,
+    "code": "QX-059",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 60,
+    "code": "QX-060",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 61,
+    "code": "QX-061",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 62,
+    "code": "QX-062",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 63,
+    "code": "QX-063",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 64,
+    "code": "QX-064",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 65,
+    "code": "QX-065",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 66,
+    "code": "QX-066",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 67,
+    "code": "QX-067",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 68,
+    "code": "QX-068",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 69,
+    "code": "QX-069",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 70,
+    "code": "QX-070",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 71,
+    "code": "QX-071",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 72,
+    "code": "QX-072",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 73,
+    "code": "QX-073",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 74,
+    "code": "QX-074",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 75,
+    "code": "QX-075",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 76,
+    "code": "QX-076",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 77,
+    "code": "QX-077",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 78,
+    "code": "QX-078",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 79,
+    "code": "QX-079",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 80,
+    "code": "QX-080",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 81,
+    "code": "QX-081",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 82,
+    "code": "QX-082",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 83,
+    "code": "QX-083",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 84,
+    "code": "QX-084",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 85,
+    "code": "QX-085",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 86,
+    "code": "QX-086",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 87,
+    "code": "QX-087",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 88,
+    "code": "QX-088",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 89,
+    "code": "QX-089",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 90,
+    "code": "QX-090",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 91,
+    "code": "QX-091",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 92,
+    "code": "QX-092",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 93,
+    "code": "QX-093",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 94,
+    "code": "QX-094",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 95,
+    "code": "QX-095",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 96,
+    "code": "QX-096",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 97,
+    "code": "QX-097",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 98,
+    "code": "QX-098",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 99,
+    "code": "QX-099",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 100,
+    "code": "QX-100",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 101,
+    "code": "QX-101",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 102,
+    "code": "QX-102",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 103,
+    "code": "QX-103",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 104,
+    "code": "QX-104",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 105,
+    "code": "QX-105",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 106,
+    "code": "QX-106",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 107,
+    "code": "QX-107",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 108,
+    "code": "QX-108",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 109,
+    "code": "QX-109",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 110,
+    "code": "QX-110",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 111,
+    "code": "QX-111",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 112,
+    "code": "QX-112",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 113,
+    "code": "QX-113",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 114,
+    "code": "QX-114",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 115,
+    "code": "QX-115",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 116,
+    "code": "QX-116",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 117,
+    "code": "QX-117",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 118,
+    "code": "QX-118",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 119,
+    "code": "QX-119",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 120,
+    "code": "QX-120",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 121,
+    "code": "QX-121",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 122,
+    "code": "QX-122",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 123,
+    "code": "QX-123",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 124,
+    "code": "QX-124",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 125,
+    "code": "QX-125",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 126,
+    "code": "QX-126",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 127,
+    "code": "QX-127",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 128,
+    "code": "QX-128",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 129,
+    "code": "QX-129",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 130,
+    "code": "QX-130",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 131,
+    "code": "QX-131",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 132,
+    "code": "QX-132",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 133,
+    "code": "QX-133",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 134,
+    "code": "QX-134",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 135,
+    "code": "QX-135",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 136,
+    "code": "QX-136",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 137,
+    "code": "QX-137",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 138,
+    "code": "QX-138",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 139,
+    "code": "QX-139",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 140,
+    "code": "QX-140",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 141,
+    "code": "QX-141",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 142,
+    "code": "QX-142",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 143,
+    "code": "QX-143",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 144,
+    "code": "QX-144",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 145,
+    "code": "QX-145",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 146,
+    "code": "QX-146",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 147,
+    "code": "QX-147",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 148,
+    "code": "QX-148",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 149,
+    "code": "QX-149",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 150,
+    "code": "QX-150",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 151,
+    "code": "QX-151",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 152,
+    "code": "QX-152",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 153,
+    "code": "QX-153",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 154,
+    "code": "QX-154",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 155,
+    "code": "QX-155",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 156,
+    "code": "QX-156",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 157,
+    "code": "QX-157",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 158,
+    "code": "QX-158",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 159,
+    "code": "QX-159",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 160,
+    "code": "QX-160",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 161,
+    "code": "QX-161",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 162,
+    "code": "QX-162",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 163,
+    "code": "QX-163",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 164,
+    "code": "QX-164",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 165,
+    "code": "QX-165",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 166,
+    "code": "QX-166",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 167,
+    "code": "QX-167",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 168,
+    "code": "QX-168",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 169,
+    "code": "QX-169",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 170,
+    "code": "QX-170",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 171,
+    "code": "QX-171",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 172,
+    "code": "QX-172",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 173,
+    "code": "QX-173",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 174,
+    "code": "QX-174",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 175,
+    "code": "QX-175",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 176,
+    "code": "QX-176",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 177,
+    "code": "QX-177",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 178,
+    "code": "QX-178",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 179,
+    "code": "QX-179",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 180,
+    "code": "QX-180",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 181,
+    "code": "QX-181",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 182,
+    "code": "QX-182",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 183,
+    "code": "QX-183",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 184,
+    "code": "QX-184",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 185,
+    "code": "QX-185",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 186,
+    "code": "QX-186",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 187,
+    "code": "QX-187",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 188,
+    "code": "QX-188",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 189,
+    "code": "QX-189",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 190,
+    "code": "QX-190",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 191,
+    "code": "QX-191",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 192,
+    "code": "QX-192",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 193,
+    "code": "QX-193",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 194,
+    "code": "QX-194",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 195,
+    "code": "QX-195",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 196,
+    "code": "QX-196",
+    "zone_id": 6,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 197,
+    "code": "QX-197",
+    "zone_id": 1,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 198,
+    "code": "QX-198",
+    "zone_id": 3,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 199,
+    "code": "QX-199",
+    "zone_id": 4,
+    "deployed_at": "2026-07-01"
+  },
+  {
+    "id": 200,
+    "code": "QX-200",
+    "zone_id": 5,
+    "deployed_at": "2026-07-01"
+  }
+]

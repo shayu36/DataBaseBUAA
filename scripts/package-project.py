@@ -70,6 +70,9 @@ REQUIRED_SOURCES = (
     "backend/index.mjs",
     "config/services.mjs",
     "database/schema.sql",
+    "database/simulation-seed.sql",
+    "database/simulation/users.json",
+    "database/simulation/bikes.json",
     "scripts/sql.mjs",
 )
 SECRET_KEYS = {"DB_PASSWORD", "DB_ADMIN_PASSWORD", "JWT_SECRET"}

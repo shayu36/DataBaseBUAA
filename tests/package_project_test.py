@@ -50,6 +50,9 @@ class PackageProjectTest(unittest.TestCase):
             names = set(archive.namelist())
         self.assertIn("qingxing/frontend/src/main.tsx", names)
         self.assertIn("qingxing/config/services.mjs", names)
+        self.assertIn("qingxing/database/simulation-seed.sql", names)
+        self.assertIn("qingxing/database/simulation/users.json", names)
+        self.assertIn("qingxing/database/simulation/bikes.json", names)
         self.assertIn("qingxing/dist/assets/site.js", names)
         self.assertIn("qingxing/.env.example", names)
         self.assertFalse(

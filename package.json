@@ -13,6 +13,7 @@
     "db:setup": "node scripts/setup.mjs",
     "db:migrate": "node scripts/migrate-features.mjs",
     "db:seed": "node scripts/run-seed-local.mjs",
+    "db:simulate": "node scripts/simulate.mjs",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
     "test:e2e": "playwright test",
     "backup": "node scripts/backup.mjs",

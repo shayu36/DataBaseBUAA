@@ -7,11 +7,6 @@ import { sql } from "./sql-statements.mjs";
 import { campus, campusDefinition } from "./campus-data.mjs";
 
 export async function seedDemo(pool, adminPool) {
-  const seedSql = await readFile(
-    new URL("../database/demo-seed.sql", import.meta.url),
-    "utf8",
-  );
-  const name = `qingxing_seed_${randomBytes(8).toString("hex")}`;
   const distances = campus.zones.flatMap((from) =>
     campus.zones.map((to) => {
       const a = campus.nodes.find((n) => n.zone_id === from.id);
@@ -23,6 +18,43 @@ export async function seedDemo(pool, adminPool) {
     }),
   );
   const hash = await bcrypt.hash("Qingxing2026!", 10);
+  const result = await executeSeed(
+    pool,
+    adminPool,
+    "demo-seed.sql",
+    "call_seed_procedure",
+    [campusDefinition, JSON.stringify(distances), hash],
+  );
+  return Boolean(result.seeded);
+}
+
+export async function seedSimulation(pool, adminPool) {
+  const [users, bikes] = await Promise.all([
+    readFile(
+      new URL("../database/simulation/users.json", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../database/simulation/bikes.json", import.meta.url),
+      "utf8",
+    ),
+  ]);
+  const hash = await bcrypt.hash("Qingxing2026!", 10);
+  return executeSeed(
+    pool,
+    adminPool,
+    "simulation-seed.sql",
+    "call_simulation_procedure",
+    [users, bikes, hash, campusDefinition],
+  );
+}
+
+async function executeSeed(pool, adminPool, filename, statement, params) {
+  const seedSql = await readFile(
+    new URL(`../database/${filename}`, import.meta.url),
+    "utf8",
+  );
+  const name = `qingxing_seed_${randomBytes(8).toString("hex")}`;
   return withSchemaLock(adminPool, async (admin) => {
     let created = false,
       failed = false,
@@ -31,13 +63,11 @@ export async function seedDemo(pool, adminPool) {
       await admin.query(seedSql.replace("__SEED_PROCEDURE__", `\`${name}\``));
       created = true;
       return await ledgerTransaction(pool, async (connection) => {
-        const [result] = await connection.query(sql("call_seed_procedure"), [
+        const [result] = await connection.query(sql(statement), [
           name,
-          campusDefinition,
-          JSON.stringify(distances),
-          hash,
+          ...params,
         ]);
-        return Boolean(result[0][0].seeded);
+        return result[0][0];
       });
     } catch (error) {
       failed = true;
