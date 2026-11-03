@@ -21,7 +21,10 @@ try {
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(base);
   await page
-    .getByRole("heading", { name: /让校园的每一程，\s*更轻盈/ })
+    .getByRole("heading", {
+      name: "欢迎使用青行校园共享自行车系统",
+      exact: true,
+    })
     .waitFor();
   await page.screenshot({
     path: output + "01-login-desktop.png",
@@ -60,6 +63,7 @@ try {
     },
   ];
   for (const group of groups) {
+    await page.locator(".demo summary").click();
     await page.getByRole("button", { name: group.account }).click();
     await page.getByRole("button", { name: "登录青行", exact: true }).click();
     for (const width of [1440, 390]) {

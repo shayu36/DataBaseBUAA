@@ -283,7 +283,10 @@ test("浏览器不支持可见性检测时仍加载底图并提示失败", async
   await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
   await page.getByRole("button", { name: "登录青行", exact: true }).click();
   const viewport = page.locator(".map-viewport");
-  expect((await viewport.boundingBox())!.y).toBeGreaterThan(560);
+  await expect(viewport).toBeVisible();
+  expect((await viewport.boundingBox())!.y).toBeGreaterThan(
+    page.viewportSize()!.height,
+  );
   await expect(viewport.locator("svg image")).toHaveCount(1);
   await expect(viewport.locator(".map-image-status")).toContainText(
     "校区图未能加载",
@@ -614,21 +617,21 @@ test("站内展示立体自行车背景和连续滚动的品牌横幅", async ({
   await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
   await page.getByRole("button", { name: "登录青行", exact: true }).click();
   await page.getByRole("button", { name: "跳过", exact: true }).click();
-  const background = await page.locator(".app main").evaluate((node) =>
-    getComputedStyle(node, "::before").backgroundImage,
-  );
+  const background = await page
+    .locator(".app main")
+    .evaluate((node) => getComputedStyle(node, "::before").backgroundImage);
   expect(background).toContain("bicycle-3d-backdrop");
   await expect(page.locator(".site-footer-marquee-group")).toHaveCount(4);
   const track = page.locator(".site-footer-marquee-track");
-  expect(await track.evaluate((node) => getComputedStyle(node).animationName)).toBe(
-    "site-footer-scroll",
-  );
-  const first = await track.evaluate((node) =>
-    new DOMMatrixReadOnly(getComputedStyle(node).transform).m41,
+  expect(
+    await track.evaluate((node) => getComputedStyle(node).animationName),
+  ).toBe("site-footer-scroll");
+  const first = await track.evaluate(
+    (node) => new DOMMatrixReadOnly(getComputedStyle(node).transform).m41,
   );
   await page.waitForTimeout(120);
-  const second = await track.evaluate((node) =>
-    new DOMMatrixReadOnly(getComputedStyle(node).transform).m41,
+  const second = await track.evaluate(
+    (node) => new DOMMatrixReadOnly(getComputedStyle(node).transform).m41,
   );
   expect(Math.abs(second - first)).toBeGreaterThan(0.5);
 });
@@ -2462,9 +2465,7 @@ test("carbon history pagination keeps the qualifying ride count", async ({
   await page.goto("/");
   await page.getByRole("button", { name: "碳积分", exact: true }).click();
   await expect(
-    page.getByText(
-      "当前模拟减排系数 999999999999.99999999 kg/km",
-    ),
+    page.getByText("当前模拟减排系数 999999999999.99999999 kg/km"),
   ).toBeVisible();
   const count = page.locator(".stat").filter({ hasText: "绿色行程" });
   await expect(count.locator("strong")).toHaveText("1");
@@ -3138,7 +3139,9 @@ test("彩色导航、语音提示与滚动横幅保持一致", async ({ page }) 
     ]);
   expect(iconColors.length).toBeGreaterThanOrEqual(4);
 
-  await expect(page.locator(".site-footer-banner")).toContainText("青行 Qingxing");
+  await expect(page.locator(".site-footer-banner")).toContainText(
+    "青行 Qingxing",
+  );
   await expect(page.locator(".site-footer-banner")).toContainText(
     "校园共享自行车系统",
   );

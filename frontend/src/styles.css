@@ -4899,7 +4899,8 @@ table td {
     bottom: 25px;
     width: min(40vw, 540px);
     aspect-ratio: 720 / 430;
-    background: url("./assets/bicycle-3d-backdrop.svg") center / contain no-repeat;
+    background: url("./assets/bicycle-3d-backdrop.svg") center / contain
+      no-repeat;
     content: "";
     opacity: 0.24;
     pointer-events: none;
@@ -4916,7 +4917,8 @@ table td {
     bottom: -8px;
     width: min(20vw, 218px);
     aspect-ratio: 720 / 430;
-    background: url("./assets/bicycle-3d-backdrop.svg") center / contain no-repeat;
+    background: url("./assets/bicycle-3d-backdrop.svg") center / contain
+      no-repeat;
     content: "";
     opacity: 0.58;
     pointer-events: none;
@@ -4942,8 +4944,20 @@ table td {
   background: #e8f0fa;
   color: #355987;
   box-shadow: 0 8px 24px rgba(30, 77, 137, 0.08);
-  -webkit-mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
-  mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 12%,
+    #000 88%,
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 12%,
+    #000 88%,
+    transparent
+  );
 }
 .site-footer-marquee-track {
   display: flex;
