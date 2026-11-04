@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, type ViteDevServer } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 import { serviceConfig } from "../config/services.mjs";
@@ -14,7 +14,19 @@ export default defineConfig(() => {
   return {
     root: fileURLToPath(new URL(".", import.meta.url)),
     build: { outDir: "../dist", emptyOutDir: true },
-    plugins: [react()],
+    plugins: [
+      react(),
+      {
+        name: "watch-campus-map",
+        configureServer(server: ViteDevServer) {
+          server.watcher.add(
+            fileURLToPath(
+              new URL("../database/campus-map.json", import.meta.url),
+            ),
+          );
+        },
+      },
+    ],
     server: {
       host: "127.0.0.1",
       port: frontendPort,

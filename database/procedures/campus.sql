@@ -24,9 +24,18 @@ BEGIN
   IF NOT (JSON_TYPE(JSON_EXTRACT(p_campus,'$.restricted_areas')) <=> 'ARRAY') THEN
    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Invalid campus restriction data.';
   END IF;
+  IF EXISTS(SELECT 1 FROM JSON_TABLE(p_campus,'$.restricted_areas[*]' COLUMNS(
+   NESTED PATH '$.excluded_area_ids[*]' COLUMNS(id VARCHAR(60) PATH '$'))) e
+   LEFT JOIN JSON_TABLE(p_campus,'$.areas[*]' COLUMNS(id VARCHAR(60) PATH '$.id')) a ON BINARY a.id=BINARY e.id
+   WHERE e.id IS NOT NULL AND a.id IS NULL) THEN
+   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Invalid campus area exclusion.';
+  END IF;
   SELECT JSON_ARRAYAGG(JSON_OBJECT('type','Polygon','coordinates',
-   JSON_ARRAY(JSON_ARRAY_APPEND(area.points,'$',JSON_EXTRACT(area.points,'$[0]'))))) INTO v_geometries
-  FROM JSON_TABLE(p_campus,'$.restricted_areas[*]' COLUMNS(points JSON PATH '$.points',rule VARCHAR(20) PATH '$.rule')) area
+   JSON_MERGE_PRESERVE(JSON_ARRAY(JSON_ARRAY_APPEND(area.points,'$',JSON_EXTRACT(area.points,'$[0]'))),
+    COALESCE((SELECT JSON_ARRAYAGG(JSON_ARRAY_APPEND(a.points,'$',JSON_EXTRACT(a.points,'$[0]')))
+     FROM JSON_TABLE(p_campus,'$.areas[*]' COLUMNS(id VARCHAR(60) PATH '$.id',points JSON PATH '$.points')) a
+     WHERE JSON_CONTAINS(area.excluded,JSON_QUOTE(a.id))),JSON_ARRAY())))) INTO v_geometries
+  FROM JSON_TABLE(p_campus,'$.restricted_areas[*]' COLUMNS(points JSON PATH '$.points',rule VARCHAR(20) PATH '$.rule',excluded JSON PATH '$.excluded_area_ids')) area
   WHERE area.rule='NO_RIDE';
   IF v_geometries IS NOT NULL THEN
    SET p_areas=ST_GeomFromGeoJSON(JSON_OBJECT('type','GeometryCollection','geometries',v_geometries),1,0);
@@ -42,7 +51,7 @@ DELIMITER ;
 -- and serializes ledger changes; a customized graph is never overwritten.
 DROP PROCEDURE IF EXISTS sp_upgrade_campus_map;
 DELIMITER $$
-CREATE PROCEDURE sp_upgrade_campus_map(IN campus JSON, IN campus_v1 JSON, IN campus_v2 JSON, IN campus_v3 JSON)
+CREATE PROCEDURE sp_upgrade_campus_map(IN campus JSON, IN campus_v1 JSON, IN campus_v2 JSON, IN campus_v3 JSON, IN campus_v4 JSON)
 SQL SECURITY INVOKER
 upgrade_map: BEGIN
  DECLARE current_version VARCHAR(100);
@@ -53,7 +62,7 @@ upgrade_map: BEGIN
    SELECT 0 AS migrated;
    LEAVE upgrade_map;
   END IF;
-  IF NOT (BINARY current_version <=> BINARY 'beihang-xueyuan-1' OR BINARY current_version <=> BINARY 'beihang-xueyuan-2' OR BINARY current_version <=> BINARY 'beihang-xueyuan-3') THEN
+  IF NOT (BINARY current_version <=> BINARY 'beihang-xueyuan-1' OR BINARY current_version <=> BINARY 'beihang-xueyuan-2' OR BINARY current_version <=> BINARY 'beihang-xueyuan-3' OR BINARY current_version <=> BINARY 'beihang-xueyuan-4') THEN
    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Unknown campus map version; explicit migration required.';
   END IF;
  END IF;
@@ -88,7 +97,7 @@ upgrade_map: BEGIN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Refusing to overwrite a customized map; explicit mapping required.';
  END IF;
  IF current_version IS NOT NULL THEN
-  SET prior_campus=CASE current_version WHEN 'beihang-xueyuan-1' THEN campus_v1 WHEN 'beihang-xueyuan-2' THEN campus_v2 ELSE campus_v3 END;
+  SET prior_campus=CASE current_version WHEN 'beihang-xueyuan-1' THEN campus_v1 WHEN 'beihang-xueyuan-2' THEN campus_v2 WHEN 'beihang-xueyuan-3' THEN campus_v3 ELSE campus_v4 END;
   IF (SELECT COUNT(*) FROM parking_zones)<>JSON_LENGTH(prior_campus,'$.zones')
   OR (SELECT COUNT(*) FROM road_nodes)<>JSON_LENGTH(prior_campus,'$.nodes')
   OR (SELECT COUNT(*) FROM road_edges)<>JSON_LENGTH(prior_campus,'$.edges')

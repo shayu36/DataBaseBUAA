@@ -4,6 +4,7 @@ import campus from "../database/campus-map.json" with { type: "json" };
 import previousCampus from "../database/campus-map-v2.json" with { type: "json" };
 import firstCampus from "../database/campus-map-v1.json" with { type: "json" };
 import thirdCampus from "../database/campus-map-v3.json" with { type: "json" };
+import fourthCampus from "../database/campus-map-v4.json" with { type: "json" };
 import {
   createPool,
   ledgerTransaction,
@@ -123,15 +124,21 @@ test("official-plan graph connects all stations with consistent route lengths", 
         assert.ok(a.id === b.id || route.distance_m > 0);
       }
 });
-test("campus graph covers family roads and separates buildings from the north road", () => {
-  assert.equal(campus.version, "beihang-xueyuan-4");
+test("campus graph separates residential areas and forbids the whole teaching district", () => {
+  assert.equal(campus.version, "beihang-xueyuan-5");
   assert.equal(
     campus.planSource,
     "https://www.buaa.edu.cn/images/xylxq20261013.jpg",
   );
   assert.deepEqual(
     campus.restricted_areas.map((area) => area.name),
-    ["主楼禁行区", "三号教学楼禁行区", "图书馆禁行区"],
+    [
+      "教学科研区（全域禁行）",
+      "南部教学科研区（全域禁行）",
+      "科研院所区（全域禁行）",
+      "知行楼教学区（全域禁行）",
+      "实验学校教学区（全域禁行）",
+    ],
   );
   for (const area of campus.restricted_areas) {
     assert.equal(area.rule, "NO_RIDE");
@@ -140,12 +147,11 @@ test("campus graph covers family roads and separates buildings from the north ro
   const library = campus.landmarks.find((place) => place.name === "图书馆");
   const canteen = campus.landmarks.find((place) => place.name === "北区食堂");
   assert.ok(library.x > canteen.x && library.y > canteen.y);
-  const libraryArea = campus.restricted_areas.find(
-    (area) => area.id === "library",
+  assert.equal(
+    campus.areas.find((area) => area.id === "dayuncun").kind,
+    "STUDENT",
   );
-  assert.ok(
-    libraryArea.points.every(([x, y]) => x > canteen.x && y > canteen.y),
-  );
+  assert.ok(campus.nodes.filter((node) => node.area === "STUDENT").length >= 3);
   const familyNodes = campus.nodes.filter((node) => node.area === "FAMILY");
   assert.ok(familyNodes.length >= 5);
   for (const node of familyNodes)
@@ -213,6 +219,61 @@ async function loadVersionedCampus(map) {
     [map.version],
   );
 }
+test("native SQL applies whole-district restrictions and keeps official non-teaching areas separate", async () => {
+  await loadVersionedCampus(campus);
+  const points = [
+    ["教学区内部北路", 700, 190, 1],
+    ["教学区内部中路", 600, 330, 1],
+    ["新主楼教学区", 780, 600, 1],
+    ["南部教学科研区", 610, 800, 1],
+    ["科研院所区", 440, 800, 1],
+    ["知行楼教学区", 500, 390, 1],
+    ["大运村学生公寓", 190, 860, 0],
+    ["家属区", 140, 420, 0],
+    ["北区学生公寓", 390, 140, 0],
+    ["学生公寓", 390, 475, 0],
+    ["文体活动区", 665, 260, 0],
+    ["球场文体区", 850, 260, 0],
+    ["音乐厅文体区", 780, 470, 0],
+    ["柏彦科技园", 598, 90, 0],
+    ["学大厦科技园", 845, 120, 0],
+    ["幼儿园家属设施", 610, 900, 0],
+    ["学校运动场文体区", 610, 845, 0],
+    ["实验学校教学区", 260, 720, 1],
+  ].map(([name, x, y, restricted]) => ({ name, x, y, restricted }));
+  points.push(
+    ...campus.restricted_areas.map((area) => ({
+      name: `禁行标记：${area.id}`,
+      x: area.label[0],
+      y: area.label[1],
+      restricted: 1,
+    })),
+  );
+  const connection = await pool.getConnection();
+  try {
+    await connection.query("CALL sp_campus_restrictions(?,@test_areas)", [
+      JSON.stringify(campus),
+    ]);
+    const [rows] = await connection.query(
+      "SELECT j.name,ST_Intersects(POINT(j.x,j.y),@test_areas) restricted FROM JSON_TABLE(?,'$[*]' COLUMNS(name VARCHAR(60) PATH '$.name',x INT PATH '$.x',y INT PATH '$.y')) j",
+      [JSON.stringify(points)],
+    );
+    assert.deepEqual(
+      rows.map((row) => ({ ...row })),
+      points.map(({ name, restricted }) => ({ name, restricted })),
+    );
+    const invalid = structuredClone(campus);
+    invalid.restricted_areas[0].excluded_area_ids.push("unknown");
+    await assert.rejects(
+      connection.query("CALL sp_campus_restrictions(?,@test_areas)", [
+        JSON.stringify(invalid),
+      ]),
+      /Invalid campus area exclusion/,
+    );
+  } finally {
+    connection.release();
+  }
+});
 test("campus routing and station creation respect restricted areas", async () => {
   await loadVersionedCampus(campus);
   const [, defaults] = await routeGraph(pool);
@@ -269,10 +330,10 @@ test("campus routing and station creation respect restricted areas", async () =>
   await assert.rejects(saveZone(pool, admin, station), {
     code: "ZONE_RESTRICTED",
   });
-  await assert.rejects(saveZone(pool, admin, { ...station, x: 696 }), {
+  await assert.rejects(saveZone(pool, admin, { ...station, x: 548 }), {
     code: "ZONE_RESTRICTED",
   });
-  const { id } = await saveZone(pool, admin, { ...station, x: 640, y: 190 });
+  const { id } = await saveZone(pool, admin, { ...station, x: 537, y: 190 });
   const [updatedNodes, updatedRoads] = await routeGraph(pool);
   const node = updatedNodes.find((item) => item.zone_id === id);
   const attached = updatedRoads.filter(
@@ -281,18 +342,18 @@ test("campus routing and station creation respect restricted areas", async () =>
   assert.equal(attached.length, 1);
   assert.equal(attached[0].status, "OPEN");
   await assert.rejects(
-    saveZone(pool, admin, { ...station, id, x: 640, y: 320 }),
+    saveZone(pool, admin, { ...station, id, x: 900, y: 190 }),
     { code: "ZONE_RESTRICTED_ROAD" },
   );
   const [[unchanged]] = await pool.query(
     "SELECT x,y FROM parking_zones WHERE id=?",
     [id],
   );
-  assert.deepEqual(unchanged, { x: 640, y: 190 });
+  assert.deepEqual(unchanged, { x: 537, y: 190 });
   const same = await saveZone(pool, admin, {
     ...station,
     name: "同点站",
-    x: 640,
+    x: 537,
     y: 190,
   });
   const [sameNodes, sameRoads] = await routeGraph(pool);
@@ -571,7 +632,7 @@ test("new station is not created when every connection crosses a restricted area
       {
         name: "不可连通站",
         location: "测试",
-        x: 600,
+        x: 537,
         y: 200,
         radius: 10,
         capacity: 10,
@@ -583,7 +644,7 @@ test("new station is not created when every connection crosses a restricted area
   const [[after]] = await pool.query("SELECT COUNT(*) n FROM parking_zones");
   assert.equal(after.n, before.n);
 });
-for (const prior of [firstCampus, previousCampus, thirdCampus]) {
+for (const prior of [firstCampus, previousCampus, thirdCampus, fourthCampus]) {
   test(`campus map upgrades the unmodified ${prior.version} graph without changing rides`, async () => {
     await loadVersionedCampus(prior);
     await pool.query(

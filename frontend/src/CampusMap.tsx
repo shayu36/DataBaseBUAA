@@ -33,6 +33,7 @@ export function CampusMap({
   const [graphError, setGraphError] = useState("");
   const [layers, setLayers] = useState({
     roads: false,
+    areas: true,
     restrictions: true,
     tasks: role !== "STUDENT",
   });
@@ -122,8 +123,8 @@ export function CampusMap({
       <div className="map-tools">
         <span>
           {role === "STUDENT"
-            ? "选择停车点借车与还车  红色区域禁止骑行"
-            : "点击停车点查看库存  容量和任务状态"}
+            ? "教学区全域禁行  请在外围停车后步行进入"
+            : "查看功能分区与停车点  教学科研区全域禁行"}
         </span>
         <div className="map-zoom">
           <button
@@ -156,6 +157,7 @@ export function CampusMap({
         <strong>地图图层</strong>
         {[
           ["roads", "模拟路网"],
+          ["areas", "功能分区"],
           ["restrictions", "禁行区域"],
           ...(role === "STUDENT" ? [] : [["tasks", "任务标记"]]),
         ].map(([key, label]) => (
@@ -204,8 +206,8 @@ export function CampusMap({
               patternUnits="userSpaceOnUse"
               patternTransform="rotate(45)"
             >
-              <rect width="12" height="12" fill="#fff1ed" />
-              <rect width="4" height="12" fill="#ef795f" opacity=".42" />
+              <rect width="12" height="12" fill="#ef795f" opacity=".08" />
+              <rect width="3" height="12" fill="#ef795f" opacity=".3" />
             </pattern>
           </defs>
           <rect width={maxX} height={maxY} fill="#f2f7f7" />
@@ -216,6 +218,27 @@ export function CampusMap({
             onLoad={() => setMapStatus("ready")}
             onError={() => setMapStatus("error")}
           />
+          {layers.areas &&
+            campus.areas.map((area) => (
+              <g
+                key={area.id}
+                className={`map-functional-area map-area-${area.kind.toLowerCase()}`}
+                role="img"
+                aria-label={area.name}
+              >
+                <title>{area.name}</title>
+                <polygon
+                  points={area.points.map((point) => point.join(",")).join(" ")}
+                />
+                <text x={area.label[0]} y={area.label[1]} textAnchor="middle">
+                  {area.kind === "CULTURE"
+                    ? "文体区"
+                    : area.kind === "SCIENCE"
+                      ? "科技园"
+                      : area.name}
+                </text>
+              </g>
+            ))}
           {layers.roads && (
             <g className="map-roads-on-plan" fill="none" strokeLinecap="round">
               {edges.map((edge) => {
@@ -250,9 +273,6 @@ export function CampusMap({
           )}
           {layers.restrictions &&
             campus.restricted_areas.map((area) => {
-              const labelX =
-                area.points.reduce((sum, [x]) => sum + x, 0) /
-                area.points.length;
               return (
                 <g
                   key={area.id}
@@ -263,18 +283,27 @@ export function CampusMap({
                   <title>
                     {area.name}：{area.reason}
                   </title>
-                  <polygon
-                    points={area.points
-                      .map((point) => point.join(","))
+                  <path
+                    d={[
+                      area.points,
+                      ...campus.areas
+                        .filter((part) =>
+                          area.excluded_area_ids.includes(part.id),
+                        )
+                        .map((part) => part.points),
+                    ]
+                      .map(
+                        (ring) =>
+                          "M" +
+                          ring.map((point) => point.join(" ")).join(" L") +
+                          " Z",
+                      )
                       .join(" ")}
+                    fillRule="evenodd"
                     fill={`url(#${id}-restricted)`}
                   />
-                  <text
-                    x={labelX}
-                    y={Math.max(...area.points.map((point) => point[1])) - 8}
-                    textAnchor="middle"
-                  >
-                    禁止骑行
+                  <text x={area.label[0]} y={area.label[1]} textAnchor="middle">
+                    {area.label_text}
                   </text>
                 </g>
               );
@@ -284,7 +313,7 @@ export function CampusMap({
               <g
                 key={place.name}
                 className={
-                  ["主楼", "三号教学楼", "图书馆", "新主楼", "家属区"].includes(
+                  ["主楼", "三号教学楼", "图书馆", "新主楼"].includes(
                     place.name,
                   )
                     ? "landmark-primary"
@@ -439,20 +468,24 @@ export function CampusMap({
           <span>路网　青色开放　红色短虚线关闭　橙色长虚线禁行</span>
         )}
         <span>
-          <i className="legend-academic" />
-          教学科研
+          <i className="legend-teaching-area" />
+          教学科研区全域禁行
         </span>
         <span>
-          <i className="legend-living" />
-          学生生活
+          <i className="legend-student-area" />
+          学生公寓（含大运村）
         </span>
         <span>
-          <i className="legend-dining" />
-          餐饮
+          <i className="legend-family-area" />
+          家属区
         </span>
         <span>
-          <i className="legend-culture" />
-          文体场馆
+          <i className="legend-culture-area" />
+          文体活动区
+        </span>
+        <span>
+          <i className="legend-science-area" />
+          科技园
         </span>
         <span>
           <i className="legend-station" />

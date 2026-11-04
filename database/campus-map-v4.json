@@ -1,0 +1,949 @@
+{
+  "version": "beihang-xueyuan-4",
+  "name": "北京航空航天大学 学院路校区",
+  "width": 940,
+  "height": 960,
+  "source": "https://www.buaa.edu.cn/xygk/xydt1/xylxq.htm",
+  "planSource": "https://www.buaa.edu.cn/images/xylxq20261013.jpg",
+  "note": "建筑和道路位置按北航官网学院路校区平面图校准；停车点、禁行范围及道路属性为课程模拟，距离为平面图坐标估算，不能用于真实导航。",
+  "restricted_areas": [
+    {
+      "id": "teaching-core",
+      "name": "主楼禁行区",
+      "rule": "NO_RIDE",
+      "reason": "主楼建筑及东侧步行区域，骑行须绕行",
+      "points": [
+        [696, 198],
+        [810, 198],
+        [810, 317],
+        [696, 317]
+      ]
+    },
+    {
+      "id": "teaching-3",
+      "name": "三号教学楼禁行区",
+      "rule": "NO_RIDE",
+      "reason": "三号教学楼建筑与入口步行区域，骑行须绕行",
+      "points": [
+        [755, 150],
+        [866, 150],
+        [866, 185],
+        [755, 185]
+      ]
+    },
+    {
+      "id": "library",
+      "name": "图书馆禁行区",
+      "rule": "NO_RIDE",
+      "reason": "图书馆建筑与入口步行区域，骑行须绕行",
+      "points": [
+        [545, 230],
+        [644, 230],
+        [644, 317],
+        [545, 317]
+      ]
+    }
+  ],
+  "zones": [
+    {
+      "id": 1,
+      "name": "东门驿站",
+      "location": "东门内侧 · 学院路校门",
+      "x": 900,
+      "y": 245,
+      "capacity": 24,
+      "count": 16
+    },
+    {
+      "id": 2,
+      "name": "图书馆站",
+      "location": "图书馆南侧 · 校园中路",
+      "x": 590,
+      "y": 330,
+      "capacity": 24,
+      "count": 2
+    },
+    {
+      "id": 3,
+      "name": "新主楼站",
+      "location": "新主楼南侧 · 南部道路",
+      "x": 785,
+      "y": 690,
+      "capacity": 20,
+      "count": 10
+    },
+    {
+      "id": 4,
+      "name": "学生公寓站",
+      "location": "北区学生公寓南侧 · 校园北路",
+      "x": 390,
+      "y": 190,
+      "capacity": 28,
+      "count": 25
+    },
+    {
+      "id": 5,
+      "name": "合一楼站",
+      "location": "合一楼西侧 · 学生生活区",
+      "x": 270,
+      "y": 400,
+      "capacity": 18,
+      "count": 9
+    },
+    {
+      "id": 6,
+      "name": "体育场站",
+      "location": "体育场北侧 · 校园南路",
+      "x": 370,
+      "y": 510,
+      "capacity": 16,
+      "count": 4
+    }
+  ],
+  "nodes": [
+    {
+      "id": 1,
+      "name": "东门驿站",
+      "x": 900,
+      "y": 245,
+      "zone_id": 1
+    },
+    {
+      "id": 2,
+      "name": "图书馆站",
+      "x": 590,
+      "y": 330,
+      "zone_id": 2
+    },
+    {
+      "id": 3,
+      "name": "新主楼站",
+      "x": 785,
+      "y": 690,
+      "zone_id": 3
+    },
+    {
+      "id": 4,
+      "name": "学生公寓站",
+      "x": 390,
+      "y": 190,
+      "zone_id": 4
+    },
+    {
+      "id": 5,
+      "name": "合一楼站",
+      "x": 270,
+      "y": 400,
+      "zone_id": 5
+    },
+    {
+      "id": 6,
+      "name": "体育场站",
+      "x": 370,
+      "y": 510,
+      "zone_id": 6
+    },
+    {
+      "id": 7,
+      "name": "东侧中路口",
+      "x": 900,
+      "y": 330,
+      "zone_id": null
+    },
+    {
+      "id": 8,
+      "name": "图书馆西南路口",
+      "x": 537,
+      "y": 330,
+      "zone_id": null
+    },
+    {
+      "id": 9,
+      "name": "主楼西南路口",
+      "x": 688,
+      "y": 330,
+      "zone_id": null
+    },
+    {
+      "id": 10,
+      "name": "北路西路口",
+      "x": 270,
+      "y": 190,
+      "zone_id": null
+    },
+    {
+      "id": 11,
+      "name": "北路中路口",
+      "x": 537,
+      "y": 190,
+      "zone_id": null
+    },
+    {
+      "id": 12,
+      "name": "生活区西南路口",
+      "x": 270,
+      "y": 510,
+      "zone_id": null
+    },
+    {
+      "id": 13,
+      "name": "体育场东北路口",
+      "x": 537,
+      "y": 510,
+      "zone_id": null
+    },
+    {
+      "id": 14,
+      "name": "新主楼西南路口",
+      "x": 688,
+      "y": 690,
+      "zone_id": null
+    },
+    {
+      "id": 15,
+      "name": "新主楼东南路口",
+      "x": 900,
+      "y": 690,
+      "zone_id": null
+    },
+    {
+      "id": 16,
+      "name": "绿园西南路口",
+      "x": 270,
+      "y": 330,
+      "zone_id": null
+    },
+    {
+      "id": 17,
+      "name": "新主楼西北路口",
+      "x": 688,
+      "y": 510,
+      "zone_id": null
+    },
+    {
+      "id": 18,
+      "name": "北区西北路口",
+      "x": 270,
+      "y": 70,
+      "zone_id": null
+    },
+    {
+      "id": 19,
+      "name": "东侧南路口",
+      "x": 900,
+      "y": 510,
+      "zone_id": null
+    },
+    {
+      "id": 20,
+      "name": "体育馆西南路口",
+      "x": 537,
+      "y": 690,
+      "zone_id": null
+    },
+    {
+      "id": 21,
+      "name": "主楼西北路口",
+      "x": 688,
+      "y": 190,
+      "zone_id": null
+    },
+    {
+      "id": 22,
+      "name": "东侧北路口",
+      "x": 900,
+      "y": 190,
+      "zone_id": null
+    },
+    {
+      "id": 23,
+      "name": "南门三路口",
+      "x": 688,
+      "y": 940,
+      "zone_id": null
+    },
+    {
+      "id": 25,
+      "name": "家属区北路西口",
+      "x": 50,
+      "y": 190,
+      "zone_id": null,
+      "area": "FAMILY"
+    },
+    {
+      "id": 26,
+      "name": "家属区中路西口",
+      "x": 50,
+      "y": 330,
+      "zone_id": null,
+      "area": "FAMILY"
+    },
+    {
+      "id": 27,
+      "name": "家属区南路西口",
+      "x": 50,
+      "y": 510,
+      "zone_id": null,
+      "area": "FAMILY"
+    },
+    {
+      "id": 28,
+      "name": "家属区南部西口",
+      "x": 50,
+      "y": 690,
+      "zone_id": null,
+      "area": "FAMILY"
+    },
+    {
+      "id": 29,
+      "name": "家属区南部东口",
+      "x": 200,
+      "y": 690,
+      "zone_id": null,
+      "area": "FAMILY"
+    },
+    {
+      "id": 30,
+      "name": "家属区北路东口",
+      "x": 200,
+      "y": 190,
+      "zone_id": null,
+      "area": "FAMILY"
+    },
+    {
+      "id": 31,
+      "name": "图书馆北侧路口",
+      "x": 590,
+      "y": 190,
+      "zone_id": null
+    },
+    {
+      "id": 32,
+      "name": "北门路口",
+      "x": 537,
+      "y": 70,
+      "zone_id": null
+    },
+    {
+      "id": 33,
+      "name": "北区东北路口",
+      "x": 688,
+      "y": 70,
+      "zone_id": null
+    },
+    {
+      "id": 34,
+      "name": "东侧东北路口",
+      "x": 900,
+      "y": 70,
+      "zone_id": null
+    },
+    {
+      "id": 35,
+      "name": "体育场西南路口",
+      "x": 270,
+      "y": 690,
+      "zone_id": null
+    },
+    {
+      "id": 36,
+      "name": "南门路口",
+      "x": 537,
+      "y": 940,
+      "zone_id": null
+    },
+    {
+      "id": 37,
+      "name": "主楼东侧步行入口",
+      "x": 800,
+      "y": 190,
+      "zone_id": null
+    },
+    {
+      "id": 38,
+      "name": "主楼东侧步行出口",
+      "x": 800,
+      "y": 330,
+      "zone_id": null
+    },
+    {
+      "id": 39,
+      "name": "图书馆东侧步行入口",
+      "x": 640,
+      "y": 190,
+      "zone_id": null
+    },
+    {
+      "id": 40,
+      "name": "图书馆东侧步行出口",
+      "x": 640,
+      "y": 330,
+      "zone_id": null
+    }
+  ],
+  "edges": [
+    {
+      "id": 1,
+      "from_node_id": 1,
+      "to_node_id": 22,
+      "distance_m": 55,
+      "safety_cost": 4,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 2,
+      "from_node_id": 1,
+      "to_node_id": 7,
+      "distance_m": 85,
+      "safety_cost": 4,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 3,
+      "from_node_id": 22,
+      "to_node_id": 34,
+      "distance_m": 120,
+      "safety_cost": 4,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 4,
+      "from_node_id": 11,
+      "to_node_id": 31,
+      "distance_m": 53,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 5,
+      "from_node_id": 4,
+      "to_node_id": 11,
+      "distance_m": 147,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 6,
+      "from_node_id": 4,
+      "to_node_id": 10,
+      "distance_m": 120,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 7,
+      "from_node_id": 10,
+      "to_node_id": 18,
+      "distance_m": 120,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 8,
+      "from_node_id": 18,
+      "to_node_id": 32,
+      "distance_m": 267,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 9,
+      "from_node_id": 32,
+      "to_node_id": 33,
+      "distance_m": 151,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 10,
+      "from_node_id": 33,
+      "to_node_id": 34,
+      "distance_m": 212,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 11,
+      "from_node_id": 11,
+      "to_node_id": 32,
+      "distance_m": 120,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 12,
+      "from_node_id": 21,
+      "to_node_id": 33,
+      "distance_m": 120,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 13,
+      "from_node_id": 10,
+      "to_node_id": 16,
+      "distance_m": 140,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 14,
+      "from_node_id": 5,
+      "to_node_id": 16,
+      "distance_m": 70,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 15,
+      "from_node_id": 5,
+      "to_node_id": 12,
+      "distance_m": 110,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 16,
+      "from_node_id": 8,
+      "to_node_id": 11,
+      "distance_m": 140,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 17,
+      "from_node_id": 2,
+      "to_node_id": 8,
+      "distance_m": 53,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 18,
+      "from_node_id": 9,
+      "to_node_id": 21,
+      "distance_m": 140,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 19,
+      "from_node_id": 8,
+      "to_node_id": 13,
+      "distance_m": 180,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 20,
+      "from_node_id": 9,
+      "to_node_id": 17,
+      "distance_m": 180,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 21,
+      "from_node_id": 7,
+      "to_node_id": 19,
+      "distance_m": 180,
+      "safety_cost": 4,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 22,
+      "from_node_id": 6,
+      "to_node_id": 12,
+      "distance_m": 100,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 23,
+      "from_node_id": 6,
+      "to_node_id": 13,
+      "distance_m": 167,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 24,
+      "from_node_id": 13,
+      "to_node_id": 17,
+      "distance_m": 151,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 25,
+      "from_node_id": 17,
+      "to_node_id": 19,
+      "distance_m": 212,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 26,
+      "from_node_id": 12,
+      "to_node_id": 35,
+      "distance_m": 180,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 27,
+      "from_node_id": 13,
+      "to_node_id": 20,
+      "distance_m": 180,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 28,
+      "from_node_id": 14,
+      "to_node_id": 17,
+      "distance_m": 180,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 29,
+      "from_node_id": 15,
+      "to_node_id": 19,
+      "distance_m": 180,
+      "safety_cost": 4,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 30,
+      "from_node_id": 20,
+      "to_node_id": 35,
+      "distance_m": 267,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 31,
+      "from_node_id": 14,
+      "to_node_id": 20,
+      "distance_m": 151,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 32,
+      "from_node_id": 3,
+      "to_node_id": 14,
+      "distance_m": 97,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 33,
+      "from_node_id": 3,
+      "to_node_id": 15,
+      "distance_m": 115,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 34,
+      "from_node_id": 20,
+      "to_node_id": 36,
+      "distance_m": 250,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 35,
+      "from_node_id": 14,
+      "to_node_id": 23,
+      "distance_m": 250,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 36,
+      "from_node_id": 23,
+      "to_node_id": 36,
+      "distance_m": 151,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 37,
+      "from_node_id": 25,
+      "to_node_id": 30,
+      "distance_m": 150,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 38,
+      "from_node_id": 10,
+      "to_node_id": 30,
+      "distance_m": 70,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 39,
+      "from_node_id": 25,
+      "to_node_id": 26,
+      "distance_m": 140,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 40,
+      "from_node_id": 26,
+      "to_node_id": 27,
+      "distance_m": 180,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 41,
+      "from_node_id": 27,
+      "to_node_id": 28,
+      "distance_m": 180,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 42,
+      "from_node_id": 16,
+      "to_node_id": 26,
+      "distance_m": 220,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 43,
+      "from_node_id": 12,
+      "to_node_id": 27,
+      "distance_m": 220,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 44,
+      "from_node_id": 28,
+      "to_node_id": 29,
+      "distance_m": 150,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 45,
+      "from_node_id": 29,
+      "to_node_id": 35,
+      "distance_m": 70,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "from_node_id": 22,
+      "to_node_id": 37,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN",
+      "id": 46,
+      "distance_m": 100
+    },
+    {
+      "from_node_id": 21,
+      "to_node_id": 37,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN",
+      "id": 47,
+      "distance_m": 112
+    },
+    {
+      "from_node_id": 21,
+      "to_node_id": 39,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN",
+      "id": 48,
+      "distance_m": 48
+    },
+    {
+      "from_node_id": 31,
+      "to_node_id": 39,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN",
+      "id": 49,
+      "distance_m": 50
+    },
+    {
+      "from_node_id": 9,
+      "to_node_id": 38,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN",
+      "id": 50,
+      "distance_m": 112
+    },
+    {
+      "from_node_id": 7,
+      "to_node_id": 38,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN",
+      "id": 51,
+      "distance_m": 100
+    },
+    {
+      "from_node_id": 2,
+      "to_node_id": 40,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN",
+      "id": 52,
+      "distance_m": 50
+    },
+    {
+      "from_node_id": 9,
+      "to_node_id": 40,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN",
+      "id": 53,
+      "distance_m": 48
+    },
+    {
+      "from_node_id": 37,
+      "to_node_id": 38,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "NO_RIDE",
+      "id": 54,
+      "distance_m": 140
+    },
+    {
+      "from_node_id": 39,
+      "to_node_id": 40,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "NO_RIDE",
+      "id": 55,
+      "distance_m": 140
+    }
+  ],
+  "plan": {
+    "x": -100,
+    "y": -150,
+    "width": 2048,
+    "height": 1161
+  },
+  "landmarks": [
+    {
+      "name": "主楼",
+      "x": 750,
+      "y": 255
+    },
+    {
+      "name": "三号教学楼",
+      "x": 793,
+      "y": 163
+    },
+    {
+      "name": "图书馆",
+      "x": 590,
+      "y": 288
+    },
+    {
+      "name": "北区食堂",
+      "x": 305,
+      "y": 105
+    },
+    {
+      "name": "新主楼",
+      "x": 785,
+      "y": 610
+    },
+    {
+      "name": "合一楼",
+      "x": 306,
+      "y": 383
+    },
+    {
+      "name": "北航体育馆",
+      "x": 625,
+      "y": 578
+    },
+    {
+      "name": "航空航天博物馆",
+      "x": 760,
+      "y": 427
+    },
+    {
+      "name": "绿园",
+      "x": 405,
+      "y": 254
+    },
+    {
+      "name": "家属区",
+      "x": 192,
+      "y": 861
+    },
+    {
+      "name": "学院路",
+      "x": 900,
+      "y": 440
+    },
+    {
+      "name": "知春路",
+      "x": 532,
+      "y": 946
+    }
+  ]
+}

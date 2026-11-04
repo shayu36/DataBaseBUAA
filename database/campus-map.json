@@ -1,47 +1,183 @@
 {
-  "version": "beihang-xueyuan-4",
+  "version": "beihang-xueyuan-5",
   "name": "北京航空航天大学 学院路校区",
   "width": 940,
   "height": 960,
   "source": "https://www.buaa.edu.cn/xygk/xydt1/xylxq.htm",
   "planSource": "https://www.buaa.edu.cn/images/xylxq20261013.jpg",
-  "note": "建筑和道路位置按北航官网学院路校区平面图校准；停车点、禁行范围及道路属性为课程模拟，距离为平面图坐标估算，不能用于真实导航。",
+  "note": "按官网平面图功能分区与课程骑行规则标注；教学科研区整片禁止骑行（含区内道路），家属区在西侧住宅区，大运村属于学生公寓。边界、停车点及距离为课程模拟，不能用于真实导航。",
   "restricted_areas": [
     {
-      "id": "teaching-core",
-      "name": "主楼禁行区",
+      "id": "teaching-main",
+      "name": "教学科研区（全域禁行）",
+      "kind": "TEACHING",
       "rule": "NO_RIDE",
-      "reason": "主楼建筑及东侧步行区域，骑行须绕行",
+      "reason": "覆盖教学科研区内建筑、广场与内部道路，须在外围停车并步行进入",
       "points": [
-        [696, 198],
-        [810, 198],
-        [810, 317],
-        [696, 317]
+        [
+          548,
+          45
+        ],
+        [
+          895,
+          45
+        ],
+        [
+          895,
+          680
+        ],
+        [
+          680,
+          680
+        ],
+        [
+          680,
+          498
+        ],
+        [
+          548,
+          498
+        ]
+      ],
+      "label": [
+        750,
+        380
+      ],
+      "label_text": "教学区全域禁行",
+      "excluded_area_ids": [
+        "bayyan",
+        "xueda",
+        "library-garden",
+        "east-courts",
+        "music"
       ]
     },
     {
-      "id": "teaching-3",
-      "name": "三号教学楼禁行区",
+      "id": "teaching-south",
+      "name": "南部教学科研区（全域禁行）",
+      "kind": "TEACHING",
       "rule": "NO_RIDE",
-      "reason": "三号教学楼建筑与入口步行区域，骑行须绕行",
+      "reason": "南部教学科研组团及其内部道路全域禁止骑行",
       "points": [
-        [755, 150],
-        [866, 150],
-        [866, 185],
-        [755, 185]
+        [
+          548,
+          700
+        ],
+        [
+          680,
+          700
+        ],
+        [
+          680,
+          930
+        ],
+        [
+          548,
+          930
+        ]
+      ],
+      "label": [
+        614,
+        790
+      ],
+      "label_text": "教学区禁行",
+      "excluded_area_ids": [
+        "school-sports",
+        "kindergarten"
       ]
     },
     {
-      "id": "library",
-      "name": "图书馆禁行区",
+      "id": "research-institutes",
+      "name": "科研院所区（全域禁行）",
+      "kind": "TEACHING",
       "rule": "NO_RIDE",
-      "reason": "图书馆建筑与入口步行区域，骑行须绕行",
+      "reason": "科研院所组团及其内部道路全域禁止骑行",
       "points": [
-        [545, 230],
-        [644, 230],
-        [644, 317],
-        [545, 317]
-      ]
+        [
+          358,
+          700
+        ],
+        [
+          525,
+          700
+        ],
+        [
+          525,
+          930
+        ],
+        [
+          358,
+          930
+        ]
+      ],
+      "label": [
+        441,
+        915
+      ],
+      "label_text": "科研区禁行",
+      "excluded_area_ids": []
+    },
+    {
+      "id": "zhixing",
+      "name": "知行楼教学区（全域禁行）",
+      "kind": "TEACHING",
+      "rule": "NO_RIDE",
+      "reason": "学生生活区东侧知行楼教学范围禁止骑行",
+      "points": [
+        [
+          480,
+          366
+        ],
+        [
+          525,
+          366
+        ],
+        [
+          525,
+          420
+        ],
+        [
+          480,
+          420
+        ]
+      ],
+      "label": [
+        502,
+        409
+      ],
+      "label_text": "禁行",
+      "excluded_area_ids": []
+    },
+    {
+      "id": "school-secondary",
+      "name": "实验学校教学区（全域禁行）",
+      "kind": "TEACHING",
+      "rule": "NO_RIDE",
+      "reason": "官网橙色学校教学范围及区内道路禁止骑行",
+      "points": [
+        [
+          190,
+          695
+        ],
+        [
+          335,
+          695
+        ],
+        [
+          335,
+          745
+        ],
+        [
+          190,
+          745
+        ]
+      ],
+      "label": [
+        262,
+        733
+      ],
+      "label_text": "教学区禁行",
+      "excluded_area_ids": []
     }
   ],
   "zones": [
@@ -57,8 +193,8 @@
     {
       "id": 2,
       "name": "图书馆站",
-      "location": "图书馆南侧 · 校园中路",
-      "x": 590,
+      "location": "教学区西侧外围入口 · 停车后步行前往图书馆",
+      "x": 527,
       "y": 330,
       "capacity": 24,
       "count": 2
@@ -111,7 +247,7 @@
     {
       "id": 2,
       "name": "图书馆站",
-      "x": 590,
+      "x": 527,
       "y": 330,
       "zone_id": 2
     },
@@ -379,6 +515,30 @@
       "x": 640,
       "y": 330,
       "zone_id": null
+    },
+    {
+      "id": 41,
+      "name": "大运村北侧路口",
+      "x": 340,
+      "y": 690,
+      "zone_id": null,
+      "area": "STUDENT"
+    },
+    {
+      "id": 42,
+      "name": "大运村学生公寓东侧入口",
+      "x": 340,
+      "y": 800,
+      "zone_id": null,
+      "area": "STUDENT"
+    },
+    {
+      "id": 43,
+      "name": "大运村南侧路口",
+      "x": 340,
+      "y": 940,
+      "zone_id": null,
+      "area": "STUDENT"
     }
   ],
   "edges": [
@@ -416,7 +576,7 @@
       "distance_m": 53,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "OPEN"
+      "status": "NO_RIDE"
     },
     {
       "id": 5,
@@ -461,7 +621,7 @@
       "distance_m": 151,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "OPEN"
+      "status": "NO_RIDE"
     },
     {
       "id": 10,
@@ -470,7 +630,7 @@
       "distance_m": 212,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "OPEN"
+      "status": "NO_RIDE"
     },
     {
       "id": 11,
@@ -488,7 +648,7 @@
       "distance_m": 120,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "OPEN"
+      "status": "NO_RIDE"
     },
     {
       "id": 13,
@@ -530,7 +690,7 @@
       "id": 17,
       "from_node_id": 2,
       "to_node_id": 8,
-      "distance_m": 53,
+      "distance_m": 10,
       "safety_cost": 1,
       "comfort_cost": 2,
       "status": "OPEN"
@@ -542,7 +702,7 @@
       "distance_m": 140,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "OPEN"
+      "status": "NO_RIDE"
     },
     {
       "id": 19,
@@ -560,7 +720,7 @@
       "distance_m": 180,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "OPEN"
+      "status": "NO_RIDE"
     },
     {
       "id": 21,
@@ -596,7 +756,7 @@
       "distance_m": 151,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "OPEN"
+      "status": "NO_RIDE"
     },
     {
       "id": 25,
@@ -605,7 +765,7 @@
       "distance_m": 212,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "OPEN"
+      "status": "NO_RIDE"
     },
     {
       "id": 26,
@@ -632,7 +792,7 @@
       "distance_m": 180,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "OPEN"
+      "status": "NO_RIDE"
     },
     {
       "id": 29,
@@ -792,7 +952,7 @@
       "to_node_id": 37,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "OPEN",
+      "status": "NO_RIDE",
       "id": 46,
       "distance_m": 100
     },
@@ -801,7 +961,7 @@
       "to_node_id": 37,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "OPEN",
+      "status": "NO_RIDE",
       "id": 47,
       "distance_m": 112
     },
@@ -810,7 +970,7 @@
       "to_node_id": 39,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "OPEN",
+      "status": "NO_RIDE",
       "id": 48,
       "distance_m": 48
     },
@@ -819,7 +979,7 @@
       "to_node_id": 39,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "OPEN",
+      "status": "NO_RIDE",
       "id": 49,
       "distance_m": 50
     },
@@ -828,7 +988,7 @@
       "to_node_id": 38,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "OPEN",
+      "status": "NO_RIDE",
       "id": 50,
       "distance_m": 112
     },
@@ -837,7 +997,7 @@
       "to_node_id": 38,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "OPEN",
+      "status": "NO_RIDE",
       "id": 51,
       "distance_m": 100
     },
@@ -846,16 +1006,16 @@
       "to_node_id": 40,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "OPEN",
+      "status": "NO_RIDE",
       "id": 52,
-      "distance_m": 50
+      "distance_m": 113
     },
     {
       "from_node_id": 9,
       "to_node_id": 40,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "OPEN",
+      "status": "NO_RIDE",
       "id": 53,
       "distance_m": 48
     },
@@ -876,6 +1036,42 @@
       "status": "NO_RIDE",
       "id": 55,
       "distance_m": 140
+    },
+    {
+      "id": 56,
+      "from_node_id": 35,
+      "to_node_id": 41,
+      "distance_m": 70,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 57,
+      "from_node_id": 41,
+      "to_node_id": 42,
+      "distance_m": 110,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 58,
+      "from_node_id": 42,
+      "to_node_id": 43,
+      "distance_m": 140,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
+    },
+    {
+      "id": 59,
+      "from_node_id": 36,
+      "to_node_id": 43,
+      "distance_m": 197,
+      "safety_cost": 1,
+      "comfort_cost": 2,
+      "status": "OPEN"
     }
   ],
   "plan": {
@@ -931,11 +1127,6 @@
       "y": 254
     },
     {
-      "name": "家属区",
-      "x": 192,
-      "y": 861
-    },
-    {
       "name": "学院路",
       "x": 900,
       "y": 440
@@ -944,6 +1135,495 @@
       "name": "知春路",
       "x": 532,
       "y": 946
+    }
+  ],
+  "areas": [
+    {
+      "id": "family-north",
+      "name": "北部家属区",
+      "kind": "FAMILY",
+      "points": [
+        [
+          25,
+          55
+        ],
+        [
+          260,
+          55
+        ],
+        [
+          260,
+          182
+        ],
+        [
+          25,
+          182
+        ]
+      ],
+      "label": [
+        140,
+        110
+      ]
+    },
+    {
+      "id": "family-middle",
+      "name": "家属区",
+      "kind": "FAMILY",
+      "points": [
+        [
+          25,
+          202
+        ],
+        [
+          260,
+          202
+        ],
+        [
+          260,
+          502
+        ],
+        [
+          25,
+          502
+        ]
+      ],
+      "label": [
+        140,
+        420
+      ]
+    },
+    {
+      "id": "family-south",
+      "name": "南部家属区",
+      "kind": "FAMILY",
+      "points": [
+        [
+          25,
+          522
+        ],
+        [
+          260,
+          522
+        ],
+        [
+          260,
+          680
+        ],
+        [
+          25,
+          680
+        ]
+      ],
+      "label": [
+        140,
+        620
+      ]
+    },
+    {
+      "id": "student-north",
+      "name": "北区学生公寓",
+      "kind": "STUDENT",
+      "points": [
+        [
+          280,
+          78
+        ],
+        [
+          525,
+          78
+        ],
+        [
+          525,
+          182
+        ],
+        [
+          280,
+          182
+        ]
+      ],
+      "label": [
+        400,
+        140
+      ]
+    },
+    {
+      "id": "student-middle",
+      "name": "学生公寓",
+      "kind": "STUDENT",
+      "points": [
+        [
+          280,
+          342
+        ],
+        [
+          525,
+          342
+        ],
+        [
+          525,
+          362
+        ],
+        [
+          475,
+          362
+        ],
+        [
+          475,
+          425
+        ],
+        [
+          525,
+          425
+        ],
+        [
+          525,
+          502
+        ],
+        [
+          280,
+          502
+        ]
+      ],
+      "label": [
+        390,
+        475
+      ]
+    },
+    {
+      "id": "dayuncun",
+      "name": "大运村学生公寓",
+      "kind": "STUDENT",
+      "points": [
+        [
+          26,
+          755
+        ],
+        [
+          200,
+          750
+        ],
+        [
+          275,
+          780
+        ],
+        [
+          333,
+          835
+        ],
+        [
+          333,
+          938
+        ],
+        [
+          150,
+          938
+        ],
+        [
+          48,
+          840
+        ]
+      ],
+      "label": [
+        190,
+        860
+      ]
+    },
+    {
+      "id": "bayyan",
+      "name": "柏彦大厦科技园",
+      "kind": "SCIENCE",
+      "points": [
+        [
+          558,
+          64
+        ],
+        [
+          638,
+          64
+        ],
+        [
+          638,
+          106
+        ],
+        [
+          558,
+          106
+        ]
+      ],
+      "label": [
+        598,
+        90
+      ]
+    },
+    {
+      "id": "xueda",
+      "name": "学大厦科技园",
+      "kind": "SCIENCE",
+      "points": [
+        [
+          806,
+          87
+        ],
+        [
+          886,
+          87
+        ],
+        [
+          886,
+          148
+        ],
+        [
+          806,
+          148
+        ]
+      ],
+      "label": [
+        845,
+        120
+      ]
+    },
+    {
+      "id": "library-garden",
+      "name": "文体活动区",
+      "kind": "CULTURE",
+      "points": [
+        [
+          644,
+          198
+        ],
+        [
+          687,
+          198
+        ],
+        [
+          687,
+          317
+        ],
+        [
+          644,
+          317
+        ]
+      ],
+      "label": [
+        665,
+        285
+      ]
+    },
+    {
+      "id": "east-courts",
+      "name": "文体活动区",
+      "kind": "CULTURE",
+      "points": [
+        [
+          810,
+          198
+        ],
+        [
+          894,
+          198
+        ],
+        [
+          894,
+          317
+        ],
+        [
+          810,
+          317
+        ]
+      ],
+      "label": [
+        853,
+        270
+      ]
+    },
+    {
+      "id": "music",
+      "name": "晨兴音乐厅文体区",
+      "kind": "CULTURE",
+      "points": [
+        [
+          740,
+          440
+        ],
+        [
+          824,
+          440
+        ],
+        [
+          824,
+          496
+        ],
+        [
+          740,
+          496
+        ]
+      ],
+      "label": [
+        782,
+        474
+      ]
+    },
+    {
+      "id": "green-garden",
+      "name": "绿园文体区",
+      "kind": "CULTURE",
+      "points": [
+        [
+          280,
+          202
+        ],
+        [
+          525,
+          202
+        ],
+        [
+          525,
+          318
+        ],
+        [
+          280,
+          318
+        ]
+      ],
+      "label": [
+        400,
+        295
+      ]
+    },
+    {
+      "id": "sports",
+      "name": "体育活动区",
+      "kind": "CULTURE",
+      "points": [
+        [
+          280,
+          522
+        ],
+        [
+          677,
+          522
+        ],
+        [
+          677,
+          680
+        ],
+        [
+          280,
+          680
+        ]
+      ],
+      "label": [
+        490,
+        655
+      ]
+    },
+    {
+      "id": "vision",
+      "name": "唯实大厦科技园",
+      "kind": "SCIENCE",
+      "points": [
+        [
+          822,
+          707
+        ],
+        [
+          895,
+          707
+        ],
+        [
+          895,
+          793
+        ],
+        [
+          822,
+          793
+        ]
+      ],
+      "label": [
+        857,
+        760
+      ]
+    },
+    {
+      "id": "zhizhen",
+      "name": "致真大厦科技园",
+      "kind": "SCIENCE",
+      "points": [
+        [
+          700,
+          841
+        ],
+        [
+          895,
+          841
+        ],
+        [
+          895,
+          933
+        ],
+        [
+          700,
+          933
+        ]
+      ],
+      "label": [
+        795,
+        904
+      ]
+    },
+    {
+      "id": "school-sports",
+      "name": "学校运动场文体区",
+      "kind": "CULTURE",
+      "points": [
+        [
+          550,
+          818
+        ],
+        [
+          678,
+          818
+        ],
+        [
+          678,
+          870
+        ],
+        [
+          550,
+          870
+        ]
+      ],
+      "label": [
+        614,
+        845
+      ]
+    },
+    {
+      "id": "kindergarten",
+      "name": "幼儿园",
+      "kind": "FAMILY",
+      "points": [
+        [
+          550,
+          875
+        ],
+        [
+          678,
+          875
+        ],
+        [
+          678,
+          928
+        ],
+        [
+          550,
+          928
+        ]
+      ],
+      "label": [
+        614,
+        905
+      ]
     }
   ]
 }

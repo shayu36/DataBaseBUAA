@@ -326,6 +326,32 @@ test("Beihang official map names landmarks and selects parking zones after zoom"
     /buaa-xueyuan-campus-map(?:-[A-Za-z0-9_-]{8})?\.jpg/,
   );
   await expect(map.locator(".map-image-status")).toHaveCount(0);
+  const dayuncun = map.getByRole("img", {
+    name: "大运村学生公寓",
+    exact: true,
+  });
+  await expect(dayuncun).toHaveClass(/map-area-student/);
+  await expect(dayuncun.locator("polygon")).toHaveCSS(
+    "stroke",
+    "rgb(230, 0, 126)",
+  );
+  const family = map.getByRole("img", { name: "家属区", exact: true });
+  await expect(family).toHaveClass(/map-area-family/);
+  await expect(family.locator("polygon")).toHaveCSS(
+    "stroke",
+    "rgb(21, 159, 219)",
+  );
+  for (const [kind, color] of [
+    ["teaching", "rgb(248, 121, 22)"],
+    ["student", "rgb(230, 0, 126)"],
+    ["family", "rgb(21, 159, 219)"],
+    ["culture", "rgb(19, 166, 163)"],
+    ["science", "rgb(140, 69, 152)"],
+  ])
+    await expect(map.locator(`.legend-${kind}-area`)).toHaveCSS(
+      "background-color",
+      color,
+    );
   const library = await map
     .locator(".map-official-labels text")
     .filter({ hasText: /^图书馆$/ })
@@ -1037,7 +1063,12 @@ test("roles receive distinct navigation and map workspaces", async ({
   await expect(page.locator("aside nav")).toContainText("借车与归还");
   await expect(page.locator("aside nav")).not.toContainText("运营分析");
   await expect(page.getByLabel("学生骑行地图")).toBeVisible();
-  for (const name of ["主楼禁行区", "三号教学楼禁行区", "图书馆禁行区"])
+  for (const name of [
+    "教学科研区（全域禁行）",
+    "南部教学科研区（全域禁行）",
+    "科研院所区（全域禁行）",
+    "知行楼教学区（全域禁行）",
+  ])
     await expect(page.getByRole("img", { name, exact: true })).toBeVisible();
   await page.getByRole("button", { name: "退出登录" }).click();
 
