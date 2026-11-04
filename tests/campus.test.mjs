@@ -5,6 +5,7 @@ import previousCampus from "../database/campus-map-v2.json" with { type: "json" 
 import firstCampus from "../database/campus-map-v1.json" with { type: "json" };
 import thirdCampus from "../database/campus-map-v3.json" with { type: "json" };
 import fourthCampus from "../database/campus-map-v4.json" with { type: "json" };
+import fifthCampus from "../database/campus-map-v5.json" with { type: "json" };
 import {
   createPool,
   ledgerTransaction,
@@ -124,22 +125,14 @@ test("official-plan graph connects all stations with consistent route lengths", 
         assert.ok(a.id === b.id || route.distance_m > 0);
       }
 });
-test("campus graph separates residential areas and forbids the whole teaching district", () => {
-  assert.equal(campus.version, "beihang-xueyuan-5");
+test("campus graph retains one northeast pedestrian restriction and residential classifications", () => {
+  assert.equal(campus.version, "beihang-xueyuan-6");
   assert.equal(
     campus.planSource,
     "https://www.buaa.edu.cn/images/xylxq20261013.jpg",
   );
-  assert.deepEqual(
-    campus.restricted_areas.map((area) => area.name),
-    [
-      "教学科研区（全域禁行）",
-      "南部教学科研区（全域禁行）",
-      "科研院所区（全域禁行）",
-      "知行楼教学区（全域禁行）",
-      "实验学校教学区（全域禁行）",
-    ],
-  );
+  assert.equal(campus.restricted_areas.length, 1);
+  assert.equal(campus.restricted_areas[0].name, "右上角步行禁行区");
   for (const area of campus.restricted_areas) {
     assert.equal(area.rule, "NO_RIDE");
     assert.ok(area.points.length >= 4);
@@ -219,27 +212,49 @@ async function loadVersionedCampus(map) {
     [map.version],
   );
 }
-test("native SQL applies whole-district restrictions and keeps official non-teaching areas separate", async () => {
+test("native SQL follows the user-defined single boundary and checks both sides of every gate", async () => {
   await loadVersionedCampus(campus);
   const points = [
-    ["教学区内部北路", 700, 190, 1],
-    ["教学区内部中路", 600, 330, 1],
-    ["新主楼教学区", 780, 600, 1],
-    ["南部教学科研区", 610, 800, 1],
-    ["科研院所区", 440, 800, 1],
-    ["知行楼教学区", 500, 390, 1],
+    ["第一馆地块", 550, 120, 1],
+    ["柏彦大厦", 610, 90, 0],
+    ["规划中地块", 710, 110, 1],
+    ["第二馆", 740, 135, 1],
+    ["第四馆", 783, 120, 1],
+    ["三四号楼地块", 800, 168, 1],
+    ["世宁大厦", 845, 120, 0],
+    ["校友之家北侧地块", 730, 58, 0],
+    ["校园东路外侧", 535, 200, 0],
+    ["校园东路内侧", 540, 200, 1],
+    ["求是广场", 590, 365, 1],
+    ["六号楼", 590, 410, 1],
+    ["西小楼", 565, 440, 0],
+    ["东小楼", 625, 440, 0],
+    ["六号楼南界内侧", 590, 416, 1],
+    ["六号楼南界外侧", 590, 418, 0],
+    ["步行区南门", 647, 384, 1],
+    ["南门外侧", 650, 400, 0],
+    ["南门内侧", 645, 400, 1],
+    ["横向楼区地块", 780, 352, 1],
+    ["横向小路南侧", 780, 380, 0],
+    ["横向小路边界", 780, 373, 1],
+    ["横向小路边界外", 780, 374, 0],
+    ["步行区南2门", 873, 475, 1],
+    ["南2门西侧馆区", 870, 475, 0],
+    ["南2门到校外边界", 900, 475, 1],
+    ["南2门到校外边界外侧", 900, 477, 0],
+    ["右侧步行通道", 900, 400, 1],
+    ["新主楼", 780, 600, 0],
+    ["南部教学科研区", 610, 800, 0],
+    ["科研院所区", 440, 800, 0],
+    ["知行楼", 500, 390, 0],
+    ["实验学校", 260, 720, 0],
     ["大运村学生公寓", 190, 860, 0],
     ["家属区", 140, 420, 0],
     ["北区学生公寓", 390, 140, 0],
-    ["学生公寓", 390, 475, 0],
-    ["文体活动区", 665, 260, 0],
-    ["球场文体区", 850, 260, 0],
-    ["音乐厅文体区", 780, 470, 0],
-    ["柏彦科技园", 598, 90, 0],
-    ["学大厦科技园", 845, 120, 0],
-    ["幼儿园家属设施", 610, 900, 0],
-    ["学校运动场文体区", 610, 845, 0],
-    ["实验学校教学区", 260, 720, 1],
+    ["禁行区内晨读园", 665, 260, 1],
+    ["禁行区内静园", 850, 260, 1],
+    ["音乐厅", 780, 470, 0],
+    ["幼儿园", 610, 900, 0],
   ].map(([name, x, y, restricted]) => ({ name, x, y, restricted }));
   points.push(
     ...campus.restricted_areas.map((area) => ({
@@ -261,14 +276,6 @@ test("native SQL applies whole-district restrictions and keeps official non-teac
     assert.deepEqual(
       rows.map((row) => ({ ...row })),
       points.map(({ name, restricted }) => ({ name, restricted })),
-    );
-    const invalid = structuredClone(campus);
-    invalid.restricted_areas[0].excluded_area_ids.push("unknown");
-    await assert.rejects(
-      connection.query("CALL sp_campus_restrictions(?,@test_areas)", [
-        JSON.stringify(invalid),
-      ]),
-      /Invalid campus area exclusion/,
     );
   } finally {
     connection.release();
@@ -330,7 +337,7 @@ test("campus routing and station creation respect restricted areas", async () =>
   await assert.rejects(saveZone(pool, admin, station), {
     code: "ZONE_RESTRICTED",
   });
-  await assert.rejects(saveZone(pool, admin, { ...station, x: 548 }), {
+  await assert.rejects(saveZone(pool, admin, { ...station, x: 538 }), {
     code: "ZONE_RESTRICTED",
   });
   const { id } = await saveZone(pool, admin, { ...station, x: 537, y: 190 });
@@ -342,7 +349,7 @@ test("campus routing and station creation respect restricted areas", async () =>
   assert.equal(attached.length, 1);
   assert.equal(attached[0].status, "OPEN");
   await assert.rejects(
-    saveZone(pool, admin, { ...station, id, x: 900, y: 190 }),
+    saveZone(pool, admin, { ...station, id, x: 900, y: 500 }),
     { code: "ZONE_RESTRICTED_ROAD" },
   );
   const [[unchanged]] = await pool.query(
@@ -501,8 +508,8 @@ test("dispatch suggestions do not send vehicles to a restricted station", async 
     {
       id: 2,
       name: "开放站",
-      x: 540,
-      y: 190,
+      x: 527,
+      y: 330,
       capacity: 10,
       available: 9,
       occupied: 9,
@@ -537,8 +544,8 @@ test("dispatch allocation prioritizes every available bike in restricted station
     {
       id: 2,
       name: "普通供给站",
-      x: 540,
-      y: 190,
+      x: 527,
+      y: 330,
       capacity: 10,
       available: 9,
       occupied: 9,
@@ -548,8 +555,8 @@ test("dispatch allocation prioritizes every available bike in restricted station
     {
       id: 3,
       name: "需求站",
-      x: 540,
-      y: 190,
+      x: 527,
+      y: 330,
       capacity: 10,
       available: 0,
       occupied: 0,
@@ -644,7 +651,13 @@ test("new station is not created when every connection crosses a restricted area
   const [[after]] = await pool.query("SELECT COUNT(*) n FROM parking_zones");
   assert.equal(after.n, before.n);
 });
-for (const prior of [firstCampus, previousCampus, thirdCampus, fourthCampus]) {
+for (const prior of [
+  firstCampus,
+  previousCampus,
+  thirdCampus,
+  fourthCampus,
+  fifthCampus,
+]) {
   test(`campus map upgrades the unmodified ${prior.version} graph without changing rides`, async () => {
     await loadVersionedCampus(prior);
     await pool.query(

@@ -1,192 +1,117 @@
 {
-  "version": "beihang-xueyuan-5",
+  "version": "beihang-xueyuan-6",
   "name": "北京航空航天大学 学院路校区",
   "width": 940,
   "height": 960,
   "source": "https://www.buaa.edu.cn/xygk/xydt1/xylxq.htm",
   "planSource": "https://www.buaa.edu.cn/images/xylxq20261013.jpg",
-  "note": "按官网平面图功能分区与课程骑行规则标注；教学科研区整片禁止骑行（含区内道路），家属区在西侧住宅区，大运村属于学生公寓。边界、停车点及距离为课程模拟，不能用于真实导航。",
+  "note": "仅右上角步行区为禁行区，按用户指定的第一馆、六号楼、步行区南门及南2门、规划中与第二馆、第四馆、三四号楼地块边界描画；建筑功能颜色不决定骑行规则。大运村属于学生公寓。",
   "restricted_areas": [
     {
-      "id": "teaching-main",
-      "name": "教学科研区（全域禁行）",
-      "kind": "TEACHING",
+      "id": "northeast-pedestrian",
+      "name": "右上角步行禁行区",
       "rule": "NO_RIDE",
-      "reason": "覆盖教学科研区内建筑、广场与内部道路，须在外围停车并步行进入",
+      "reason": "唯一禁行区；柏彦大厦、世宁大厦及边界以南地块不在区内",
       "points": [
         [
-          548,
-          45
+          538,
+          73
         ],
         [
-          895,
-          45
+          575,
+          73
         ],
         [
-          895,
-          680
+          575,
+          105
         ],
         [
-          680,
-          680
+          644,
+          105
         ],
         [
-          680,
-          498
+          644,
+          73
         ],
         [
-          548,
-          498
+          765,
+          73
+        ],
+        [
+          765,
+          89
+        ],
+        [
+          800,
+          89
+        ],
+        [
+          800,
+          146
+        ],
+        [
+          940,
+          146
+        ],
+        [
+          940,
+          475
+        ],
+        [
+          873,
+          475
+        ],
+        [
+          873,
+          373
+        ],
+        [
+          647,
+          373
+        ],
+        [
+          647,
+          417
+        ],
+        [
+          538,
+          417
         ]
       ],
       "label": [
-        750,
-        380
+        755,
+        305
       ],
-      "label_text": "教学区全域禁行",
-      "excluded_area_ids": [
-        "bayyan",
-        "xueda",
-        "library-garden",
-        "east-courts",
-        "music"
+      "label_text": "步行区禁止骑行",
+      "boundary_markers": [
+        {
+          "name": "步行区南门",
+          "x": 647,
+          "y": 384,
+          "label": [
+            685,
+            400
+          ]
+        },
+        {
+          "name": "步行区南2门",
+          "x": 873,
+          "y": 475,
+          "label": [
+            830,
+            492
+          ]
+        }
       ]
-    },
-    {
-      "id": "teaching-south",
-      "name": "南部教学科研区（全域禁行）",
-      "kind": "TEACHING",
-      "rule": "NO_RIDE",
-      "reason": "南部教学科研组团及其内部道路全域禁止骑行",
-      "points": [
-        [
-          548,
-          700
-        ],
-        [
-          680,
-          700
-        ],
-        [
-          680,
-          930
-        ],
-        [
-          548,
-          930
-        ]
-      ],
-      "label": [
-        614,
-        790
-      ],
-      "label_text": "教学区禁行",
-      "excluded_area_ids": [
-        "school-sports",
-        "kindergarten"
-      ]
-    },
-    {
-      "id": "research-institutes",
-      "name": "科研院所区（全域禁行）",
-      "kind": "TEACHING",
-      "rule": "NO_RIDE",
-      "reason": "科研院所组团及其内部道路全域禁止骑行",
-      "points": [
-        [
-          358,
-          700
-        ],
-        [
-          525,
-          700
-        ],
-        [
-          525,
-          930
-        ],
-        [
-          358,
-          930
-        ]
-      ],
-      "label": [
-        441,
-        915
-      ],
-      "label_text": "科研区禁行",
-      "excluded_area_ids": []
-    },
-    {
-      "id": "zhixing",
-      "name": "知行楼教学区（全域禁行）",
-      "kind": "TEACHING",
-      "rule": "NO_RIDE",
-      "reason": "学生生活区东侧知行楼教学范围禁止骑行",
-      "points": [
-        [
-          480,
-          366
-        ],
-        [
-          525,
-          366
-        ],
-        [
-          525,
-          420
-        ],
-        [
-          480,
-          420
-        ]
-      ],
-      "label": [
-        502,
-        409
-      ],
-      "label_text": "禁行",
-      "excluded_area_ids": []
-    },
-    {
-      "id": "school-secondary",
-      "name": "实验学校教学区（全域禁行）",
-      "kind": "TEACHING",
-      "rule": "NO_RIDE",
-      "reason": "官网橙色学校教学范围及区内道路禁止骑行",
-      "points": [
-        [
-          190,
-          695
-        ],
-        [
-          335,
-          695
-        ],
-        [
-          335,
-          745
-        ],
-        [
-          190,
-          745
-        ]
-      ],
-      "label": [
-        262,
-        733
-      ],
-      "label_text": "教学区禁行",
-      "excluded_area_ids": []
     }
   ],
   "zones": [
     {
       "id": 1,
       "name": "东门驿站",
-      "location": "东门内侧 · 学院路校门",
+      "location": "东门南侧外围 · 步行区南2门外",
       "x": 900,
-      "y": 245,
+      "y": 490,
       "capacity": 24,
       "count": 16
     },
@@ -241,7 +166,7 @@
       "id": 1,
       "name": "东门驿站",
       "x": 900,
-      "y": 245,
+      "y": 490,
       "zone_id": 1
     },
     {
@@ -546,19 +471,19 @@
       "id": 1,
       "from_node_id": 1,
       "to_node_id": 22,
-      "distance_m": 55,
+      "distance_m": 300,
       "safety_cost": 4,
       "comfort_cost": 2,
-      "status": "OPEN"
+      "status": "NO_RIDE"
     },
     {
       "id": 2,
       "from_node_id": 1,
       "to_node_id": 7,
-      "distance_m": 85,
+      "distance_m": 160,
       "safety_cost": 4,
       "comfort_cost": 2,
-      "status": "OPEN"
+      "status": "NO_RIDE"
     },
     {
       "id": 3,
@@ -567,7 +492,7 @@
       "distance_m": 120,
       "safety_cost": 4,
       "comfort_cost": 2,
-      "status": "OPEN"
+      "status": "NO_RIDE"
     },
     {
       "id": 4,
@@ -621,7 +546,7 @@
       "distance_m": 151,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "NO_RIDE"
+      "status": "OPEN"
     },
     {
       "id": 10,
@@ -630,7 +555,7 @@
       "distance_m": 212,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "NO_RIDE"
+      "status": "OPEN"
     },
     {
       "id": 11,
@@ -729,7 +654,7 @@
       "distance_m": 180,
       "safety_cost": 4,
       "comfort_cost": 2,
-      "status": "OPEN"
+      "status": "NO_RIDE"
     },
     {
       "id": 22,
@@ -756,7 +681,7 @@
       "distance_m": 151,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "NO_RIDE"
+      "status": "OPEN"
     },
     {
       "id": 25,
@@ -765,7 +690,7 @@
       "distance_m": 212,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "NO_RIDE"
+      "status": "OPEN"
     },
     {
       "id": 26,
@@ -792,7 +717,7 @@
       "distance_m": 180,
       "safety_cost": 1,
       "comfort_cost": 2,
-      "status": "NO_RIDE"
+      "status": "OPEN"
     },
     {
       "id": 29,
@@ -1072,6 +997,15 @@
       "safety_cost": 1,
       "comfort_cost": 2,
       "status": "OPEN"
+    },
+    {
+      "id": 60,
+      "from_node_id": 1,
+      "to_node_id": 19,
+      "distance_m": 20,
+      "safety_cost": 4,
+      "comfort_cost": 2,
+      "status": "OPEN"
     }
   ],
   "plan": {
@@ -1135,6 +1069,31 @@
       "name": "知春路",
       "x": 532,
       "y": 946
+    },
+    {
+      "name": "第一馆",
+      "x": 555,
+      "y": 125
+    },
+    {
+      "name": "柏彦大厦",
+      "x": 610,
+      "y": 88
+    },
+    {
+      "name": "世宁大厦",
+      "x": 845,
+      "y": 120
+    },
+    {
+      "name": "六号楼",
+      "x": 590,
+      "y": 408
+    },
+    {
+      "name": "求是广场",
+      "x": 590,
+      "y": 365
     }
   ],
   "areas": [
@@ -1334,20 +1293,20 @@
       "kind": "SCIENCE",
       "points": [
         [
-          558,
-          64
+          578,
+          74
         ],
         [
-          638,
-          64
+          642,
+          74
         ],
         [
-          638,
-          106
+          642,
+          103
         ],
         [
-          558,
-          106
+          578,
+          103
         ]
       ],
       "label": [
@@ -1356,8 +1315,8 @@
       ]
     },
     {
-      "id": "xueda",
-      "name": "学大厦科技园",
+      "id": "shining",
+      "name": "世宁大厦科技园",
       "kind": "SCIENCE",
       "points": [
         [
@@ -1370,11 +1329,11 @@
         ],
         [
           886,
-          148
+          142
         ],
         [
           806,
-          148
+          142
         ]
       ],
       "label": [

@@ -123,8 +123,8 @@ export function CampusMap({
       <div className="map-tools">
         <span>
           {role === "STUDENT"
-            ? "教学区全域禁行  请在外围停车后步行进入"
-            : "查看功能分区与停车点  教学科研区全域禁行"}
+            ? "仅右上角步行区禁行  请沿标记边界绕行"
+            : "查看停车点与唯一禁行区  建筑颜色表示功能分区"}
         </span>
         <div className="map-zoom">
           <button
@@ -283,28 +283,34 @@ export function CampusMap({
                   <title>
                     {area.name}：{area.reason}
                   </title>
-                  <path
-                    d={[
-                      area.points,
-                      ...campus.areas
-                        .filter((part) =>
-                          area.excluded_area_ids.includes(part.id),
-                        )
-                        .map((part) => part.points),
-                    ]
-                      .map(
-                        (ring) =>
-                          "M" +
-                          ring.map((point) => point.join(" ")).join(" L") +
-                          " Z",
-                      )
+                  <polygon
+                    points={area.points
+                      .map((point) => point.join(","))
                       .join(" ")}
-                    fillRule="evenodd"
                     fill={`url(#${id}-restricted)`}
                   />
                   <text x={area.label[0]} y={area.label[1]} textAnchor="middle">
                     {area.label_text}
                   </text>
+                  {area.boundary_markers.map((marker) => (
+                    <g key={marker.name} className="map-boundary-marker">
+                      <title>{marker.name}</title>
+                      <line
+                        x1={marker.x}
+                        y1={marker.y}
+                        x2={marker.label[0]}
+                        y2={marker.label[1]}
+                      />
+                      <circle cx={marker.x} cy={marker.y} r="4" />
+                      <text
+                        x={marker.label[0]}
+                        y={marker.label[1]}
+                        textAnchor="middle"
+                      >
+                        {marker.name}
+                      </text>
+                    </g>
+                  ))}
                 </g>
               );
             })}
@@ -469,7 +475,7 @@ export function CampusMap({
         )}
         <span>
           <i className="legend-teaching-area" />
-          教学科研区全域禁行
+          教学科研区
         </span>
         <span>
           <i className="legend-student-area" />
@@ -501,7 +507,7 @@ export function CampusMap({
         </span>
         <span>
           <i className="legend-restricted" />
-          禁行区域
+          右上角唯一禁行区
         </span>
       </div>
       <div

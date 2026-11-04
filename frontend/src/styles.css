@@ -1749,7 +1749,7 @@ td strong {
   stroke-dasharray: 10 8;
   opacity: 0.85;
 }
-.map-restricted-area path {
+.map-restricted-area polygon {
   stroke: #d74e3f;
   stroke-width: 3;
   stroke-dasharray: 9 6;
@@ -1822,6 +1822,19 @@ td strong {
   stroke: #fff8f5;
   stroke-width: 4px;
   stroke-linejoin: round;
+}
+.map-boundary-marker {
+  pointer-events: none;
+}
+.map-boundary-marker circle {
+  fill: #b42318;
+}
+.map-boundary-marker line {
+  stroke: #b42318;
+  stroke-width: 1.5;
+}
+.map-boundary-marker text {
+  font-size: 12px;
 }
 .family-road-label {
   fill: #2b7b72 !important;
@@ -4306,7 +4319,7 @@ table td {
 .map-official-labels .landmark-primary {
   filter: drop-shadow(0 2px 3px #1b446430);
 }
-.map-restricted-area path {
+.map-restricted-area polygon {
   opacity: 0.72;
 }
 .map-route {

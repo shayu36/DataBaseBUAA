@@ -1063,13 +1063,10 @@ test("roles receive distinct navigation and map workspaces", async ({
   await expect(page.locator("aside nav")).toContainText("借车与归还");
   await expect(page.locator("aside nav")).not.toContainText("运营分析");
   await expect(page.getByLabel("学生骑行地图")).toBeVisible();
-  for (const name of [
-    "教学科研区（全域禁行）",
-    "南部教学科研区（全域禁行）",
-    "科研院所区（全域禁行）",
-    "知行楼教学区（全域禁行）",
-  ])
-    await expect(page.getByRole("img", { name, exact: true })).toBeVisible();
+  await expect(page.locator(".map-restricted-area")).toHaveCount(1);
+  await expect(
+    page.getByRole("img", { name: "右上角步行禁行区", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "退出登录" }).click();
 
   await page.locator(".demo summary").click();
