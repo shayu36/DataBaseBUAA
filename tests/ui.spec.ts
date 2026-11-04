@@ -3162,3 +3162,182 @@ test("彩色导航、语音提示与滚动横幅保持一致", async ({ page }) 
     .poll(() => page.evaluate(() => (window as any).__spoken))
     .toContain("感谢使用青行校园共享自行车管理系统，期待您下次使用");
 });
+
+async function mockExpandedCampus(
+  page: import("@playwright/test").Page,
+  role: "STUDENT" | "ADMIN",
+) {
+  const dashboard = structuredClone(regressionDashboard);
+  dashboard.bikes = Array.from({ length: 200 }, (_, i) => ({
+    ...regressionDashboard.bikes[0],
+    id: i + 1,
+    code: `QX-${String(i + 1).padStart(3, "0")}`,
+    current_zone_id: i < 180 ? 1 : 2,
+    zone_name: i < 180 ? "测试源站" : "测试目标站",
+  }));
+  dashboard.zones = dashboard.zones.map((zone, i) => ({
+    ...zone,
+    capacity: i === 0 ? 220 : 40,
+    available: i === 0 ? 180 : 20,
+    borrowable: i === 0 ? 180 : 20,
+    occupied: i === 0 ? 180 : 20,
+  }));
+  dashboard.summary.total_bikes = dashboard.summary.available_bikes = 200;
+  const users = Array.from({ length: 123 }, (_, i) => ({
+    id: i + 1,
+    name: i === 0 ? "测试管理员" : `模拟账户${i + 1}`,
+    email:
+      i === 0
+        ? "jia@qingxing.local"
+        : `student${i + 1}@simulation.qingxing.local`,
+    phone: `139${String(i).padStart(8, "0")}`,
+    role: i === 0 ? "ADMIN" : "STUDENT",
+    status: "ACTIVE",
+  })).reverse();
+  const searches: string[] = [];
+  const borrowed: number[] = [];
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: role === "ADMIN" ? 1 : 2,
+            name: "测试账户",
+            email: "test@qingxing.local",
+            role,
+          },
+        },
+      });
+    if (url.pathname === "/api/dashboard")
+      return route.fulfill({ json: dashboard });
+    if (url.pathname === "/api/admin/users") {
+      const query = url.searchParams.get("q") || "";
+      searches.push(url.search);
+      const matching = users.filter((user) =>
+        `${user.name} ${user.email} ${user.phone}`.includes(query),
+      );
+      const before = Number(url.searchParams.get("before") || Infinity);
+      const remaining = matching.filter((user) => user.id < before);
+      const rows = remaining.slice(0, 100);
+      return route.fulfill({
+        json: {
+          users: rows,
+          total: matching.length,
+          next_before: remaining.length > 100 ? rows.at(-1)!.id : null,
+        },
+      });
+    }
+    if (url.pathname === "/api/rides/start") {
+      borrowed.push(route.request().postDataJSON().bike_id);
+      return route.fulfill({ json: { id: 999 } });
+    }
+    return route.fulfill({
+      json: { roads: [], attempts: [], orders: [], next_before: null },
+    });
+  });
+  return { searches, borrowed };
+}
+
+test("200辆单车的借车列表分页、检索并借用末尾车辆", async ({ page }) => {
+  const { borrowed } = await mockExpandedCampus(page, "STUDENT");
+  await page.goto("/");
+  await page.getByRole("button", { name: "借车与归还", exact: true }).click();
+  await expect(page.locator(".bike-card")).toHaveCount(12);
+  const pager = page.getByRole("group", { name: "可借车辆分页" });
+  await pager.getByRole("button", { name: "下一页" }).click();
+  await expect(page.locator(".bike-card").first()).toContainText("QX-013");
+  await page.getByLabel("查找可借车辆").fill("QX-180");
+  await expect(page.locator(".bike-card")).toHaveCount(1);
+  await expect(page.locator(".bike-card")).toContainText("QX-180");
+  await page.getByLabel("借车停车点").selectOption("2");
+  await expect(page.getByLabel("查找可借车辆")).toHaveValue("");
+  await expect(page.locator(".bike-card").first()).toContainText("QX-181");
+  await page.getByLabel("查找可借车辆").fill("QX-200");
+  await page.getByRole("button", { name: "借用自行车 ↗", exact: true }).click();
+  await expect.poll(() => borrowed).toEqual([200]);
+});
+
+test("200辆单车的管理列表可以分页并定位编辑车辆", async ({ page }) => {
+  await mockExpandedCampus(page, "ADMIN");
+  await page.goto("/");
+  await page.getByRole("button", { name: "基础资料", exact: true }).click();
+  await page.getByRole("button", { name: "车辆管理", exact: true }).click();
+  await expect(page.getByRole("row")).toHaveCount(21);
+  const pager = page.getByRole("group", { name: "车辆资料分页" });
+  await pager.getByRole("button", { name: "下一页" }).click();
+  await expect(page.getByRole("row").nth(1)).toContainText("QX-021");
+  await page.getByLabel("检索车辆").fill("QX-200");
+  const row = page.getByRole("row").filter({ hasText: "QX-200" });
+  await expect(page.getByRole("row")).toHaveCount(2);
+  await row.getByRole("button", { name: "编辑", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "编辑 #200", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("车辆编号", { exact: true })).toHaveValue(
+    "QX-200",
+  );
+  await page.getByLabel("检索车辆").fill("");
+  await page.getByLabel("车辆停车点筛选").selectOption("2");
+  await expect(page.getByRole("row")).toHaveCount(21);
+  await expect(page.getByRole("row").nth(1)).toContainText("QX-181");
+});
+
+test("123名账户可检索未加载记录并保留搜索游标", async ({ page }) => {
+  const { searches } = await mockExpandedCampus(page, "ADMIN");
+  await page.goto("/");
+  await page.getByRole("button", { name: "基础资料", exact: true }).click();
+  await page.getByRole("tab", { name: "用户账户", exact: true }).click();
+  await expect(page.getByText("共 123 个账户", { exact: true })).toBeVisible();
+  await expect(page.getByRole("row")).toHaveCount(21);
+  await page.getByLabel("查找用户账户").fill("管理员");
+  await page.getByRole("button", { name: "查询账户", exact: true }).click();
+  await expect(
+    page.getByRole("row").filter({ hasText: "jia@qingxing.local" }),
+  ).toBeVisible();
+  await expect(page.getByRole("row")).toHaveCount(2);
+  await page.getByLabel("查找用户账户").fill("模拟账户");
+  await page.getByRole("button", { name: "查询账户", exact: true }).click();
+  await expect(
+    page.getByText("匹配 122 个账户", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "加载更早账户", exact: true }).click();
+  await expect
+    .poll(() =>
+      searches.some((query) => {
+        const params = new URLSearchParams(query);
+        return params.get("q") === "模拟账户" && params.has("before");
+      }),
+    )
+    .toBe(true);
+  await expect(
+    page.getByRole("button", { name: "加载更早账户", exact: true }),
+  ).toHaveCount(0);
+});
+
+test("账户搜索失败清除旧结果并可重试同一条件", async ({ page }) => {
+  await mockExpandedCampus(page, "ADMIN");
+  let fail = true;
+  await page.route("**/api/admin/users?**", async (route) => {
+    if (fail) {
+      fail = false;
+      return route.fulfill({
+        status: 503,
+        json: { error: "账户查询暂不可用" },
+      });
+    }
+    return route.fallback();
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "基础资料", exact: true }).click();
+  await page.getByRole("tab", { name: "用户账户", exact: true }).click();
+  await page.getByText("共 123 个账户", { exact: true }).waitFor();
+  await page.getByLabel("查找用户账户").fill("管理员");
+  await page.getByRole("button", { name: "查询账户", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("账户查询暂不可用");
+  await expect(page.getByRole("row")).toHaveCount(0);
+  await page.getByRole("button", { name: "查询账户", exact: true }).click();
+  await expect(
+    page.getByRole("row").filter({ hasText: "jia@qingxing.local" }),
+  ).toBeVisible();
+});

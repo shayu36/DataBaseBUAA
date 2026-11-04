@@ -7,6 +7,7 @@ import { createPool } from "../backend/db.mjs";
 import { seedDemo, seedSimulation } from "../backend/demo-seed.mjs";
 import { applySchema } from "../scripts/sql.mjs";
 import { dashboard } from "../backend/read-model.mjs";
+import { createApp } from "../backend/app.mjs";
 
 test("simulation data imports 123 users and 200 bikes atomically without replacing existing records", async () => {
   const suffix = randomBytes(4).toString("hex");
@@ -20,6 +21,7 @@ test("simulation data imports 123 users and 200 bikes atomically without replaci
   const admin = createPool({ ...credentials, database: undefined });
   let db,
     app,
+    server,
     created = false,
     userCreated = false;
   const snapshot = async () => {
@@ -147,7 +149,110 @@ test("simulation data imports 123 users and 200 bikes atomically without replaci
       "SELECT COUNT(*) routines FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=DATABASE()",
     );
     assert.equal(routines, 39);
+
+    server = createApp(app).listen(0, "127.0.0.1");
+    await new Promise((resolve) => server.once("listening", resolve));
+    const base = `http://127.0.0.1:${server.address().port}`;
+    async function request(path, body, cookie) {
+      const response = await fetch(base + "/api" + path, {
+        headers: {
+          ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+          ...(cookie ? { Cookie: cookie } : {}),
+        },
+        ...(body !== undefined
+          ? { method: "POST", body: JSON.stringify(body) }
+          : {}),
+      });
+      return {
+        status: response.status,
+        cookie: response.headers.get("set-cookie")?.split(";")[0],
+        data: await response.json(),
+      };
+    }
+    const studentLogin = await request("/auth/login", {
+      email: "student119@simulation.qingxing.local",
+      password: "Qingxing2026!",
+    });
+    assert.equal(studentLogin.status, 200);
+    assert.equal(studentLogin.data.user.id, 123);
+    assert.equal(studentLogin.data.user.role, "STUDENT");
+    const studentCookie = studentLogin.cookie;
+    const studentDashboard = await request(
+      "/dashboard",
+      undefined,
+      studentCookie,
+    );
+    assert.equal(studentDashboard.data.summary.total_bikes, 200);
+    assert.equal(studentDashboard.data.bikes.length, 200);
+    assert.equal(
+      (await request("/admin/users?q=student", undefined, studentCookie))
+        .status,
+      403,
+    );
+
+    const adminLogin = await request("/auth/login", {
+      email: "jia@qingxing.local",
+      password: "Qingxing2026!",
+    });
+    assert.equal(adminLogin.status, 200);
+    const accounts = await request(
+      "/admin/users",
+      undefined,
+      adminLogin.cookie,
+    );
+    assert.equal(accounts.data.total, 123);
+    assert.equal(accounts.data.users.length, 100);
+    const found = await request(
+      "/admin/users?q=student001%40simulation.qingxing.local",
+      undefined,
+      adminLogin.cookie,
+    );
+    assert.equal(found.data.total, 1);
+    assert.equal(found.data.users[0].id, 5);
+
+    const bike = studentDashboard.data.bikes.find((row) => row.id === 200);
+    assert.equal(bike.status, "AVAILABLE");
+    const ride = await request(
+      "/rides/start",
+      { bike_id: bike.id },
+      studentCookie,
+    );
+    assert.equal(ride.status, 201);
+    const returned = await request(
+      `/rides/${ride.data.id}/return`,
+      {
+        zone_id: bike.current_zone_id,
+        route_mode: "shortest",
+        captured_at: new Date().toISOString(),
+        location_source: "MAP_SIMULATION",
+      },
+      studentCookie,
+    );
+    assert.equal(returned.status, 200);
+    const payment = await request(
+      `/rides/${ride.data.id}/pay`,
+      { idempotency_key: `simulation-http-${suffix}` },
+      studentCookie,
+    );
+    assert.equal(payment.status, 200);
+    const finalDashboard = await request(
+      "/dashboard",
+      undefined,
+      studentCookie,
+    );
+    assert.equal(
+      finalDashboard.data.rides.find((row) => row.id === ride.data.id).status,
+      "PAID",
+    );
+    assert.equal(
+      finalDashboard.data.bikes.find((row) => row.id === bike.id).status,
+      "AVAILABLE",
+    );
+    const afterRide = await snapshot();
+    await seedSimulation(app, db);
+    assert.deepEqual(await snapshot(), afterRide);
   } finally {
+    if (server) await new Promise((resolve) => server.close(resolve));
     if (app) await app.end();
     if (db) await db.end();
     if (userCreated) await admin.query("DROP USER ?@'localhost'", [username]);

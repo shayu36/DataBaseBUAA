@@ -391,8 +391,76 @@ test("administrators can paginate and update older user accounts", async () => {
         .status,
       400,
     );
+    const search = await request(
+      "/api/admin/users?q=" + encodeURIComponent("  PAGINATION-1@HTTP.LOCAL  "),
+      undefined,
+      adminCookie,
+    );
+    assert.equal(search.status, 200);
+    assert.deepEqual(
+      search.data.users.map((user) => user.id),
+      [firstId],
+    );
+    assert.equal(search.data.total, 1);
+    assert.equal(search.data.next_before, null);
+    const matching = await request(
+      "/api/admin/users?q=" + encodeURIComponent("分页用户1"),
+      undefined,
+      adminCookie,
+    );
+    assert.equal(matching.data.total, 111);
+    assert.equal(matching.data.users.length, 100);
+    const remaining = await request(
+      `/api/admin/users?q=${encodeURIComponent("分页用户1")}&before=${matching.data.next_before}`,
+      undefined,
+      adminCookie,
+    );
+    assert.equal(remaining.data.users.length, 11);
+    assert.equal(remaining.data.total, 111);
+    assert.equal(remaining.data.next_before, null);
+    assert.equal(
+      new Set(
+        [...matching.data.users, ...remaining.data.users].map(
+          (user) => user.id,
+        ),
+      ).size,
+      111,
+    );
+    const phoneSearch = await request(
+      "/api/admin/users?q=13600000001",
+      undefined,
+      adminCookie,
+    );
+    assert.deepEqual(
+      phoneSearch.data.users.map((user) => user.id),
+      [firstId],
+    );
+    for (const term of ["%", "_", "' OR 1=1 --"]) {
+      const literal = await request(
+        "/api/admin/users?q=" + encodeURIComponent(term),
+        undefined,
+        adminCookie,
+      );
+      assert.equal(literal.data.users.length, 0);
+      assert.equal(literal.data.total, 0);
+    }
+    assert.equal(
+      (
+        await request(
+          "/api/admin/users?q=" + "a".repeat(255),
+          undefined,
+          adminCookie,
+        )
+      ).status,
+      400,
+    );
+    assert.equal(
+      (await request("/api/admin/users?q=x", undefined, studentCookie)).status,
+      403,
+    );
     const first = await request("/api/admin/users", undefined, adminCookie);
     assert.equal(first.data.users.length, 100);
+    assert.equal(first.data.total, baseline + 205);
     assert.equal(first.data.next_before, first.data.users.at(-1).id);
     const second = await request(
       `/api/admin/users?before=${first.data.next_before}`,

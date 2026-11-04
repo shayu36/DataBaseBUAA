@@ -6,6 +6,7 @@ import {
   CampusMap,
   Empty,
   Field,
+  PaginatedRecords,
   Stat,
   Table,
   date,
@@ -234,6 +235,7 @@ export function Rides({ d, run }: Props) {
         d.zones[0]?.id ||
         0,
     ),
+    [bikeQuery, setBikeQuery] = useState(""),
     [mode, setMode] = useState("shortest"),
     [capturedAt, setCapturedAt] = useState(() => new Date().toISOString());
   const capture = () => setCapturedAt(new Date().toISOString());
@@ -252,6 +254,9 @@ export function Rides({ d, run }: Props) {
             Number(bike.current_zone_id) === Number(borrowZone),
         )
       : [];
+  const filteredBikes = borrowableBikes.filter((bike) =>
+    bike.code.toLowerCase().includes(bikeQuery.trim().toLowerCase()),
+  );
   return (
     <>
       <div className="two-col">
@@ -263,7 +268,10 @@ export function Rides({ d, run }: Props) {
           <Field label="借车停车点">
             <select
               value={borrowZone}
-              onChange={(e) => setBorrowZone(Number(e.target.value))}
+              onChange={(e) => {
+                setBorrowZone(Number(e.target.value));
+                setBikeQuery("");
+              }}
             >
               {d.zones.map((z) => (
                 <option
@@ -279,26 +287,51 @@ export function Rides({ d, run }: Props) {
               ))}
             </select>
           </Field>
-          <div className="bike-grid">
-            {borrowableBikes.map((b) => (
-              <article className="bike-card" key={b.id}>
-                <span className="bike-symbol" aria-hidden="true">
-                  ●
-                </span>
-                <strong>{b.code}</strong>
-                <small>停放于 {b.zone_name}</small>
-                <small>状态良好 · 可立即借用</small>
-                <button
-                  disabled={!!active}
-                  onClick={async () => {
-                    if (await run("/rides/start", { bike_id: b.id })) capture();
-                  }}
-                >
-                  借用自行车 ↗
-                </button>
-              </article>
-            ))}
-          </div>
+          <Field label="查找可借车辆">
+            <input
+              type="search"
+              value={bikeQuery}
+              placeholder="输入车辆编号，如 QX-200"
+              onChange={(event) => setBikeQuery(event.target.value)}
+            />
+          </Field>
+          <p className="muted">
+            该停车点共 {borrowableBikes.length} 辆可借车辆
+            {bikeQuery.trim() ? ` · 匹配 ${filteredBikes.length} 辆` : ""}
+          </p>
+          <PaginatedRecords
+            rows={filteredBikes}
+            pageSize={12}
+            resetKey={`${borrowZone}:${bikeQuery}`}
+            label="可借车辆"
+          >
+            {(rows) => (
+              <div className="bike-grid">
+                {rows.map((b) => (
+                  <article className="bike-card" key={b.id}>
+                    <span className="bike-symbol" aria-hidden="true">
+                      ●
+                    </span>
+                    <strong>{b.code}</strong>
+                    <small>停放于 {b.zone_name}</small>
+                    <small>状态良好 · 可立即借用</small>
+                    <button
+                      disabled={!!active}
+                      onClick={async () => {
+                        if (await run("/rides/start", { bike_id: b.id }))
+                          capture();
+                      }}
+                    >
+                      借用自行车 ↗
+                    </button>
+                  </article>
+                ))}
+              </div>
+            )}
+          </PaginatedRecords>
+          {borrowableBikes.length > 0 && !filteredBikes.length && (
+            <Empty text="没有匹配的可借车辆，请调整车辆编号" />
+          )}
           {!borrowableBikes.length && (
             <p className="muted">
               {Number(selectedBorrowZone?.restricted)
@@ -388,7 +421,10 @@ export function Rides({ d, run }: Props) {
               if (active) {
                 setReturnZone(z.id);
                 capture();
-              } else setBorrowZone(z.id);
+              } else {
+                setBorrowZone(z.id);
+                setBikeQuery("");
+              }
             }}
           />
         </div>
@@ -2318,6 +2354,16 @@ export function Admin({ d, user, run }: Props) {
   const [showSchema, setShowSchema] = useState(false);
   const [module, setModule] = useState("inventory");
   const [roadFilter, setRoadFilter] = useState("");
+  const [bikeSearch, setBikeSearch] = useState("");
+  const [bikeStatus, setBikeStatus] = useState("");
+  const [bikeZone, setBikeZone] = useState("");
+  const [userSearch, setUserSearch] = useState("");
+  const [userQuery, setUserQuery] = useState("");
+  const [userRequestVersion, setUserRequestVersion] = useState(0);
+  const [usersTotal, setUsersTotal] = useState<number | null>(null);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const userPath =
+    "/admin/users" + (userQuery ? "?q=" + encodeURIComponent(userQuery) : "");
   const adjustmentStorageKey = `qingxing-adjustment-${user.id}`;
   const [pendingAdjustment, setPendingAdjustment] =
     useState<PendingAdjustment | null>(() => {
@@ -2352,18 +2398,34 @@ export function Admin({ d, user, run }: Props) {
       pendingAdjustment?.reason ?? "课程演示人工校正",
     ),
     [userError, setUserError] = useState("");
+  const searchAccounts = (query: string) => {
+    const trimmed = query.trim();
+    if (trimmed !== userQuery) {
+      setUsers([]);
+      setUsersBefore(null);
+      setUsersTotal(null);
+    }
+    setUserError("");
+    setUsersLoading(true);
+    setUserQuery(trimmed);
+    setUserRequestVersion((version) => version + 1);
+  };
   useEffect(() => {
     let live = true;
+    const controller = new AbortController();
+    const options = { signal: controller.signal };
+    setUsersLoading(true);
     Promise.all([
-      api("/admin/users"),
-      api("/admin/roads"),
-      api("/return-attempts"),
-      api("/admin/orders/review"),
+      api(userPath, undefined, options),
+      api("/admin/roads", undefined, options),
+      api("/return-attempts", undefined, options),
+      api("/admin/orders/review", undefined, options),
     ])
       .then(([u, r, a, q]) => {
         if (!live) return;
-        setUsers(u.users);
+        setUsers(u.users || []);
         setUsersBefore(u.next_before ?? null);
+        setUsersTotal(u.total == null ? null : Number(u.total));
         setRoads(r.roads || []);
         setAttempts(a.attempts || []);
         setAttemptsBefore(a.next_before ?? null);
@@ -2372,12 +2434,27 @@ export function Admin({ d, user, run }: Props) {
         setUserError("");
       })
       .catch((e) => {
-        if (live) setUserError(e.message);
+        if (live) {
+          setUserError(e.message);
+          setUsers([]);
+          setUsersBefore(null);
+          setUsersTotal(null);
+        }
+      })
+      .finally(() => {
+        if (live) setUsersLoading(false);
       });
     return () => {
       live = false;
+      controller.abort();
     };
-  }, [d]);
+  }, [d, userPath, userRequestVersion]);
+  const vehicleRows = d.bikes.filter(
+    (bike) =>
+      bike.code.toLowerCase().includes(bikeSearch.trim().toLowerCase()) &&
+      (!bikeStatus || bike.status === bikeStatus) &&
+      (!bikeZone || Number(bike.current_zone_id) === Number(bikeZone)),
+  );
   const fields =
     kind === "zones"
       ? ["name", "location", "x", "y", "radius", "capacity"]
@@ -2540,74 +2617,202 @@ export function Admin({ d, user, run }: Props) {
             </div>
             <button>保存资料</button>
           </form>
-          <Table
-            rows={
-              kind === "zones" ? d.zones : kind === "bikes" ? d.bikes : d.staff
-            }
-            columns={[
-              { label: "编号", render: (r) => r.id },
-              { label: "名称", render: (r) => r.name || r.code },
-              { label: "状态", render: (r) => <Badge value={r.status} /> },
-              {
-                label: "操作",
-                render: (r) => (
-                  <button
-                    className="tiny secondary"
-                    onClick={() =>
-                      setEdit({ ...r, zone_id: r.current_zone_id })
-                    }
-                  >
-                    编辑
-                  </button>
-                ),
-              },
-            ]}
-          />
-        </section>
-      </div>
-      <div hidden={module !== "users"}>
-        <section className="panel">
-          <h2>用户账户管理</h2>
-          {userError && (
-            <div className="error" role="alert">
-              {userError}
+          {kind === "bikes" && (
+            <div className="record-toolbar">
+              <Field label="检索车辆">
+                <input
+                  type="search"
+                  value={bikeSearch}
+                  placeholder="按车辆编号查找"
+                  onChange={(event) => setBikeSearch(event.target.value)}
+                />
+              </Field>
+              <Field label="车辆停车点筛选">
+                <select
+                  value={bikeZone}
+                  onChange={(event) => setBikeZone(event.target.value)}
+                >
+                  <option value="">全部停车点</option>
+                  {d.zones.map((zone) => (
+                    <option value={zone.id} key={zone.id}>
+                      {zone.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="车辆状态筛选">
+                <select
+                  value={bikeStatus}
+                  onChange={(event) => setBikeStatus(event.target.value)}
+                >
+                  <option value="">全部状态</option>
+                  {[
+                    ["AVAILABLE", "可借用"],
+                    ["RIDING", "骑行中"],
+                    ["MAINTENANCE", "维修中"],
+                    ["DISPATCHING", "调度中"],
+                    ["RETIRED", "已退役"],
+                  ].map(([value, label]) => (
+                    <option value={value} key={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
             </div>
           )}
-          <PaginatedRows
-            initialRows={users}
-            initialBefore={usersBefore}
-            path="/admin/users"
-            field="users"
-            label="加载更早账户"
+          <PaginatedRecords
+            rows={
+              kind === "zones"
+                ? d.zones
+                : kind === "bikes"
+                  ? vehicleRows
+                  : d.staff
+            }
+            label={
+              kind === "zones"
+                ? "停车区资料"
+                : kind === "bikes"
+                  ? "车辆资料"
+                  : "员工资料"
+            }
+            resetKey={`${kind}:${bikeSearch}:${bikeStatus}:${bikeZone}`}
           >
             {(rows) => (
               <Table
                 rows={rows}
                 columns={[
-                  { label: "姓名", render: (r) => r.name },
-                  { label: "邮箱", render: (r) => r.email },
-                  { label: "角色", render: (r) => r.role },
+                  { label: "编号", render: (r) => r.id },
+                  { label: "名称", render: (r) => r.name || r.code },
                   { label: "状态", render: (r) => <Badge value={r.status} /> },
+                  ...(kind === "bikes"
+                    ? [
+                        {
+                          label: "停车点",
+                          render: (r: Row) => r.zone_name || "未停放",
+                        },
+                      ]
+                    : []),
                   {
                     label: "操作",
                     render: (r) => (
                       <button
                         className="tiny secondary"
                         onClick={() =>
-                          run("/admin/users/" + r.id + "/status", {
-                            status:
-                              r.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE",
-                          })
+                          setEdit({ ...r, zone_id: r.current_zone_id })
                         }
                       >
-                        {r.status === "ACTIVE" ? "停用" : "启用"}
+                        编辑
                       </button>
                     ),
                   },
                 ]}
               />
             )}
-          </PaginatedRows>
+          </PaginatedRecords>
+        </section>
+      </div>
+      <div hidden={module !== "users"}>
+        <section className="panel">
+          <h2>用户账户管理</h2>
+          <form
+            className="record-toolbar"
+            onSubmit={(event) => {
+              event.preventDefault();
+              searchAccounts(userSearch);
+            }}
+          >
+            <Field label="查找用户账户">
+              <input
+                type="search"
+                value={userSearch}
+                maxLength={254}
+                placeholder="输入姓名、邮箱或手机号"
+                onChange={(event) => setUserSearch(event.target.value)}
+              />
+            </Field>
+            <button type="submit">查询账户</button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setUserSearch("");
+                searchAccounts("");
+              }}
+            >
+              清除查询
+            </button>
+          </form>
+          {usersTotal != null && (
+            <p className="muted">
+              {userQuery ? "匹配" : "共"} {usersTotal} 个账户
+            </p>
+          )}
+          {usersLoading && (
+            <p role="status" className="muted">
+              正在读取账户…
+            </p>
+          )}
+          {userError && (
+            <div className="error" role="alert">
+              {userError}
+            </div>
+          )}
+          <fieldset
+            className="record-results"
+            disabled={usersLoading}
+            aria-busy={usersLoading}
+          >
+            <PaginatedRows
+              key={userPath}
+              initialRows={users}
+              initialBefore={usersBefore}
+              path={userPath}
+              field="users"
+              label="加载更早账户"
+            >
+              {(rows) => (
+                <PaginatedRecords
+                  rows={rows}
+                  resetKey={userPath}
+                  label="用户账户"
+                >
+                  {(pageRows) => (
+                    <Table
+                      rows={pageRows}
+                      columns={[
+                        { label: "姓名", render: (r) => r.name },
+                        { label: "邮箱", render: (r) => r.email },
+                        { label: "角色", render: (r) => r.role },
+                        {
+                          label: "状态",
+                          render: (r) => <Badge value={r.status} />,
+                        },
+                        {
+                          label: "操作",
+                          render: (r) => (
+                            <button
+                              className="tiny secondary"
+                              onClick={() =>
+                                run("/admin/users/" + r.id + "/status", {
+                                  status:
+                                    r.status === "ACTIVE"
+                                      ? "SUSPENDED"
+                                      : "ACTIVE",
+                                })
+                              }
+                            >
+                              {r.status === "ACTIVE" ? "停用" : "启用"}
+                            </button>
+                          ),
+                        },
+                      ]}
+                    />
+                  )}
+                </PaginatedRecords>
+              )}
+            </PaginatedRows>
+          </fieldset>
         </section>
       </div>
       <div hidden={module !== "roads"}>

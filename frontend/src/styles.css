@@ -4997,3 +4997,43 @@ table td {
     transform: translateX(-25%);
   }
 }
+
+.record-toolbar {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 20px 0 16px;
+}
+.record-toolbar .field {
+  flex: 1 1 180px;
+  min-width: 0;
+  margin: 0;
+}
+.record-toolbar button {
+  min-height: 42px;
+  flex-shrink: 0;
+}
+.record-results {
+  min-inline-size: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.record-pagination {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  padding-top: 16px;
+  margin-bottom: 12px;
+}
+.record-pagination > span {
+  margin-right: auto;
+  color: #526b86;
+  font-size: 13px;
+}
+.record-pagination button {
+  min-width: 76px;
+  justify-content: center;
+}

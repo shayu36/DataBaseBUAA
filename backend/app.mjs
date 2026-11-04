@@ -235,14 +235,27 @@ export function createApp(pool) {
   });
   app.get("/api/admin/users", async (req, res) => {
     requireAdmin(req.user);
-    const { before } = z
-      .object({ before: idSchema.optional() })
+    const { before, q } = z
+      .object({
+        before: idSchema.optional(),
+        q: z.string().trim().max(254).default(""),
+      })
       .parse(req.query);
-    const [users] = await pool.query(sql("admin_users"), [
-      before ?? null,
-      before ?? null,
-    ]);
-    res.json(pageById(users, "users"));
+    res.json(
+      await readSnapshot(pool, async (connection) => {
+        const [users] = await connection.query(sql("admin_users"), [
+          before ?? null,
+          before ?? null,
+          q,
+          q,
+        ]);
+        const [[{ total }]] = await connection.query(sql("admin_users_count"), [
+          q,
+          q,
+        ]);
+        return { ...pageById(users, "users"), total: Number(total) };
+      }),
+    );
   });
   app.get("/api/analytics", async (req, res) => {
     requireAdmin(req.user);

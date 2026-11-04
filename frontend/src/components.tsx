@@ -1,4 +1,4 @@
-import { cloneElement, isValidElement } from "react";
+import { cloneElement, isValidElement, useEffect, useState } from "react";
 import { Leaf, ArrowUpRight } from "lucide-react";
 import type { Row } from "./types";
 export const money = (v: number) => "¥" + (Number(v || 0) / 100).toFixed(2);
@@ -7,6 +7,7 @@ export const date = (v: string) =>
 const labels: Record<string, string> = {
   AVAILABLE: "可借用",
   RUNNING: "骑行中",
+  RIDING: "骑行中",
   UNPAID: "待支付",
   PAID: "已支付",
   PENDING: "待处理",
@@ -114,6 +115,55 @@ export function Table({
     </div>
   ) : (
     <Empty />
+  );
+}
+
+export function PaginatedRecords({
+  rows,
+  pageSize = 20,
+  resetKey = "",
+  label,
+  children,
+}: {
+  rows: Row[];
+  pageSize?: number;
+  resetKey?: string;
+  label: string;
+  children: (rows: Row[]) => React.ReactNode;
+}) {
+  const [page, setPage] = useState(1);
+  useEffect(() => setPage(1), [resetKey]);
+  const pages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const current = Math.min(page, pages);
+  return (
+    <>
+      {children(rows.slice((current - 1) * pageSize, current * pageSize))}
+      {pages > 1 && (
+        <div
+          className="record-pagination"
+          role="group"
+          aria-label={`${label}分页`}
+        >
+          <span>
+            第 {current} / {pages} 页 · 共 {rows.length} 条
+          </span>
+          <button
+            className="tiny secondary"
+            disabled={current === 1}
+            onClick={() => setPage(current - 1)}
+          >
+            上一页
+          </button>
+          <button
+            className="tiny secondary"
+            disabled={current === pages}
+            onClick={() => setPage(current + 1)}
+          >
+            下一页
+          </button>
+        </div>
+      )}
+    </>
   );
 }
 export { CampusMap } from "./CampusMap";
