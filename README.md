@@ -49,6 +49,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 ```text
 npm run db:seed
+npm run db:simulate -- --append
 npm run build
 npm start
 ```
@@ -75,7 +76,7 @@ npm start
 仓库包含完整的模拟数据清单：[用户数据](database/simulation/users.json)共 123 条，[单车数据](database/simulation/bikes.json)共 200 条。完成上述数据库初始化后执行：
 
 ```text
-npm run db:simulate
+npm run db:simulate -- --append
 npm run check
 ```
 
@@ -83,7 +84,7 @@ npm run check
 
 [MySQL 原生导入过程](database/simulation-seed.sql)使用 `JSON_TABLE` 批量写入，保留原有账号密码、车辆状态与位置、订单、支付及积分流水。新增车辆分布于东门、新主楼、学生公寓、合一楼、体育场五个停车区，避开图书馆禁行站点；必要时增加停车容量，并按本次新增车辆数预留约 20% 的空位，扩容记录写入审计日志。容量包含既有占用和调度预留，因此不同库的最终容量可能不同。
 
-重复执行不会重复新增数据。已有账号或车辆与清单身份不一致、已有清单之外的数据，或新增车辆的目标站关闭、禁行时，命令会报错并回滚，不会删除已有数据；请核对目标库，导入前可用 `npm run backup` 备份。提交到仓库的是可复现的模拟清单与导入代码，本机数据库备份、凭据和测试产物仍由 `.gitignore` 排除。
+重复执行不会重复新增数据。严格模式 `npm run db:simulate` 要求已有账号和车辆与清单一致；已有清单之外的数据时会报错并回滚。上面的追加模式适用于已有业务数据的数据库。请核对目标库，导入前可用 `npm run backup` 备份。提交到仓库的是可复现的模拟清单与导入代码，本机数据库备份、凭据和测试产物仍由 `.gitignore` 排除。
 
 已有自行注册的账号或自建车辆时，先备份，再执行 `npm run db:simulate -- --append`。追加模式按邮箱、手机号和车辆编号识别已有记录，保留原编号、密码、车辆状态、位置及历史业务记录；清单编号被其他记录占用时，为新增记录分配空闲编号。邮箱、手机号或角色相互冲突时仍会回滚。追加后总数可能超过 123 名用户或 200 辆单车，输出以数据库实际数量为准；重复追加不会重复创建记录。
 
@@ -151,25 +152,22 @@ npm run check
 
 ## 分支协作
 
-日常开发在 `zyf` 分支进行。开始工作前先获取远程更新，并确认本地未提交内容：
+仓库仅保留 `main` 分支。前端、后端、数据库结构、原生 SQL 和模拟数据清单在同一分支维护。开始工作前确认本地改动，并获取远程更新：
 
 ```text
-git fetch origin
-git switch zyf
-git pull --ff-only origin zyf
-```
-
-完成开发、构建和相关测试后，将 `zyf` 的已验证成果合入 `main`。先获取远程更新；若 `main` 有独立新提交，先在 `zyf` 合并并核对冲突、重新测试。`main` 是 `zyf` 祖先时，可使用下面的快进合并流程，保留全部开发历史：
-
-```text
+git status --short
 git switch main
+git fetch origin
 git pull --ff-only origin main
-git merge --ff-only zyf
-git push origin main
-git switch zyf
 ```
 
-快进失败时应停下来检查分支差异，不能强制推送。首次使用开发分支时可运行 `git switch --track origin/zyf`；本仓库目前没有配置定时自动合并。
+完成开发、构建和相关测试后，核对并提交本次涉及的代码、数据集和文档，再推送：
+
+```text
+git push origin main
+```
+
+拉取快进失败或推送被拒绝时，先核对远程新增提交、保留本地工作并解决冲突，重新验证后再推送。数据库中的实际业务数据需在本机按初始化、追加导入或备份恢复流程更新；Git 拉取文件不会自动写入 MySQL。
 
 ## 备份与恢复
 
