@@ -28,7 +28,7 @@ export async function seedDemo(pool, adminPool) {
   return Boolean(result.seeded);
 }
 
-export async function seedSimulation(pool, adminPool) {
+export async function seedSimulation(pool, adminPool, { append = false } = {}) {
   const [users, bikes] = await Promise.all([
     readFile(
       new URL("../database/simulation/users.json", import.meta.url),
@@ -45,7 +45,7 @@ export async function seedSimulation(pool, adminPool) {
     adminPool,
     "simulation-seed.sql",
     "call_simulation_procedure",
-    [users, bikes, hash, campusDefinition],
+    [users, bikes, hash, campusDefinition, append ? 1 : 0],
   );
 }
 

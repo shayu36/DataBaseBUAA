@@ -9,6 +9,103 @@ import { applySchema } from "../scripts/sql.mjs";
 import { dashboard } from "../backend/read-model.mjs";
 import { createApp } from "../backend/app.mjs";
 
+test("append simulation preserves existing identities, vehicles and orders when ids collide", async () => {
+  const database = `campus_bike_append_${randomBytes(4).toString("hex")}`;
+  const credentials = {
+    user: process.env.DB_ADMIN_USER,
+    password: process.env.DB_ADMIN_PASSWORD,
+  };
+  const admin = createPool({ ...credentials, database: undefined });
+  const db = createPool({ ...credentials, database });
+  let created = false;
+  const snapshot = async () => {
+    const result = {};
+    for (const table of [
+      "users",
+      "bikes",
+      "parking_zones",
+      "ride_orders",
+      "payments",
+      "carbon_transactions",
+      "audit_logs",
+      "system_settings",
+    ])
+      [result[table]] = await db.query(
+        `SELECT * FROM \`${table}\` ORDER BY ${table === "system_settings" ? "name" : "id"}`,
+      );
+    return result;
+  };
+  try {
+    await admin.query(
+      "CREATE DATABASE ?? CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci",
+      [database],
+    );
+    created = true;
+    await applySchema(db);
+    await seedDemo(db, db);
+    await db.query(
+      "INSERT INTO users(id,name,email,phone,password_hash) VALUES(5,'原有账户','existing@append.local','13999999999','existing-password-hash')",
+    );
+    await db.query(
+      "INSERT INTO bikes(id,code,deployed_at,status,current_zone_id) VALUES(67,'LOCAL-067','2026-01-01','RETIRED',NULL)",
+    );
+    const original = await snapshot();
+    assert.deepEqual(await seedSimulation(db, db, { append: true }), {
+      users_created: 119,
+      bikes_created: 134,
+      users: 124,
+      bikes: 201,
+    });
+    const expanded = await snapshot();
+    assert.deepEqual(
+      expanded.users.find((row) => row.id === 5),
+      original.users.find((row) => row.id === 5),
+    );
+    assert.deepEqual(
+      expanded.bikes.find((row) => row.id === 67),
+      original.bikes.find((row) => row.id === 67),
+    );
+    assert.equal(
+      expanded.users.find(
+        (row) => row.email === "student001@simulation.qingxing.local",
+      ).id,
+      124,
+    );
+    assert.equal(expanded.bikes.find((row) => row.code === "QX-067").id, 201);
+    for (const table of ["ride_orders", "payments", "carbon_transactions"])
+      assert.deepEqual(expanded[table], original[table]);
+    assert.deepEqual(await seedSimulation(db, db, { append: true }), {
+      users_created: 0,
+      bikes_created: 0,
+      users: 124,
+      bikes: 201,
+    });
+    assert.deepEqual(await snapshot(), expanded);
+    const [checks] = await db.query(
+      await readFile(
+        new URL("../database/invariant-checks.sql", import.meta.url),
+        "utf8",
+      ),
+    );
+    assert.deepEqual(
+      checks.filter((row) => Number(row.errors) !== 0),
+      [],
+    );
+    await db.query(
+      "UPDATE users SET phone='13999999998' WHERE email='student001@simulation.qingxing.local'",
+    );
+    const conflicting = await snapshot();
+    await assert.rejects(seedSimulation(db, db, { append: true }), {
+      sqlMessage: "SIMULATION_USER_CONFLICT",
+    });
+    assert.deepEqual(await snapshot(), conflicting);
+  } finally {
+    await db.end();
+    if (created) await admin.query("DROP DATABASE ??", [database]);
+    await admin.end();
+  }
+});
+
 test("simulation data imports 123 users and 200 bikes atomically without replacing existing records", async () => {
   const suffix = randomBytes(4).toString("hex");
   const database = `campus_bike_simulation_${suffix}`;
