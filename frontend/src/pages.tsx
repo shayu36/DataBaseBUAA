@@ -368,9 +368,9 @@ export function Rides({ d, run }: Props) {
           </Field>
           <Field label="行程路线偏好">
             <select value={mode} onChange={(e) => setMode(e.target.value)}>
-              <option value="shortest">最短路线</option>
-              <option value="safe">安全优先</option>
-              <option value="comfortable">舒适优先</option>
+              <option value="shortest">模拟路网内最短</option>
+              <option value="safe">安全优先（模拟）</option>
+              <option value="comfortable">舒适优先（模拟）</option>
             </select>
           </Field>
           <p className="muted">
@@ -1919,7 +1919,12 @@ export function Routes({ d }: Props) {
   return (
     <>
       <section className="panel">
-        <h2>选一条适合你的路</h2>
+        <h2>模拟路线方案</h2>
+        <p className="muted">
+          路网为人工录入的简化模型，尚未完整核实校园道路
+          <br />
+          最短仅指已录入路网内的结果，里程与道路属性均为模拟，不用于真实导航
+        </p>
         <div className="form-row">
           {[
             ["出发停车区", from, setFrom],
@@ -1937,9 +1942,9 @@ export function Routes({ d }: Props) {
           ))}
           <Field label="路线模式">
             <select value={mode} onChange={(e) => setMode(e.target.value)}>
-              <option value="shortest">最短路线</option>
-              <option value="safe">安全优先</option>
-              <option value="comfortable">舒适优先</option>
+              <option value="shortest">模拟路网内最短</option>
+              <option value="safe">安全优先（模拟）</option>
+              <option value="comfortable">舒适优先（模拟）</option>
             </select>
           </Field>
         </div>
@@ -1968,9 +1973,17 @@ export function Routes({ d }: Props) {
             <>
               <div className="route-options">
                 {[
-                  ["shortest", "最短路线", "以可通行距离为主要依据"],
-                  ["safe", "安全优先", "综合交叉口、照明与机动车混行"],
-                  ["comfortable", "舒适优先", "综合坡度、路面与遮阴"],
+                  ["shortest", "模拟路网内最短", "按已录入路段的估算长度计算"],
+                  [
+                    "safe",
+                    "安全优先（模拟）",
+                    "按模拟交叉口、照明与混行权重计算",
+                  ],
+                  [
+                    "comfortable",
+                    "舒适优先（模拟）",
+                    "按模拟坡度、路面与遮阴权重计算",
+                  ],
                 ].map(([key, title, detail]) => {
                   const route = result.routes[key];
                   return (

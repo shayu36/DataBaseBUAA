@@ -33,7 +33,6 @@ export function CampusMap({
   const [graphError, setGraphError] = useState("");
   const [layers, setLayers] = useState({
     roads: false,
-    areas: true,
     restrictions: true,
     tasks: role !== "STUDENT",
   });
@@ -124,7 +123,7 @@ export function CampusMap({
         <span>
           {role === "STUDENT"
             ? "仅右上角步行区禁行  请沿标记边界绕行"
-            : "查看停车点与唯一禁行区  建筑颜色表示功能分区"}
+            : "查看停车站点与唯一禁行区"}
         </span>
         <div className="map-zoom">
           <button
@@ -157,7 +156,6 @@ export function CampusMap({
         <strong>地图图层</strong>
         {[
           ["roads", "模拟路网"],
-          ["areas", "功能分区"],
           ["restrictions", "禁行区域"],
           ...(role === "STUDENT" ? [] : [["tasks", "任务标记"]]),
         ].map(([key, label]) => (
@@ -218,27 +216,6 @@ export function CampusMap({
             onLoad={() => setMapStatus("ready")}
             onError={() => setMapStatus("error")}
           />
-          {layers.areas &&
-            campus.areas.map((area) => (
-              <g
-                key={area.id}
-                className={`map-functional-area map-area-${area.kind.toLowerCase()}`}
-                role="img"
-                aria-label={area.name}
-              >
-                <title>{area.name}</title>
-                <polygon
-                  points={area.points.map((point) => point.join(",")).join(" ")}
-                />
-                <text x={area.label[0]} y={area.label[1]} textAnchor="middle">
-                  {area.kind === "CULTURE"
-                    ? "文体区"
-                    : area.kind === "SCIENCE"
-                      ? "科技园"
-                      : area.name}
-                </text>
-              </g>
-            ))}
           {layers.roads && (
             <g className="map-roads-on-plan" fill="none" strokeLinecap="round">
               {edges.map((edge) => {
@@ -289,57 +266,9 @@ export function CampusMap({
                       .join(" ")}
                     fill={`url(#${id}-restricted)`}
                   />
-                  <text x={area.label[0]} y={area.label[1]} textAnchor="middle">
-                    {area.label_text}
-                  </text>
-                  {area.boundary_markers.map((marker) => (
-                    <g key={marker.name} className="map-boundary-marker">
-                      <title>{marker.name}</title>
-                      <line
-                        x1={marker.x}
-                        y1={marker.y}
-                        x2={marker.label[0]}
-                        y2={marker.label[1]}
-                      />
-                      <circle cx={marker.x} cy={marker.y} r="4" />
-                      <text
-                        x={marker.label[0]}
-                        y={marker.label[1]}
-                        textAnchor="middle"
-                      >
-                        {marker.name}
-                      </text>
-                    </g>
-                  ))}
                 </g>
               );
             })}
-          <g className="map-official-labels">
-            {campus.landmarks.map((place) => (
-              <g
-                key={place.name}
-                className={
-                  ["主楼", "三号教学楼", "图书馆", "新主楼"].includes(
-                    place.name,
-                  )
-                    ? "landmark-primary"
-                    : "landmark-secondary"
-                }
-                transform={"translate(" + place.x + " " + place.y + ")"}
-              >
-                <rect
-                  x={-Math.max(68, place.name.length * 14 + 20) / 2}
-                  y="-17"
-                  width={Math.max(68, place.name.length * 14 + 20)}
-                  height="28"
-                  rx="7"
-                />
-                <text textAnchor="middle" y="5">
-                  {place.name}
-                </text>
-              </g>
-            ))}
-          </g>
           {points && (
             <>
               <polyline
@@ -473,26 +402,6 @@ export function CampusMap({
         {layers.roads && (
           <span>路网　青色开放　红色短虚线关闭　橙色长虚线禁行</span>
         )}
-        <span>
-          <i className="legend-teaching-area" />
-          教学科研区
-        </span>
-        <span>
-          <i className="legend-student-area" />
-          学生公寓（含大运村）
-        </span>
-        <span>
-          <i className="legend-family-area" />
-          家属区
-        </span>
-        <span>
-          <i className="legend-culture-area" />
-          文体活动区
-        </span>
-        <span>
-          <i className="legend-science-area" />
-          科技园
-        </span>
         <span>
           <i className="legend-station" />
           车源充足

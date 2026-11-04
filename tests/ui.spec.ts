@@ -293,7 +293,7 @@ test("浏览器不支持可见性检测时仍加载底图并提示失败", async
   );
 });
 
-test("Beihang official map names landmarks and selects parking zones after zoom", async ({
+test("校园地图仅叠加站点名称和禁行色块，缩放后仍可选择停车点", async ({
   page,
 }) => {
   await page.goto("/");
@@ -305,63 +305,29 @@ test("Beihang official map names landmarks and selects parking zones after zoom"
   await expect(
     map.getByRole("heading", { name: "北京航空航天大学 学院路校区" }),
   ).toBeVisible();
-  for (const name of [
-    "主楼",
-    "图书馆",
-    "北区食堂",
-    "新主楼",
-    "合一楼",
-    "北航体育馆",
-    "航空航天博物馆",
-    "绿园",
-    "学院路",
-    "知春路",
-  ]) {
-    await expect(
-      map.locator("svg text").filter({ hasText: new RegExp(`^${name}$`) }),
-    ).toBeVisible();
-  }
   await expect(map.locator("svg image")).toHaveAttribute(
     "href",
     /buaa-xueyuan-campus-map(?:-[A-Za-z0-9_-]{8})?\.jpg/,
   );
   await expect(map.locator(".map-image-status")).toHaveCount(0);
-  const dayuncun = map.getByRole("img", {
-    name: "大运村学生公寓",
-    exact: true,
-  });
-  await expect(dayuncun).toHaveClass(/map-area-student/);
-  await expect(dayuncun.locator("polygon")).toHaveCSS(
-    "stroke",
-    "rgb(230, 0, 126)",
-  );
-  const family = map.getByRole("img", { name: "家属区", exact: true });
-  await expect(family).toHaveClass(/map-area-family/);
-  await expect(family.locator("polygon")).toHaveCSS(
-    "stroke",
-    "rgb(21, 159, 219)",
-  );
-  for (const [kind, color] of [
-    ["teaching", "rgb(248, 121, 22)"],
-    ["student", "rgb(230, 0, 126)"],
-    ["family", "rgb(21, 159, 219)"],
-    ["culture", "rgb(19, 166, 163)"],
-    ["science", "rgb(140, 69, 152)"],
-  ])
-    await expect(map.locator(`.legend-${kind}-area`)).toHaveCSS(
-      "background-color",
-      color,
-    );
-  const library = await map
-    .locator(".map-official-labels text")
-    .filter({ hasText: /^图书馆$/ })
-    .boundingBox();
-  const canteen = await map
-    .locator(".map-official-labels text")
-    .filter({ hasText: /^北区食堂$/ })
-    .boundingBox();
-  expect(library!.x).toBeGreaterThan(canteen!.x);
-  expect(library!.y).toBeGreaterThan(canteen!.y);
+  await expect(
+    map.locator(
+      ".map-functional-area, .map-official-labels, .map-boundary-marker",
+    ),
+  ).toHaveCount(0);
+  await expect(
+    map.getByRole("button", { name: "功能分区", exact: true }),
+  ).toHaveCount(0);
+  await expect(map.locator(".map-restricted-area")).toHaveCount(1);
+  await expect(map.locator(".map-restricted-area text")).toHaveCount(0);
+  const labels = await map.locator("svg text").allTextContents();
+  expect(labels.length).toBeGreaterThan(0);
+  expect(
+    labels.every(
+      (text) => /^\d+$/.test(text.trim()) || /站$/.test(text.trim()),
+    ),
+  ).toBe(true);
+  await expect(map.locator(".station-label + text")).toHaveCount(6);
   await expect(map.locator(".map-roads-on-plan path")).toHaveCount(0);
   await expect(map.locator(".station-fence")).toHaveCount(0);
   await page.getByRole("button", { name: "借车与归还", exact: true }).click();

@@ -1754,88 +1754,6 @@ td strong {
   stroke-width: 3;
   stroke-dasharray: 9 6;
 }
-.map-functional-area {
-  pointer-events: none;
-}
-.map-functional-area polygon {
-  stroke-width: 2;
-  stroke-dasharray: 6 4;
-}
-.map-area-family polygon {
-  fill: #159fdb15;
-  stroke: #159fdb;
-}
-.map-area-student polygon {
-  fill: #e6007e15;
-  stroke: #e6007e;
-}
-.map-area-culture polygon {
-  fill: #13a6a315;
-  stroke: #13a6a3;
-}
-.map-area-science polygon {
-  fill: #8c459815;
-  stroke: #8c4598;
-}
-.map-functional-area text {
-  font-size: 17px;
-  font-weight: 700;
-  paint-order: stroke;
-  stroke: #fff;
-  stroke-width: 5;
-  stroke-linejoin: round;
-}
-.map-area-family text {
-  fill: #1e40af;
-}
-.map-area-student text {
-  fill: #be0068;
-}
-.map-area-culture text {
-  fill: #087e7b;
-  font-size: 11px;
-}
-.map-area-science text {
-  fill: #74367f;
-  font-size: 11px;
-}
-.map-legend .legend-teaching-area {
-  background: #f87916;
-}
-.map-legend .legend-student-area {
-  background: #e6007e;
-}
-.map-legend .legend-family-area {
-  background: #159fdb;
-}
-.map-legend .legend-culture-area {
-  background: #13a6a3;
-}
-.map-legend .legend-science-area {
-  background: #8c4598;
-}
-.map-restricted-area text {
-  fill: #a73b32;
-  font-size: 15px;
-  font-weight: 750;
-  paint-order: stroke;
-  stroke: #fff8f5;
-  stroke-width: 4px;
-  stroke-linejoin: round;
-}
-.map-boundary-marker {
-  pointer-events: none;
-}
-.map-boundary-marker circle {
-  fill: #b42318;
-}
-.map-boundary-marker line {
-  stroke: #b42318;
-  stroke-width: 1.5;
-}
-.map-boundary-marker text {
-  font-size: 12px;
-}
 .family-road-label {
   fill: #2b7b72 !important;
   font-weight: 700;
@@ -2306,11 +2224,6 @@ td strong {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.map-official-labels rect {
-  fill: rgba(255, 255, 255, 0.94);
-  stroke: #277d89;
-  stroke-width: 1.5;
-}
 .map-viewport {
   position: relative;
 }
@@ -2328,11 +2241,6 @@ td strong {
 .map-image-status a {
   color: #125bb1;
   margin-left: 4px;
-}
-.map-official-labels text {
-  fill: #174761;
-  font-size: 14px;
-  font-weight: 750;
 }
 .map-roads-on-plan {
   pointer-events: none;
@@ -4307,18 +4215,6 @@ table td {
   font-size: 12px;
   font-weight: 700;
 }
-.map-official-labels .landmark-secondary {
-  opacity: 1;
-}
-.map-official-labels .landmark-secondary rect {
-  fill: #f7fafc99;
-}
-.map-official-labels .landmark-secondary text {
-  font-size: 12px;
-}
-.map-official-labels .landmark-primary {
-  filter: drop-shadow(0 2px 3px #1b446430);
-}
 .map-restricted-area polygon {
   opacity: 0.72;
 }
@@ -4538,9 +4434,6 @@ table td {
   }
   .overview-grid .campus-svg {
     min-width: 0 !important;
-  }
-  .map-official-labels .landmark-primary text {
-    font-size: 18px;
   }
   .login-page {
     display: grid;
