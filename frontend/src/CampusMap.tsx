@@ -5,20 +5,6 @@ import campusMap from "./assets/buaa-xueyuan-campus-map.jpg";
 import { api } from "./api";
 import type { Row, User } from "./types";
 
-const landmarks = [
-  { name: "主楼", x: 737, y: 263 },
-  { name: "三号教学楼", x: 740, y: 104 },
-  { name: "图书馆", x: 426, y: 123 },
-  { name: "新主楼", x: 792, y: 637 },
-  { name: "合一楼", x: 372, y: 439 },
-  { name: "北航体育馆", x: 625, y: 562 },
-  { name: "航空航天博物馆", x: 762, y: 414 },
-  { name: "绿园", x: 405, y: 254 },
-  { name: "家属区", x: 192, y: 861 },
-  { name: "学院路", x: 850, y: 402 },
-  { name: "知春路", x: 532, y: 933 },
-];
-
 export function CampusMap({
   zones,
   bikes,
@@ -225,10 +211,7 @@ export function CampusMap({
           <rect width={maxX} height={maxY} fill="#f2f7f7" />
           <image
             href={campusMap}
-            x="-100"
-            y="-150"
-            width="2048"
-            height="1161"
+            {...campus.plan}
             aria-label="北航官网学院路校区平面图"
             onLoad={() => setMapStatus("ready")}
             onError={() => setMapStatus("error")}
@@ -265,8 +248,39 @@ export function CampusMap({
               })}
             </g>
           )}
+          {layers.restrictions &&
+            campus.restricted_areas.map((area) => {
+              const labelX =
+                area.points.reduce((sum, [x]) => sum + x, 0) /
+                area.points.length;
+              return (
+                <g
+                  key={area.id}
+                  className="map-restricted-area"
+                  role="img"
+                  aria-label={area.name}
+                >
+                  <title>
+                    {area.name}：{area.reason}
+                  </title>
+                  <polygon
+                    points={area.points
+                      .map((point) => point.join(","))
+                      .join(" ")}
+                    fill={`url(#${id}-restricted)`}
+                  />
+                  <text
+                    x={labelX}
+                    y={Math.max(...area.points.map((point) => point[1])) - 8}
+                    textAnchor="middle"
+                  >
+                    禁止骑行
+                  </text>
+                </g>
+              );
+            })}
           <g className="map-official-labels">
-            {landmarks.map((place) => (
+            {campus.landmarks.map((place) => (
               <g
                 key={place.name}
                 className={
@@ -278,62 +292,18 @@ export function CampusMap({
                 }
                 transform={"translate(" + place.x + " " + place.y + ")"}
               >
-                <rect x="-74" y="-18" width="148" height="33" rx="13" />
+                <rect
+                  x={-Math.max(68, place.name.length * 14 + 20) / 2}
+                  y="-17"
+                  width={Math.max(68, place.name.length * 14 + 20)}
+                  height="28"
+                  rx="7"
+                />
                 <text textAnchor="middle" y="5">
                   {place.name}
                 </text>
               </g>
             ))}
-          </g>
-          {layers.restrictions &&
-            campus.restricted_areas.map((area) => {
-              const center = area.points.reduce(
-                (sum, point) => ({ x: sum.x + point[0], y: sum.y + point[1] }),
-                { x: 0, y: 0 },
-              );
-              center.x /= area.points.length;
-              center.y /= area.points.length;
-              return (
-                <g key={area.id} className="map-restricted-area">
-                  <title>
-                    {area.name}：{area.reason}
-                  </title>
-                  <polygon
-                    points={area.points
-                      .map((point) => point.join(","))
-                      .join(" ")}
-                    fill={`url(#${id}-restricted)`}
-                  />
-                  <text x={center.x} y={center.y - 5} textAnchor="middle">
-                    {area.name}
-                  </text>
-                  <text
-                    className="restricted-sub"
-                    x={center.x}
-                    y={center.y + 16}
-                    textAnchor="middle"
-                  >
-                    禁止骑行 请沿外围道路绕行
-                  </text>
-                </g>
-              );
-            })}
-          <g className="map-compass" transform="translate(123 91)">
-            <path d="M0 40 L10 11 L20 40 L10 33Z" fill="#344b65" />
-            <text x="10" y="4" textAnchor="middle">
-              N 北
-            </text>
-          </g>
-          <g className="map-gate">
-            <text x="560" y="101" textAnchor="middle">
-              北门
-            </text>
-            <text x="920" y="298" textAnchor="end">
-              东门 学院路侧
-            </text>
-            <text x="560" y="962" textAnchor="middle">
-              南门
-            </text>
           </g>
           {points && (
             <>
@@ -413,18 +383,20 @@ export function CampusMap({
                       </text>
                     </>
                   )}
-                  <circle
-                    className="station-fence"
-                    cx={z.x}
-                    cy={z.y}
-                    r={z.radius}
-                  />
-                  <circle className="station-marker" cx={z.x} cy={z.y} r="21" />
+                  {selected === z.id && (
+                    <circle
+                      className="station-fence"
+                      cx={z.x}
+                      cy={z.y}
+                      r={z.radius}
+                    />
+                  )}
+                  <circle className="station-marker" cx={z.x} cy={z.y} r="17" />
                   <text
                     x={z.x}
-                    y={Number(z.y) + 7}
+                    y={Number(z.y) + 5}
                     textAnchor="middle"
-                    fontSize="20"
+                    fontSize="14"
                     fontWeight="700"
                     fill="#fff"
                   >
@@ -432,17 +404,17 @@ export function CampusMap({
                   </text>
                   <rect
                     className="station-label"
-                    x={Number(z.x) - Math.max(58, z.name.length * 10 + 9)}
-                    y={Number(z.y) + 28}
-                    width={Math.max(116, z.name.length * 20 + 18)}
-                    height="31"
-                    rx="8"
+                    x={Number(z.x) - Math.max(42, z.name.length * 7 + 8)}
+                    y={Number(z.y) + 20}
+                    width={Math.max(84, z.name.length * 14 + 16)}
+                    height="24"
+                    rx="6"
                   />
                   <text
                     x={z.x}
-                    y={Number(z.y) + 50}
+                    y={Number(z.y) + 37}
                     textAnchor="middle"
-                    fontSize="19"
+                    fontSize="14"
                     fill="#254778"
                   >
                     {z.name}

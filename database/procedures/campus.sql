@@ -42,7 +42,7 @@ DELIMITER ;
 -- and serializes ledger changes; a customized graph is never overwritten.
 DROP PROCEDURE IF EXISTS sp_upgrade_campus_map;
 DELIMITER $$
-CREATE PROCEDURE sp_upgrade_campus_map(IN campus JSON, IN campus_v1 JSON, IN campus_v2 JSON)
+CREATE PROCEDURE sp_upgrade_campus_map(IN campus JSON, IN campus_v1 JSON, IN campus_v2 JSON, IN campus_v3 JSON)
 SQL SECURITY INVOKER
 upgrade_map: BEGIN
  DECLARE current_version VARCHAR(100);
@@ -53,7 +53,7 @@ upgrade_map: BEGIN
    SELECT 0 AS migrated;
    LEAVE upgrade_map;
   END IF;
-  IF NOT (BINARY current_version <=> BINARY 'beihang-xueyuan-1' OR BINARY current_version <=> BINARY 'beihang-xueyuan-2') THEN
+  IF NOT (BINARY current_version <=> BINARY 'beihang-xueyuan-1' OR BINARY current_version <=> BINARY 'beihang-xueyuan-2' OR BINARY current_version <=> BINARY 'beihang-xueyuan-3') THEN
    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Unknown campus map version; explicit migration required.';
   END IF;
  END IF;
@@ -88,7 +88,7 @@ upgrade_map: BEGIN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Refusing to overwrite a customized map; explicit mapping required.';
  END IF;
  IF current_version IS NOT NULL THEN
-  SET prior_campus=IF(BINARY current_version=BINARY 'beihang-xueyuan-1',campus_v1,campus_v2);
+  SET prior_campus=CASE current_version WHEN 'beihang-xueyuan-1' THEN campus_v1 WHEN 'beihang-xueyuan-2' THEN campus_v2 ELSE campus_v3 END;
   IF (SELECT COUNT(*) FROM parking_zones)<>JSON_LENGTH(prior_campus,'$.zones')
   OR (SELECT COUNT(*) FROM road_nodes)<>JSON_LENGTH(prior_campus,'$.nodes')
   OR (SELECT COUNT(*) FROM road_edges)<>JSON_LENGTH(prior_campus,'$.edges')
@@ -107,7 +107,11 @@ upgrade_map: BEGIN
    direction VARCHAR(10) PATH '$.direction' NULL ON EMPTY,status VARCHAR(10) PATH '$.status' NULL ON EMPTY)) e
    ON r.from_node_id=e.from_id AND r.to_node_id=e.to_id AND r.distance_m=e.distance_m
     AND r.safety_cost=e.safety AND r.comfort_cost=e.comfort
-    AND BINARY r.direction=BINARY COALESCE(e.direction,'BOTH') AND BINARY r.status=BINARY COALESCE(e.status,'OPEN')
+    AND BINARY r.direction=BINARY COALESCE(e.direction,'BOTH')
+    -- v3 早期初始化曾将这四条默认禁行边保留为 OPEN，运行时仍按几何禁行。
+    AND (BINARY r.status=BINARY COALESCE(e.status,'OPEN') OR
+     (BINARY current_version=BINARY 'beihang-xueyuan-3' AND r.status='OPEN' AND e.status='NO_RIDE'
+      AND (r.from_node_id,r.to_node_id) IN ((4,11),(8,11),(9,19),(9,23))))
     AND r.attribute_source='SIMULATED_COURSE_DATA'
     AND r.slope_percent=(CAST(MOD(e.id,5) AS SIGNED)-2)*1.5
     AND r.surface=CASE WHEN MOD(e.id,5)=0 THEN 'ROUGH' WHEN MOD(e.id,2)=0 THEN 'AVERAGE' ELSE 'SMOOTH' END

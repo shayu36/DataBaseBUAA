@@ -1589,12 +1589,6 @@ td strong {
   fill: #b8a6dc;
   stroke: #846cbb;
 }
-.map-compass text,
-.map-gate text {
-  fill: #40546d;
-  font-size: 13px;
-  font-weight: 600;
-}
 .map-station {
   cursor: pointer;
   outline: none;
@@ -1780,11 +1774,6 @@ td strong {
   stroke: #fff8f5;
   stroke-width: 4px;
   stroke-linejoin: round;
-}
-.map-restricted-area .restricted-sub {
-  fill: #b64b40;
-  font-size: 10px;
-  font-weight: 600;
 }
 .family-road-label {
   fill: #2b7b72 !important;
@@ -2281,7 +2270,7 @@ td strong {
 }
 .map-official-labels text {
   fill: #174761;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 750;
 }
 .map-roads-on-plan {
@@ -4258,7 +4247,7 @@ table td {
   font-weight: 700;
 }
 .map-official-labels .landmark-secondary {
-  opacity: 0.35;
+  opacity: 1;
 }
 .map-official-labels .landmark-secondary rect {
   fill: #f7fafc99;
@@ -4269,24 +4258,8 @@ table td {
 .map-official-labels .landmark-primary {
   filter: drop-shadow(0 2px 3px #1b446430);
 }
-.map-station .station-label,
-.map-station .station-label + text {
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-.map-station:hover .station-label,
-.map-station:hover .station-label + text,
-.map-station.is-selected .station-label,
-.map-station.is-selected .station-label + text,
-.map-station:focus-visible .station-label,
-.map-station:focus-visible .station-label + text {
-  opacity: 1;
-}
 .map-restricted-area polygon {
   opacity: 0.72;
-}
-.map-restricted-area .restricted-sub {
-  display: none;
 }
 .map-route {
   filter: drop-shadow(0 2px 3px #233c5d55);

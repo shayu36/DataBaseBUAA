@@ -308,6 +308,7 @@ test("Beihang official map names landmarks and selects parking zones after zoom"
   for (const name of [
     "主楼",
     "图书馆",
+    "北区食堂",
     "新主楼",
     "合一楼",
     "北航体育馆",
@@ -325,6 +326,18 @@ test("Beihang official map names landmarks and selects parking zones after zoom"
     /buaa-xueyuan-campus-map(?:-[A-Za-z0-9_-]{8})?\.jpg/,
   );
   await expect(map.locator(".map-image-status")).toHaveCount(0);
+  const library = await map
+    .locator(".map-official-labels text")
+    .filter({ hasText: /^图书馆$/ })
+    .boundingBox();
+  const canteen = await map
+    .locator(".map-official-labels text")
+    .filter({ hasText: /^北区食堂$/ })
+    .boundingBox();
+  expect(library!.x).toBeGreaterThan(canteen!.x);
+  expect(library!.y).toBeGreaterThan(canteen!.y);
+  await expect(map.locator(".map-roads-on-plan path")).toHaveCount(0);
+  await expect(map.locator(".station-fence")).toHaveCount(0);
   await page.getByRole("button", { name: "借车与归还", exact: true }).click();
   await page
     .locator("details")
@@ -337,6 +350,7 @@ test("Beihang official map names landmarks and selects parking zones after zoom"
   await station.focus();
   await station.press("Space");
   await expect(page.getByLabel("借车停车点")).toHaveValue("1");
+  await expect(map.locator(".station-fence")).toHaveCount(1);
   await expect(page.getByLabel("归还横坐标（米）")).toHaveCount(0);
 });
 
@@ -1023,10 +1037,8 @@ test("roles receive distinct navigation and map workspaces", async ({
   await expect(page.locator("aside nav")).toContainText("借车与归还");
   await expect(page.locator("aside nav")).not.toContainText("运营分析");
   await expect(page.getByLabel("学生骑行地图")).toBeVisible();
-  await expect(
-    page.getByText("主楼三号教学楼禁行区", { exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText("图书馆禁行区", { exact: true })).toBeVisible();
+  for (const name of ["主楼禁行区", "三号教学楼禁行区", "图书馆禁行区"])
+    await expect(page.getByRole("img", { name, exact: true })).toBeVisible();
   await page.getByRole("button", { name: "退出登录" }).click();
 
   await page.locator(".demo summary").click();

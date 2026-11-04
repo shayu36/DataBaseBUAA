@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import campus from "../database/campus-map.json" with { type: "json" };
 import previousCampus from "../database/campus-map-v2.json" with { type: "json" };
 import firstCampus from "../database/campus-map-v1.json" with { type: "json" };
+import thirdCampus from "../database/campus-map-v3.json" with { type: "json" };
 import {
   createPool,
   ledgerTransaction,
@@ -110,6 +111,10 @@ test("official-plan graph connects all stations with consistent route lengths", 
       b = campus.nodes.find((n) => n.id === edge.to_node_id);
     assert.ok(a && b);
     assert.equal(edge.distance_m, Math.round(Math.hypot(a.x - b.x, a.y - b.y)));
+    assert.ok(
+      a.x === b.x || a.y === b.y,
+      "路段须沿校区道路分段，不能跨建筑斜连",
+    );
   }
   for (const a of campus.zones)
     for (const b of campus.zones)
@@ -118,20 +123,29 @@ test("official-plan graph connects all stations with consistent route lengths", 
         assert.ok(a.id === b.id || route.distance_m > 0);
       }
 });
-test("campus graph covers family roads and declares both no-ride areas", () => {
-  assert.equal(campus.version, "beihang-xueyuan-3");
+test("campus graph covers family roads and separates buildings from the north road", () => {
+  assert.equal(campus.version, "beihang-xueyuan-4");
   assert.equal(
     campus.planSource,
     "https://www.buaa.edu.cn/images/xylxq20261013.jpg",
   );
   assert.deepEqual(
     campus.restricted_areas.map((area) => area.name),
-    ["主楼三号教学楼禁行区", "图书馆禁行区"],
+    ["主楼禁行区", "三号教学楼禁行区", "图书馆禁行区"],
   );
   for (const area of campus.restricted_areas) {
     assert.equal(area.rule, "NO_RIDE");
     assert.ok(area.points.length >= 4);
   }
+  const library = campus.landmarks.find((place) => place.name === "图书馆");
+  const canteen = campus.landmarks.find((place) => place.name === "北区食堂");
+  assert.ok(library.x > canteen.x && library.y > canteen.y);
+  const libraryArea = campus.restricted_areas.find(
+    (area) => area.id === "library",
+  );
+  assert.ok(
+    libraryArea.points.every(([x, y]) => x > canteen.x && y > canteen.y),
+  );
   const familyNodes = campus.nodes.filter((node) => node.area === "FAMILY");
   assert.ok(familyNodes.length >= 5);
   for (const node of familyNodes)
@@ -201,16 +215,19 @@ async function loadVersionedCampus(map) {
 }
 test("campus routing and station creation respect restricted areas", async () => {
   await loadVersionedCampus(campus);
+  const [, defaults] = await routeGraph(pool);
+  assert.ok(
+    defaults.every((road) => road.status === road.stored_status),
+    "默认路段须与建筑围栏一致，不能把正常道路画入建筑禁行区",
+  );
   await pool.query("UPDATE users SET role='ADMIN' WHERE id=1");
   await pool.query(
-    "UPDATE road_edges SET status='OPEN' WHERE (from_node_id,to_node_id) IN ((4,11),(8,11),(9,19),(9,23))",
+    "UPDATE road_edges SET status='OPEN' WHERE (from_node_id,to_node_id) IN ((37,38),(39,40))",
   );
   const [nodes, roads] = await routeGraph(pool);
   for (const [from, to] of [
-    [4, 11],
-    [8, 11],
-    [9, 19],
-    [9, 23],
+    [37, 38],
+    [39, 40],
   ]) {
     const crossing = roads.find(
       (road) => road.from_node_id === from && road.to_node_id === to,
@@ -219,20 +236,20 @@ test("campus routing and station creation respect restricted areas", async () =>
     assert.equal(crossing.stored_status, "OPEN");
   }
   const [[stored]] = await pool.query(
-    "SELECT status FROM road_edges WHERE from_node_id=4 AND to_node_id=11",
+    "SELECT status FROM road_edges WHERE from_node_id=37 AND to_node_id=38",
   );
   assert.equal(stored.status, "OPEN");
   await pool.query(
-    "UPDATE road_edges SET status='CLOSED' WHERE from_node_id=4 AND to_node_id=11",
+    "UPDATE road_edges SET status='CLOSED' WHERE from_node_id=37 AND to_node_id=38",
   );
   const [, closedRoads] = await routeGraph(pool);
   const closed = closedRoads.find(
-    (road) => road.from_node_id === 4 && road.to_node_id === 11,
+    (road) => road.from_node_id === 37 && road.to_node_id === 38,
   );
   assert.equal(closed.status, "CLOSED");
   assert.equal(closed.stored_status, "CLOSED");
   await pool.query(
-    "UPDATE road_edges SET status='OPEN' WHERE from_node_id=4 AND to_node_id=11",
+    "UPDATE road_edges SET status='OPEN' WHERE from_node_id=37 AND to_node_id=38",
   );
   for (const from of campus.zones)
     for (const to of campus.zones) {
@@ -252,7 +269,7 @@ test("campus routing and station creation respect restricted areas", async () =>
   await assert.rejects(saveZone(pool, admin, station), {
     code: "ZONE_RESTRICTED",
   });
-  await assert.rejects(saveZone(pool, admin, { ...station, x: 642 }), {
+  await assert.rejects(saveZone(pool, admin, { ...station, x: 696 }), {
     code: "ZONE_RESTRICTED",
   });
   const { id } = await saveZone(pool, admin, { ...station, x: 640, y: 190 });
@@ -264,7 +281,7 @@ test("campus routing and station creation respect restricted areas", async () =>
   assert.equal(attached.length, 1);
   assert.equal(attached[0].status, "OPEN");
   await assert.rejects(
-    saveZone(pool, admin, { ...station, id, x: 320, y: 180 }),
+    saveZone(pool, admin, { ...station, id, x: 640, y: 320 }),
     { code: "ZONE_RESTRICTED_ROAD" },
   );
   const [[unchanged]] = await pool.query(
@@ -275,7 +292,7 @@ test("campus routing and station creation respect restricted areas", async () =>
   const same = await saveZone(pool, admin, {
     ...station,
     name: "同点站",
-    x: 540,
+    x: 640,
     y: 190,
   });
   const [sameNodes, sameRoads] = await routeGraph(pool);
@@ -566,7 +583,7 @@ test("new station is not created when every connection crosses a restricted area
   const [[after]] = await pool.query("SELECT COUNT(*) n FROM parking_zones");
   assert.equal(after.n, before.n);
 });
-for (const prior of [firstCampus, previousCampus]) {
+for (const prior of [firstCampus, previousCampus, thirdCampus]) {
   test(`campus map upgrades the unmodified ${prior.version} graph without changing rides`, async () => {
     await loadVersionedCampus(prior);
     await pool.query(
@@ -593,6 +610,7 @@ for (const prior of [firstCampus, previousCampus]) {
         "UPDATE road_edges SET distance_m=distance_m+1 ORDER BY id LIMIT 1",
         "UPDATE road_edges SET safety_cost=safety_cost+1 ORDER BY id LIMIT 1",
         "UPDATE road_edges SET slope_percent=slope_percent+1 ORDER BY id LIMIT 1",
+        "UPDATE road_edges SET status='CLOSED' ORDER BY id LIMIT 1",
         "INSERT INTO audit_logs(actor_id,action,entity_type,entity_id) SELECT 1,'ROAD_UPDATE','road_edges',id FROM road_edges LIMIT 1",
       ]) {
         await connection.query("SAVEPOINT map_change");
@@ -614,6 +632,26 @@ for (const prior of [firstCampus, previousCampus]) {
     });
   });
 }
+test("v3 map correction accepts the known initialization status differences and preserves capacity", async () => {
+  await loadVersionedCampus(thirdCampus);
+  await pool.query(
+    "UPDATE road_edges SET status='OPEN' WHERE (from_node_id,to_node_id) IN ((4,11),(8,11),(9,19),(9,23))",
+  );
+  await pool.query("UPDATE parking_zones SET capacity=58 WHERE id=4");
+  assert.equal(await ledgerTransaction(pool, upgradeCampusMap), true);
+  const [[zone]] = await pool.query(
+    "SELECT capacity FROM parking_zones WHERE id=4",
+  );
+  assert.equal(zone.capacity, 58);
+  const [nodes, roads] = await routeGraph(pool);
+  for (const from of campus.zones)
+    for (const to of campus.zones)
+      assert.ok(
+        findRoute(nodes, roads, from.id, to.id).segments.every(
+          (road) => road.status === "OPEN",
+        ),
+      );
+});
 test("campus upgrade completes while the migration holds both named locks", async () => {
   await loadVersionedCampus(firstCampus);
   const migrated = await withSchemaLock(pool, (connection) =>
