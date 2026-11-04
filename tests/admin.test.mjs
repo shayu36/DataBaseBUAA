@@ -221,18 +221,18 @@ test("zone edits and new road lengths use stored coordinate precision", async ()
   const { id } = await saveZone(
     pool,
     admin,
-    zone({ id: undefined, name: "精度站", x: 601.496, y: 100 }),
+    zone({ id: undefined, name: "精度站", x: 301.496, y: 100 }),
   );
   const [[newRoad]] = await pool.query(
     `SELECT z.x,n.x AS node_x,e.distance_m FROM parking_zones z
     JOIN road_nodes n ON n.zone_id=z.id JOIN road_edges e ON e.to_node_id=n.id WHERE z.id=?`,
     [id],
   );
-  assert.deepEqual(newRoad, { x: 601.5, node_x: 601.5, distance_m: 102 });
+  assert.deepEqual(newRoad, { x: 301.5, node_x: 301.5, distance_m: 202 });
   const minimum = await saveZone(
     pool,
     admin,
-    zone({ id: undefined, name: "最小围栏", x: 700, radius: 0.005 }),
+    zone({ id: undefined, name: "最小围栏", x: 400, radius: 0.005 }),
   );
   const [[small]] = await pool.query(
     "SELECT radius FROM parking_zones WHERE id=?",
@@ -240,34 +240,67 @@ test("zone edits and new road lengths use stored coordinate precision", async ()
   );
   assert.equal(small.radius, 0.01);
 });
-test("new zone connects to nearest road node and empty zone edits sync graph", async () => {
+test("new stations use an existing road segment and cannot create shortcuts or move its endpoints", async () => {
+  await assert.rejects(
+    saveZone(
+      pool,
+      admin,
+      zone({ id: undefined, name: "越界站", x: 600, y: 100 }),
+    ),
+    { code: "ZONE_NO_CONNECTION" },
+  );
+  await assert.rejects(
+    saveZone(
+      pool,
+      admin,
+      zone({ id: undefined, name: "楼内站", x: 300, y: 110 }),
+    ),
+    { code: "ZONE_NO_CONNECTION" },
+  );
+  await pool.query(
+    "UPDATE road_edges SET direction='FORWARD',slope_percent=2,distance_m=650 WHERE id=1",
+  );
   const { id } = await saveZone(
     pool,
     admin,
-    zone({ id: undefined, name: "C", x: 600, y: 100 }),
+    zone({ id: undefined, name: "C", x: 300, y: 100 }),
   );
   const [[node]] = await pool.query(
-    "SELECT * FROM road_nodes WHERE zone_id=?",
+    "SELECT id,x FROM road_nodes WHERE zone_id=?",
     [id],
   );
-  const [[edge]] = await pool.query(
-    "SELECT * FROM road_edges WHERE to_node_id=?",
+  const [edges] = await pool.query(
+    "SELECT from_node_id,distance_m,direction,slope_percent FROM road_edges WHERE to_node_id=? ORDER BY from_node_id",
     [node.id],
   );
-  assert.equal(edge.from_node_id, 2);
-  assert.equal(edge.distance_m, 100);
-  await saveZone(pool, admin, zone({ id, name: "C", x: 700, y: 100 }));
-  const [[n]] = await pool.query("SELECT x FROM road_nodes WHERE zone_id=?", [
-    id,
-  ]);
-  assert.equal(Number(n.x), 700);
-  const [[e]] = await pool.query(
-    "SELECT distance_m FROM road_edges WHERE to_node_id=?",
-    [node.id],
+  assert.deepEqual(
+    edges.map((r) => ({ ...r })),
+    [
+      {
+        from_node_id: 1,
+        distance_m: 325,
+        direction: "FORWARD",
+        slope_percent: 2,
+      },
+      {
+        from_node_id: 2,
+        distance_m: 325,
+        direction: "REVERSE",
+        slope_percent: -2,
+      },
+    ],
   );
-  assert.equal(e.distance_m, 200);
+  await assert.rejects(
+    saveZone(pool, admin, zone({ id, name: "C", x: 350, y: 100 })),
+    { code: "ZONE_ROAD_MAPPING_REQUIRED" },
+  );
+  assert.equal(
+    (await pool.query("SELECT x FROM road_nodes WHERE id=?", [node.id]))[0][0]
+      .x,
+    300,
+  );
 });
-test("radius-only updates preserve road lengths while coordinate moves update them", async () => {
+test("radius-only updates preserve road lengths and connected moves require road remapping", async () => {
   await pool.query(
     "UPDATE road_edges SET distance_m=650 WHERE from_node_id=1 AND to_node_id=2",
   );
@@ -280,15 +313,22 @@ test("radius-only updates preserve road lengths while coordinate moves update th
     "SELECT distance_m FROM road_edges WHERE from_node_id=1 AND to_node_id=2",
   );
   assert.equal(unchanged.distance_m, 650);
-  await saveZone(
-    pool,
-    admin,
-    zone({ id: 2, name: "B", x: 600, capacity: 2, radius: 45 }),
+  await assert.rejects(
+    saveZone(
+      pool,
+      admin,
+      zone({ id: 2, name: "B", x: 600, capacity: 2, radius: 45 }),
+    ),
+    { code: "ZONE_ROAD_MAPPING_REQUIRED" },
   );
-  const [[moved]] = await pool.query(
-    "SELECT distance_m FROM road_edges WHERE from_node_id=1 AND to_node_id=2",
+  assert.equal(
+    (
+      await pool.query(
+        "SELECT distance_m FROM road_edges WHERE from_node_id=1 AND to_node_id=2",
+      )
+    )[0][0].distance_m,
+    650,
   );
-  assert.equal(moved.distance_m, 500);
 });
 test("bike date strictness, capacity, retirement and reactivation", async () => {
   for (const date of ["2026-02-30", "2030-01-01", "2026-1-1"])

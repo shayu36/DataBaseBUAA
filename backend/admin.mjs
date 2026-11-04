@@ -91,8 +91,13 @@ const zoneBikeErrors = {
   ],
   ZONE_RESTRICTED: ["停车点不能位于禁行区域内或边界上", "ZONE_RESTRICTED", 409],
   ZONE_NO_CONNECTION: [
-    "没有可避开禁行区域的连接道路",
+    "停车位置不在已录入道路上，请选择核实过的道路位置",
     "ZONE_NO_CONNECTION",
+    409,
+  ],
+  ZONE_ROAD_MAPPING_REQUIRED: [
+    "该站点已有道路连接，移动前须先核实并重新映射接入道路",
+    "ZONE_ROAD_MAPPING_REQUIRED",
     409,
   ],
   ZONE_RESTRICTED_ROAD: [

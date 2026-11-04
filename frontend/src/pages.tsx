@@ -1921,9 +1921,9 @@ export function Routes({ d }: Props) {
       <section className="panel">
         <h2>模拟路线方案</h2>
         <p className="muted">
-          路网为人工录入的简化模型，尚未完整核实校园道路
+          路线沿官网图中已描画的道路与转弯点计算，未录入支路不会自动补线
           <br />
-          最短仅指已录入路网内的结果，里程与道路属性均为模拟，不用于真实导航
+          最短仅指已录入道路内的结果，里程按图估算，道路属性仍为模拟
         </p>
         <div className="form-row">
           {[
@@ -2536,6 +2536,11 @@ export function Admin({ d, user, run }: Props) {
             ))}
           </div>
           <h2>{edit.id ? "编辑 #" + edit.id : "新增资料"}</h2>
+          {kind === "zones" && (
+            <p className="muted">
+              停车点须位于已录入道路上，系统不会跨建筑或空地自动拉线；已连接路网的站点移动前须重新核实接入道路
+            </p>
+          )}
           <form
             onSubmit={async (e) => {
               e.preventDefault();

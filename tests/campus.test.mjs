@@ -6,6 +6,7 @@ import firstCampus from "../database/campus-map-v1.json" with { type: "json" };
 import thirdCampus from "../database/campus-map-v3.json" with { type: "json" };
 import fourthCampus from "../database/campus-map-v4.json" with { type: "json" };
 import fifthCampus from "../database/campus-map-v5.json" with { type: "json" };
+import sixthCampus from "../database/campus-map-v6.json" with { type: "json" };
 import {
   createPool,
   ledgerTransaction,
@@ -113,9 +114,22 @@ test("official-plan graph connects all stations with consistent route lengths", 
       b = campus.nodes.find((n) => n.id === edge.to_node_id);
     assert.ok(a && b);
     assert.equal(edge.distance_m, Math.round(Math.hypot(a.x - b.x, a.y - b.y)));
+    const trace = campus.road_traces.find((road) => road.id === edge.road_id);
+    assert.ok(trace);
     assert.ok(
-      a.x === b.x || a.y === b.y,
-      "路段须沿校区道路分段，不能跨建筑斜连",
+      trace.points.some(
+        (point, i) =>
+          i > 0 &&
+          ((point[0] === a.x &&
+            point[1] === a.y &&
+            trace.points[i - 1][0] === b.x &&
+            trace.points[i - 1][1] === b.y) ||
+            (point[0] === b.x &&
+              point[1] === b.y &&
+              trace.points[i - 1][0] === a.x &&
+              trace.points[i - 1][1] === a.y)),
+      ),
+      "每条边都必须对应原图描画道路的一段",
     );
   }
   for (const a of campus.zones)
@@ -126,7 +140,7 @@ test("official-plan graph connects all stations with consistent route lengths", 
       }
 });
 test("campus graph retains one northeast pedestrian restriction and connected residential roads", () => {
-  assert.equal(campus.version, "beihang-xueyuan-6");
+  assert.equal(campus.version, "beihang-xueyuan-7");
   assert.equal(
     campus.planSource,
     "https://www.buaa.edu.cn/images/xylxq20261013.jpg",
@@ -137,15 +151,7 @@ test("campus graph retains one northeast pedestrian restriction and connected re
     assert.equal(area.rule, "NO_RIDE");
     assert.ok(area.points.length >= 4);
   }
-  assert.ok(campus.nodes.filter((node) => node.area === "STUDENT").length >= 3);
-  const familyNodes = campus.nodes.filter((node) => node.area === "FAMILY");
-  assert.ok(familyNodes.length >= 5);
-  for (const node of familyNodes)
-    assert.ok(
-      campus.edges.some(
-        (edge) => edge.from_node_id === node.id || edge.to_node_id === node.id,
-      ),
-    );
+  assert.ok(campus.road_traces.some((road) => road.id === "dayuncun-east"));
   const forbiddenEdges = campus.edges.filter(
     (edge) => edge.status === "NO_RIDE",
   );
@@ -274,35 +280,32 @@ test("campus routing and station creation respect restricted areas", async () =>
     "默认路段须与建筑围栏一致，不能把正常道路画入建筑禁行区",
   );
   await pool.query("UPDATE users SET role='ADMIN' WHERE id=1");
+  const blocked = campus.edges.find((edge) => edge.status === "NO_RIDE");
+  const pair = [blocked.from_node_id, blocked.to_node_id];
   await pool.query(
-    "UPDATE road_edges SET status='OPEN' WHERE (from_node_id,to_node_id) IN ((37,38),(39,40))",
+    "UPDATE road_edges SET status='OPEN' WHERE from_node_id=? AND to_node_id=?",
+    pair,
   );
   const [nodes, roads] = await routeGraph(pool);
-  for (const [from, to] of [
-    [37, 38],
-    [39, 40],
-  ]) {
-    const crossing = roads.find(
-      (road) => road.from_node_id === from && road.to_node_id === to,
-    );
-    assert.equal(crossing.status, "NO_RIDE");
-    assert.equal(crossing.stored_status, "OPEN");
-  }
-  const [[stored]] = await pool.query(
-    "SELECT status FROM road_edges WHERE from_node_id=37 AND to_node_id=38",
+  const crossing = roads.find(
+    (road) => road.from_node_id === pair[0] && road.to_node_id === pair[1],
   );
-  assert.equal(stored.status, "OPEN");
+  assert.equal(crossing.status, "NO_RIDE");
+  assert.equal(crossing.stored_status, "OPEN");
   await pool.query(
-    "UPDATE road_edges SET status='CLOSED' WHERE from_node_id=37 AND to_node_id=38",
+    "UPDATE road_edges SET status='CLOSED' WHERE from_node_id=? AND to_node_id=?",
+    pair,
   );
   const [, closedRoads] = await routeGraph(pool);
-  const closed = closedRoads.find(
-    (road) => road.from_node_id === 37 && road.to_node_id === 38,
+  assert.equal(
+    closedRoads.find(
+      (road) => road.from_node_id === pair[0] && road.to_node_id === pair[1],
+    ).status,
+    "CLOSED",
   );
-  assert.equal(closed.status, "CLOSED");
-  assert.equal(closed.stored_status, "CLOSED");
   await pool.query(
-    "UPDATE road_edges SET status='OPEN' WHERE from_node_id=37 AND to_node_id=38",
+    "UPDATE road_edges SET status='OPEN' WHERE from_node_id=? AND to_node_id=?",
+    pair,
   );
   for (const from of campus.zones)
     for (const to of campus.zones) {
@@ -325,7 +328,7 @@ test("campus routing and station creation respect restricted areas", async () =>
   await assert.rejects(saveZone(pool, admin, { ...station, x: 538 }), {
     code: "ZONE_RESTRICTED",
   });
-  const { id } = await saveZone(pool, admin, { ...station, x: 537, y: 190 });
+  const { id } = await saveZone(pool, admin, { ...station, x: 531, y: 191 });
   const [updatedNodes, updatedRoads] = await routeGraph(pool);
   const node = updatedNodes.find((item) => item.zone_id === id);
   const attached = updatedRoads.filter(
@@ -341,12 +344,12 @@ test("campus routing and station creation respect restricted areas", async () =>
     "SELECT x,y FROM parking_zones WHERE id=?",
     [id],
   );
-  assert.deepEqual(unchanged, { x: 537, y: 190 });
+  assert.deepEqual(unchanged, { x: 531, y: 191 });
   const same = await saveZone(pool, admin, {
     ...station,
     name: "同点站",
-    x: 537,
-    y: 190,
+    x: 531,
+    y: 191,
   });
   const [sameNodes, sameRoads] = await routeGraph(pool);
   const sameNode = sameNodes.find((item) => item.zone_id === same.id);
@@ -360,8 +363,9 @@ test("campus routing and station creation respect restricted areas", async () =>
     JSON.stringify({ version: campus.version, restricted_areas: [] }),
   ]);
   assert.equal(
-    empty[1].find((road) => road.from_node_id === 4 && road.to_node_id === 11)
-      .status,
+    empty[1].find(
+      (road) => road.from_node_id === pair[0] && road.to_node_id === pair[1],
+    ).status,
     "OPEN",
   );
   await assert.rejects(
@@ -642,6 +646,7 @@ for (const prior of [
   thirdCampus,
   fourthCampus,
   fifthCampus,
+  sixthCampus,
 ]) {
   test(`campus map upgrades the unmodified ${prior.version} graph without changing rides`, async () => {
     await loadVersionedCampus(prior);

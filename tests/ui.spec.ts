@@ -346,6 +346,65 @@ test("校园地图仅叠加站点名称和禁行色块，缩放后仍可选择�
   await expect(page.getByLabel("归还横坐标（米）")).toHaveCount(0);
 });
 
+test("录入路段逐点贴合官网道路而不穿过建筑和空地", async ({ page }) => {
+  await page.goto("/");
+  await page.locator(".demo summary").click();
+  await page.getByRole("button", { name: "学生 · 欧阳晨" }).click();
+  await page.getByRole("button", { name: "登录青行", exact: true }).click();
+  const map = page.locator(".map-shell");
+  await expect(map).toBeVisible();
+  const response = await page.request.get("/api/road-graph");
+  expect(response.ok()).toBe(true);
+  const graph = await response.json();
+  const failures = await map
+    .locator("svg image")
+    .evaluate(async (image, graph) => {
+      const source = new Image();
+      source.src = image.getAttribute("href")!;
+      await source.decode();
+      const width = Number(image.getAttribute("width")),
+        height = Number(image.getAttribute("height"));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d")!;
+      context.drawImage(source, 0, 0, width, height);
+      const data = context.getImageData(0, 0, width, height).data;
+      const dark = (x: number, y: number) => {
+        if (x < 0 || x >= width || y < 0 || y >= height) return false;
+        const k = (y * width + x) * 4;
+        return data[k] < 25 && data[k + 1] < 85 && data[k + 2] < 105;
+      };
+      const nearRoad = (x: number, y: number) => {
+        for (let dy = -4; dy <= 4; dy++)
+          for (let dx = -4; dx <= 4; dx++)
+            if (dx * dx + dy * dy <= 16 && dark(x + dx, y + dy)) return true;
+        return false;
+      };
+      const x0 = Number(image.getAttribute("x")),
+        y0 = Number(image.getAttribute("y"));
+      const nodes = new Map<number, any>(
+        graph.nodes.map((node: any) => [Number(node.id), node]),
+      );
+      const failures: any[] = [];
+      for (const edge of graph.edges) {
+        const a = nodes.get(Number(edge.from_node_id)),
+          b = nodes.get(Number(edge.to_node_id));
+        const steps = Math.max(1, Math.ceil(Math.hypot(a.x - b.x, a.y - b.y)));
+        for (let step = 0; step <= steps; step++) {
+          const x = Math.round(a.x + ((b.x - a.x) * step) / steps - x0),
+            y = Math.round(a.y + ((b.y - a.y) * step) / steps - y0);
+          if (!nearRoad(x, y)) {
+            failures.push({ edge: edge.id, x, y });
+            break;
+          }
+        }
+      }
+      return failures;
+    }, graph);
+  expect(failures).toEqual([]);
+});
+
 test("禁行站点显示实际可借数量并阻止选择车辆", async ({ page }) => {
   let stationName = "";
   let bikeCode = "";

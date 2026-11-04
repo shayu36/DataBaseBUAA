@@ -42,7 +42,7 @@ DELIMITER ;
 -- and serializes ledger changes; a customized graph is never overwritten.
 DROP PROCEDURE IF EXISTS sp_upgrade_campus_map;
 DELIMITER $$
-CREATE PROCEDURE sp_upgrade_campus_map(IN campus JSON, IN campus_v1 JSON, IN campus_v2 JSON, IN campus_v3 JSON, IN campus_v4 JSON, IN campus_v5 JSON)
+CREATE PROCEDURE sp_upgrade_campus_map(IN campus JSON, IN campus_v1 JSON, IN campus_v2 JSON, IN campus_v3 JSON, IN campus_v4 JSON, IN campus_v5 JSON, IN campus_v6 JSON)
 SQL SECURITY INVOKER
 upgrade_map: BEGIN
  DECLARE current_version VARCHAR(100);
@@ -53,7 +53,7 @@ upgrade_map: BEGIN
    SELECT 0 AS migrated;
    LEAVE upgrade_map;
   END IF;
-  IF NOT (BINARY current_version <=> BINARY 'beihang-xueyuan-1' OR BINARY current_version <=> BINARY 'beihang-xueyuan-2' OR BINARY current_version <=> BINARY 'beihang-xueyuan-3' OR BINARY current_version <=> BINARY 'beihang-xueyuan-4' OR BINARY current_version <=> BINARY 'beihang-xueyuan-5') THEN
+  IF NOT (BINARY current_version <=> BINARY 'beihang-xueyuan-1' OR BINARY current_version <=> BINARY 'beihang-xueyuan-2' OR BINARY current_version <=> BINARY 'beihang-xueyuan-3' OR BINARY current_version <=> BINARY 'beihang-xueyuan-4' OR BINARY current_version <=> BINARY 'beihang-xueyuan-5' OR BINARY current_version <=> BINARY 'beihang-xueyuan-6') THEN
    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Unknown campus map version; explicit migration required.';
   END IF;
  END IF;
@@ -88,7 +88,7 @@ upgrade_map: BEGIN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Refusing to overwrite a customized map; explicit mapping required.';
  END IF;
  IF current_version IS NOT NULL THEN
-  SET prior_campus=CASE current_version WHEN 'beihang-xueyuan-1' THEN campus_v1 WHEN 'beihang-xueyuan-2' THEN campus_v2 WHEN 'beihang-xueyuan-3' THEN campus_v3 WHEN 'beihang-xueyuan-4' THEN campus_v4 ELSE campus_v5 END;
+  SET prior_campus=CASE current_version WHEN 'beihang-xueyuan-1' THEN campus_v1 WHEN 'beihang-xueyuan-2' THEN campus_v2 WHEN 'beihang-xueyuan-3' THEN campus_v3 WHEN 'beihang-xueyuan-4' THEN campus_v4 WHEN 'beihang-xueyuan-5' THEN campus_v5 ELSE campus_v6 END;
   IF (SELECT COUNT(*) FROM parking_zones)<>JSON_LENGTH(prior_campus,'$.zones')
   OR (SELECT COUNT(*) FROM road_nodes)<>JSON_LENGTH(prior_campus,'$.nodes')
   OR (SELECT COUNT(*) FROM road_edges)<>JSON_LENGTH(prior_campus,'$.edges')

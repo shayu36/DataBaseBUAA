@@ -17,7 +17,7 @@ DELIMITER $$
 CREATE PROCEDURE sp_save_zone(IN p_actor BIGINT UNSIGNED, IN p_data JSON, IN p_campus JSON)
 SQL SECURITY INVOKER
 BEGIN
- DECLARE v_id,v_node,v_nearest BIGINT UNSIGNED DEFAULT NULL;
+ DECLARE v_id,v_node,v_nearest,v_edge BIGINT UNSIGNED DEFAULT NULL;
  DECLARE v_name VARCHAR(60);
  DECLARE v_location VARCHAR(160);
  DECLARE v_x,v_y,v_old_x,v_old_y DECIMAL(10,2);
@@ -57,18 +57,27 @@ BEGIN
     AND NOT ST_Intersects(IF(v_old_x=other.x AND v_old_y=other.y,POINT(v_old_x,v_old_y),LINESTRING(POINT(v_old_x,v_old_y),POINT(other.x,other.y))),v_areas)) THEN
    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ZONE_RESTRICTED_ROAD';
   END IF;
+  IF v_changed AND EXISTS(SELECT 1 FROM road_nodes n JOIN road_edges e ON e.from_node_id=n.id OR e.to_node_id=n.id WHERE n.zone_id=v_id) THEN
+   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ZONE_ROAD_MAPPING_REQUIRED';
+  END IF;
   UPDATE parking_zones SET name=v_name,location=v_location,x=v_x,y=v_y,radius=v_radius,capacity=v_capacity,status=v_status WHERE id=v_id;
   UPDATE road_nodes SET name=v_name,x=v_x,y=v_y WHERE zone_id=v_id;
-  IF v_changed THEN
-   UPDATE road_edges e JOIN road_nodes a ON a.id=e.from_node_id JOIN road_nodes b ON b.id=e.to_node_id
-   SET e.distance_m=GREATEST(1,ROUND(SQRT(POW(a.x-b.x,2)+POW(a.y-b.y,2)))) WHERE a.zone_id=v_id OR b.zone_id=v_id;
-  END IF;
  ELSE
-  SELECT n.id,GREATEST(1,ROUND(SQRT(POW(n.x-v_x,2)+POW(n.y-v_y,2)))) INTO v_nearest,v_distance
-  FROM road_nodes n WHERE v_areas IS NULL OR NOT ST_Intersects(
-   IF(v_x=n.x AND v_y=n.y,POINT(v_x,v_y),LINESTRING(POINT(v_x,v_y),POINT(n.x,n.y))),v_areas)
+  -- 只能接入已存在道路；坐标误差容限为 0.5 个图上单位，不跨地块自动拉线。
+  SELECT n.id,1 INTO v_nearest,v_distance
+  FROM road_nodes n WHERE ST_Distance(POINT(n.x,n.y),POINT(v_x,v_y))<=0.5
+   AND EXISTS(SELECT 1 FROM road_edges e WHERE (e.from_node_id=n.id OR e.to_node_id=n.id) AND e.status='OPEN')
+   AND (v_areas IS NULL OR NOT ST_Intersects(
+    IF(v_x=n.x AND v_y=n.y,POINT(v_x,v_y),LINESTRING(POINT(v_x,v_y),POINT(n.x,n.y))),v_areas))
   ORDER BY POW(n.x-v_x,2)+POW(n.y-v_y,2),n.id LIMIT 1 FOR UPDATE;
-  IF v_nearest IS NULL AND v_areas IS NOT NULL THEN
+  IF v_nearest IS NULL THEN
+   SELECT e.id INTO v_edge FROM road_edges e JOIN road_nodes a ON a.id=e.from_node_id JOIN road_nodes b ON b.id=e.to_node_id
+   WHERE e.status='OPEN' AND (a.x<>b.x OR a.y<>b.y)
+    AND ST_Distance(POINT(v_x,v_y),LINESTRING(POINT(a.x,a.y),POINT(b.x,b.y)))<=0.5
+    AND (v_areas IS NULL OR NOT ST_Intersects(LINESTRING(POINT(a.x,a.y),POINT(b.x,b.y)),v_areas))
+   ORDER BY ST_Distance(POINT(v_x,v_y),LINESTRING(POINT(a.x,a.y),POINT(b.x,b.y))),e.id LIMIT 1 FOR UPDATE;
+  END IF;
+  IF v_nearest IS NULL AND v_edge IS NULL THEN
    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='ZONE_NO_CONNECTION';
   END IF;
   INSERT INTO parking_zones(name,location,x,y,radius,capacity,status) VALUES(v_name,v_location,v_x,v_y,v_radius,v_capacity,v_status);
@@ -77,6 +86,16 @@ BEGIN
   SET v_node=LAST_INSERT_ID();
   IF v_nearest IS NOT NULL THEN
    INSERT INTO road_edges(from_node_id,to_node_id,distance_m,safety_cost,comfort_cost) VALUES(LEAST(v_nearest,v_node),GREATEST(v_nearest,v_node),v_distance,1,1);
+  ELSE
+   INSERT INTO road_edges(from_node_id,to_node_id,distance_m,safety_cost,comfort_cost,direction,status,slope_percent,surface,shade_level,lighting_level,traffic_mix,intersection_risk,attribute_source)
+   SELECT e.from_node_id,v_node,GREATEST(1,ROUND(e.distance_m*ST_Distance(POINT(a.x,a.y),POINT(v_x,v_y))/ST_Distance(POINT(a.x,a.y),POINT(b.x,b.y)))),
+    e.safety_cost,e.comfort_cost,e.direction,e.status,e.slope_percent,e.surface,e.shade_level,e.lighting_level,e.traffic_mix,e.intersection_risk,'SIMULATED_COURSE_DATA'
+   FROM road_edges e JOIN road_nodes a ON a.id=e.from_node_id JOIN road_nodes b ON b.id=e.to_node_id WHERE e.id=v_edge
+   UNION ALL
+   SELECT e.to_node_id,v_node,GREATEST(1,ROUND(e.distance_m*ST_Distance(POINT(b.x,b.y),POINT(v_x,v_y))/ST_Distance(POINT(a.x,a.y),POINT(b.x,b.y)))),
+    e.safety_cost,e.comfort_cost,CASE e.direction WHEN 'FORWARD' THEN 'REVERSE' WHEN 'REVERSE' THEN 'FORWARD' ELSE 'BOTH' END,e.status,-e.slope_percent,
+    e.surface,e.shade_level,e.lighting_level,e.traffic_mix,e.intersection_risk,'SIMULATED_COURSE_DATA'
+   FROM road_edges e JOIN road_nodes a ON a.id=e.from_node_id JOIN road_nodes b ON b.id=e.to_node_id WHERE e.id=v_edge;
   END IF;
  END IF;
  INSERT INTO audit_logs(actor_id,action,entity_type,entity_id,detail)
