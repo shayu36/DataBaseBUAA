@@ -1,5 +1,6 @@
 import mysql from "mysql2/promise";
 import { sql } from "../backend/sql-statements.mjs";
+import { databaseStartupError } from "../backend/database-errors.mjs";
 
 // Verify an existing account before granting access to the application database.
 export async function initializeAccount(
@@ -8,7 +9,9 @@ export async function initializeAccount(
   connect = mysql.createConnection,
 ) {
   await admin.query(sql("create_application_user"), [options.password]);
-  const app = await connect(options);
+  const app = await connect(options).catch((error) => {
+    throw databaseStartupError(error);
+  });
   try {
     const [[{ account }]] = await app.query(sql("current_account"));
     if (account !== "qingxing_app@localhost")

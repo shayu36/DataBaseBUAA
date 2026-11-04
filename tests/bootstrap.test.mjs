@@ -23,6 +23,28 @@ test("bootstrap verifies account credentials before granting privileges", async 
   assert.deepEqual(statements, [sql("create_application_user")]);
 });
 
+test("已有应用账号认证失败时提示应用密码，且不会泄露 SQL 或授予权限", async () => {
+  const statements = [];
+  const admin = { query: async (statement) => statements.push(statement) };
+  await assert.rejects(
+    initializeAccount(admin, options, async () => {
+      throw Object.assign(new Error("认证失败"), {
+        code: "ER_ACCESS_DENIED_ERROR",
+        sql: "CREATE USER IDENTIFIED BY 'must-not-be-printed'",
+      });
+    }),
+    (error) => {
+      assert.equal(error.code, "ER_ACCESS_DENIED_ERROR");
+      assert.match(error.message, /DB_USER、DB_PASSWORD/);
+      assert.match(error.message, /不会被初始化命令覆盖/);
+      assert.equal(String(error).includes("must-not-be-printed"), false);
+      assert.equal(error.cause, undefined);
+      return true;
+    },
+  );
+  assert.deepEqual(statements, [sql("create_application_user")]);
+});
+
 test("bootstrap rejects another matched MySQL account before granting", async () => {
   const events = [];
   const admin = { query: async (statement) => events.push(statement) };

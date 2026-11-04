@@ -13,6 +13,17 @@
 
 校园禁行几何使用 MySQL 的 [GeoJSON 转换](https://dev.mysql.com/doc/refman/8.0/en/spatial-geojson-functions.html)和[空间相交判断](https://dev.mysql.com/doc/refman/8.0/en/spatial-relation-functions-object-shapes.html)，采用 SRID 0 的课程平面坐标；地图多边形并非真实 GPS 围栏。
 
+## Windows 首次配置 MySQL
+
+`npm ci` 只安装项目的 JavaScript 依赖，不安装 MySQL Server；`npm run build` 成功也不代表数据库已就绪。首次使用须先安装并启动数据库，再执行下文的项目初始化。
+
+1. 在命令提示符运行 `sc query type= service state= all | findstr /I mysql`，查找 MySQL 服务。也可按 `Win + R`，输入 `services.msc` 打开服务列表。若服务已存在，启动对应服务；服务名称取决于安装配置，不固定为 `MySQL80` 或 `MySQL84`。
+2. 若没有配置 MySQL Server，下载 [MySQL Community Server 8.4 的 Windows MSI 安装包](https://dev.mysql.com/downloads/mysql/8.4.html?os=3)，安装后完成 MySQL Configurator。设置并记住 `root` 密码，启用 TCP/IP，端口可用时使用 `3306`，配置为 Windows 服务并启动。只安装 Workbench 等客户端不能提供数据库服务。已安装 Server 但未配置服务时，先用 Configurator 完成现有安装的配置，无需重复安装。详细过程见 [MySQL 官方 Windows 安装说明](https://dev.mysql.com/doc/refman/8.4/en/windows-installation.html)和[配置说明](https://dev.mysql.com/doc/refman/8.4/en/mysql-configurator-workflow-server.html)。
+3. 在项目的 `.env` 中填写 `DB_ADMIN_USER=root`，`DB_ADMIN_PASSWORD` 填上一步设置的 MySQL 密码。网页演示账号 `jia@qingxing.local` 只用于登录青行页面，不能填入数据库管理员配置。保留 `DB_USER=qingxing_app`、`DB_NAME=campus_bike`；`DB_PASSWORD` 是项目创建应用数据库账号时使用的自定密码，与 `root` 密码和网页密码相互独立。若数据库使用其他端口，同步修改 `DB_PORT`。
+4. 如 MySQL 命令行客户端已在系统路径中，可运行 `mysql --host=127.0.0.1 --port=3306 --user=root --password`，在提示后输入密码验证连接；自定义端口需替换。提示找不到 `mysql` 命令只表示客户端不在路径中，也可从开始菜单打开 MySQL 命令行客户端验证。
+
+出现 `ECONNREFUSED 127.0.0.1:3306` 表示该地址端口未接受连接，应先检查 MySQL 服务及端口；此时尚未进入账号认证。出现 `Access denied` 才需要核对相应的 MySQL 账号密码。数据库连接通过前，不要继续导入模拟数据或启动应用。
+
 ## 首次启动
 
 在项目根目录执行：
@@ -32,20 +43,20 @@ node -e "require('fs').copyFileSync('.env.example','.env',require('fs').constant
 | 配置项 | 含义 |
 |---|---|
 | `DB_HOST`、`DB_PORT` | 本机 MySQL 地址和端口；默认分别为 `127.0.0.1`、`3306` |
-| `DB_ADMIN_USER`、`DB_ADMIN_PASSWORD` | 本机 MySQL 管理员账号和密码 |
-| `DB_USER`、`DB_PASSWORD` | 应用账号及密码；自动初始化时账号名固定为 `qingxing_app` |
+| `DB_ADMIN_USER`、`DB_ADMIN_PASSWORD` | 本机 MySQL 管理员账号（通常为 `root`）和安装 MySQL 时设置的密码；不是网页演示账号 |
+| `DB_USER`、`DB_PASSWORD` | 数据库应用账号及密码；自动初始化时账号名固定为 `qingxing_app`，密码自行设置，由初始化命令创建账号 |
 | `DB_NAME` | 业务库名，自动初始化时固定为 `campus_bike` |
 | `JWT_SECRET` | 至少 32 个字符的随机会话密钥；须替换示例占位符，不能只填空白 |
 | `HOST`、`PORT` | 应用监听地址和端口，默认 `127.0.0.1:5188` |
 | `FRONTEND_PORT` | 前端开发和预览端口，默认 `5189`；应与后端 `PORT` 不同 |
 
-可以用下面的命令生成会话密钥，将输出复制到 `.env` 的 `JWT_SECRET` 中：
+可以用下面的命令生成会话密钥，将输出复制到 `.env` 的 `JWT_SECRET` 中。此命令只打印随机值，不会自动修改配置文件：
 
 ```text
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-确认 MySQL 已启动，然后执行：
+确认 MySQL 已启动，然后按顺序执行以下命令，每一步成功后再运行下一步；初始化失败时先解决报错，不要跳过数据库初始化直接运行 `npm start`。
 
 ```text
 npm run db:seed
@@ -57,6 +68,20 @@ npm start
 初始化会创建业务库 `campus_bike`、测试库 `campus_bike_test` 和业务账号；已有同名应用账号的密码不会被修改，必须与 `.env` 中一致。脚本会先验证密码及实际匹配的 MySQL 账号，再授予业务库权限；验证失败时不新增授权。演示数据只在空库首次写入，重复初始化不会重置已有业务数据。构建同时生成前端页面、课程报告和 E-R 图，可从管理员“基础资料”的“查看数据库结构”入口打开。浏览器访问 `http://127.0.0.1:5188`；在运行终端按 `Ctrl+C` 停止应用。
 
 初始化和启动都会检查会话密钥；密钥缺失、过短、全为空白或仍是示例占位符时会直接报错。校验不能判断密钥是否随机，请使用上面的生成命令。
+
+## 通过 SSH 在笔记本浏览器访问开发机
+
+数据库、项目依赖和生产构建均在开发机配置，开发机上运行 `npm start`，应用默认监听 `127.0.0.1:5188`。笔记本无需安装 Node.js 或 MySQL，只需能够通过 SSH 登录开发机。
+
+例如平时使用 `ssh gpu1` 登录，在笔记本命令提示符或终端运行：
+
+```text
+ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -L 127.0.0.1:5188:127.0.0.1:5188 gpu1
+```
+
+保持此终端打开，在笔记本浏览器访问 `http://127.0.0.1:5188`。`gpu1` 沿用笔记本已有的 SSH 用户、端口、密钥或跳板配置；其他环境替换为自己的 SSH 别名或登录目标。`-L` 的两个 `5188` 分别是笔记本监听端口和开发机应用端口，参见 [OpenSSH 官方说明](https://man.openbsd.org/ssh)。页面和接口由同一服务提供，无需转发前端开发端口或数据库端口。
+
+若笔记本的 `5188` 已被占用，将转发参数改为 `127.0.0.1:15188:127.0.0.1:5188`，浏览器改为访问 `http://127.0.0.1:15188`。终端完成认证后没有输出、保持等待是正常状态；按 `Ctrl+C` 关闭隧道。开发机上的应用和数据库须持续运行；SSH 断开后，网页需要重新建立隧道才能访问。
 
 ## 演示账号
 

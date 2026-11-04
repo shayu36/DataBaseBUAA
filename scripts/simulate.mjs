@@ -1,5 +1,6 @@
 import { createPool } from "../backend/db.mjs";
 import { seedSimulation } from "../backend/demo-seed.mjs";
+import { databaseStartupError } from "../backend/database-errors.mjs";
 
 const args = process.argv.slice(2);
 if (args.length > 1 || args.some((argument) => argument !== "--append"))
@@ -25,6 +26,8 @@ try {
     error.sqlMessage === "SIMULATION_BASE_REQUIRED"
   )
     throw new Error("基础演示库尚未就绪，请先运行 npm run db:seed");
+  const explained = databaseStartupError(error, { account: "both" });
+  if (explained !== error) throw explained;
   throw new Error(
     `模拟数据导入失败：${error.sqlMessage || error.code || error.message}`,
   );

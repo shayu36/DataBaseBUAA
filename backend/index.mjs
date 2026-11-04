@@ -10,6 +10,7 @@ import { sql } from "./sql-statements.mjs";
 import { campus, campusDefinition } from "./campus-data.mjs";
 import { createSnapshotRunner } from "./snapshot-runner.mjs";
 import { serviceConfig } from "../config/services.mjs";
+import { databaseStartupError } from "./database-errors.mjs";
 import {
   loadProcedureSources,
   procedureRevision,
@@ -46,7 +47,7 @@ try {
   await pool.end();
   if (error.code === "ER_NO_SUCH_TABLE")
     throw new Error(versionError, { cause: error });
-  throw error;
+  throw databaseStartupError(error);
 }
 const server = createApp(pool).listen(port, host, () =>
   console.log(

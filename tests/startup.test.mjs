@@ -64,6 +64,71 @@ test("session secret validation accepts the documented length boundary", () => {
   }
 });
 
+test("初始化、模拟导入和启动在 MySQL 未运行时说明服务及端口问题", () => {
+  const databasePassword = "local-credential-must-not-be-printed";
+  for (const script of [
+    "../scripts/bootstrap.mjs",
+    "../scripts/simulate.mjs",
+    "../backend/index.mjs",
+  ]) {
+    const result = spawnSync(
+      process.execPath,
+      [fileURLToPath(new URL(script, import.meta.url))],
+      {
+        env: {
+          ...process.env,
+          DB_HOST: "127.0.0.1",
+          DB_PORT: "1",
+          DB_NAME: "campus_bike",
+          DB_USER: "qingxing_app",
+          DB_PASSWORD: databasePassword,
+          DB_ADMIN_USER: "root",
+          DB_ADMIN_PASSWORD: databasePassword,
+          JWT_SECRET: "a".repeat(32),
+          HOST: "127.0.0.1",
+          PORT: "0",
+        },
+        encoding: "utf8",
+        timeout: 5000,
+      },
+    );
+    assert.equal(result.status, 1, script);
+    assert.match(result.stderr, /无法连接 MySQL 127\.0\.0\.1:1/);
+    assert.match(result.stderr, /安装并启动 MySQL Server/);
+    assert.match(result.stderr, /DB_HOST、DB_PORT/);
+    assert.equal(result.stderr.includes(databasePassword), false);
+    assert.doesNotMatch(result.stdout, /Qingxing ready/);
+  }
+});
+
+test("初始化明确列出未配置项，且不打印其他凭据", () => {
+  const databasePassword = "local-credential-must-not-be-printed";
+  const result = spawnSync(
+    process.execPath,
+    [fileURLToPath(new URL("../scripts/bootstrap.mjs", import.meta.url))],
+    {
+      env: {
+        ...process.env,
+        DB_HOST: "127.0.0.1",
+        DB_PORT: "1",
+        DB_NAME: "campus_bike",
+        DB_USER: "qingxing_app",
+        DB_PASSWORD: databasePassword,
+        DB_ADMIN_USER: "root",
+        DB_ADMIN_PASSWORD: "replace-with-local-root-password",
+        JWT_SECRET: "",
+      },
+      encoding: "utf8",
+      timeout: 5000,
+    },
+  );
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /以下配置：DB_ADMIN_PASSWORD、JWT_SECRET/);
+  assert.match(result.stderr, /不是网页演示账号/);
+  assert.equal(result.stderr.includes(databasePassword), false);
+  assert.doesNotMatch(result.stderr, /ECONNREFUSED/);
+});
+
 test("application refuses an incompatible or missing database version before listening", async () => {
   const database = `campus_bike_startup_test_${randomBytes(4).toString("hex")}`;
   const credentials = {
