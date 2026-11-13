@@ -12,7 +12,9 @@ import {
   LogOut,
   ArrowRight,
   RefreshCw,
+  Smartphone,
 } from "lucide-react";
+import { PhonePreview } from "./phone/PhonePreview";
 import { api } from "./api";
 import {
   announcementForOperation,
@@ -46,6 +48,7 @@ const navigation = [
     icon: LayoutDashboard,
   },
   { id: "rides", name: "借车与归还", icon: Bike, roles: ["STUDENT"] },
+  { id: "phone", name: "手机 App", icon: Smartphone, roles: ["STUDENT"] },
   { id: "orders", name: "我的订单", icon: ClipboardList, roles: ["STUDENT"] },
   { id: "routes", name: "路线规划", icon: Map, roles: ["STUDENT"] },
   { id: "carbon", name: "碳积分", icon: Leaf, roles: ["STUDENT"] },
@@ -113,7 +116,15 @@ const visibleNavigation = (role: User["role"]) =>
       ...item,
       name: typeof item.name === "string" ? item.name : item.name[role],
     }));
-function Login({ onLogin }: { onLogin: (u: User) => void }) {
+function Login({
+  onLogin,
+  phoneMode,
+  onPhoneMode,
+}: {
+  onLogin: (u: User) => void;
+  phoneMode: boolean;
+  onPhoneMode: () => void;
+}) {
   const [register, setRegister] = useState(false),
     [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
@@ -137,6 +148,17 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
             <img src={qingxingLogo} alt="青行商标" />
             <h1>欢迎使用青行校园共享自行车系统</h1>
             <p>北京航空航天大学 · 学院路校区</p>
+            <button
+              className="secondary tiny"
+              type="button"
+              aria-pressed={phoneMode}
+              onClick={onPhoneMode}
+            >
+              <Smartphone size={16} />
+              {phoneMode
+                ? "手机 App 展示已选择 · 请用学生账号登录"
+                : "切换到手机 App 展示"}
+            </button>
           </header>
           <h2>{register ? "注册学生账户" : "账号登录"}</h2>
           <fieldset className="login-controls" disabled={busy} aria-busy={busy}>
@@ -264,19 +286,33 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
 export default function App() {
   const [user, setUser] = useState<User>(),
     [d, setD] = useState<Dashboard>(),
-    [page, setPage] = useState("overview"),
+    [page, setPage] = useState(() =>
+      new URLSearchParams(window.location.search).get("view") === "phone"
+        ? "phone"
+        : "overview",
+    ),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
     [initial, setInitial] = useState(true),
-    [entering, setEntering] = useState(false);
+    [entering, setEntering] = useState(false),
+    [dashboardStale, setDashboardStale] = useState(false);
   const inFlight = useRef(false);
+  const navigate = (next: string) => {
+    setPage(next);
+    const url = new URL(window.location.href);
+    if (next === "phone") url.searchParams.set("view", "phone");
+    else url.searchParams.delete("view");
+    window.history.replaceState(null, "", url);
+  };
   const fetchDashboard = async () => {
     try {
       setD(await api("/dashboard"));
+      setDashboardStale(false);
       setError("");
       return true;
     } catch (e) {
+      setDashboardStale(true);
       setError((e as Error).message);
       return false;
     }
@@ -346,7 +382,7 @@ export default function App() {
       speakAnnouncement(VOICE_MESSAGES.logout);
       setUser(undefined);
       setD(undefined);
-      setPage("overview");
+      if (page !== "phone") navigate("overview");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -358,6 +394,8 @@ export default function App() {
   if (!user)
     return (
       <Login
+        phoneMode={page === "phone"}
+        onPhoneMode={() => navigate(page === "phone" ? "overview" : "phone")}
         onLogin={(nextUser) => {
           setEntering(
             !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -371,7 +409,22 @@ export default function App() {
   const current =
     roleNavigation.find((item) => item.id === page) || roleNavigation[0];
   const activePage = current.id;
-  const props = d ? { d, user, run, onNavigate: setPage } : undefined;
+  const props = d ? { d, user, run, onNavigate: navigate } : undefined;
+  if (activePage === "phone")
+    return (
+      <PhonePreview
+        d={d}
+        user={user}
+        run={run}
+        busy={busy}
+        stale={dashboardStale}
+        error={error}
+        notice={notice}
+        refresh={refresh}
+        logout={logout}
+        onExit={() => navigate("overview")}
+      />
+    );
   const Page = (
     {
       overview: Overview,
@@ -466,7 +519,7 @@ export default function App() {
               className={`nav-${n.id}${activePage === n.id ? " active" : ""}`}
               aria-current={activePage === n.id ? "page" : undefined}
               onClick={() => {
-                setPage(n.id);
+                navigate(n.id);
                 setNotice("");
                 setError("");
               }}

@@ -1,6 +1,178 @@
 import { test, expect } from "@playwright/test";
 import { announcementForOperation } from "../frontend/src/speech";
 
+test("手机演示完成选车开锁、归还失败重试和支付，并与桌面共享状态", async ({
+  page,
+}) => {
+  const data: any = structuredClone(regressionDashboard);
+  data.bikes[0].code = "QX-001";
+  let failReturn = true;
+  let starts = 0;
+  let paid = false;
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/auth/me")
+      return route.fulfill({
+        json: {
+          user: {
+            id: 2,
+            name: "欧阳晨",
+            email: "ouyang@qingxing.local",
+            role: "STUDENT",
+          },
+        },
+      });
+    if (path === "/api/dashboard") return route.fulfill({ json: data });
+    if (path === "/api/rides/start") {
+      starts++;
+      expect(route.request().postDataJSON()).toEqual({ bike_id: 1 });
+      data.bikes[0].status = "RIDING";
+      data.actionable_rides = [
+        {
+          id: 42,
+          bike_code: "QX-001",
+          start_zone_id: 1,
+          started_at: new Date().toISOString(),
+          status: "RUNNING",
+        },
+      ];
+      data.rides = [...data.actionable_rides];
+      return route.fulfill({ json: { id: 42 } });
+    }
+    if (path === "/api/rides/42/return") {
+      expect(route.request().postDataJSON()).toMatchObject({
+        zone_id: 2,
+        location_source: "MAP_SIMULATION",
+        route_mode: "shortest",
+      });
+      if (failReturn) {
+        failReturn = false;
+        return route.fulfill({
+          status: 409,
+          json: { error: "停车点已满，请选择其他停车点" },
+        });
+      }
+      data.actionable_rides[0] = {
+        ...data.actionable_rides[0],
+        status: "UNPAID",
+        amount_cents: 100,
+        end_zone_name: "测试目标站",
+      };
+      data.rides = [...data.actionable_rides];
+      return route.fulfill({ json: {} });
+    }
+    if (path === "/api/rides/42/pay") {
+      expect(route.request().postDataJSON()).toEqual({
+        idempotency_key: "qingxing-order-42",
+      });
+      paid = true;
+      data.rides[0] = { ...data.rides[0], status: "PAID" };
+      data.actionable_rides = [];
+      return route.fulfill({ json: {} });
+    }
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/?view=phone");
+  const phone = page.getByRole("region", { name: "青行手机 App" });
+  await expect(phone).toBeVisible({ timeout: 5000 });
+  await phone.getByLabel("车辆编号", { exact: true }).fill("不存在");
+  await phone.getByRole("button", { name: "开锁", exact: true }).click();
+  await expect(phone.getByRole("alert")).toContainText("未找到");
+  expect(starts).toBe(0);
+  await phone.getByRole("button", { name: "选择 QX-001" }).click();
+  await expect(phone.getByLabel("车辆编号", { exact: true })).toHaveValue(
+    "QX-001",
+  );
+  await phone.getByRole("button", { name: "开锁", exact: true }).click();
+  await expect(phone.getByText("骑行中", { exact: true })).toBeVisible();
+  expect(starts).toBe(1);
+  await phone.getByLabel("归还停车点").selectOption("2");
+  await phone.getByRole("button", { name: "确认归还" }).click();
+  await expect(phone.getByRole("alert")).toContainText("停车点已满");
+  await expect(phone.getByText("骑行中", { exact: true })).toBeVisible();
+  await phone.getByRole("button", { name: "确认归还" }).click();
+  await phone.getByRole("button", { name: "模拟支付 ¥1.00" }).click();
+  expect(paid).toBe(true);
+  await phone.getByRole("button", { name: "骑行记录", exact: true }).click();
+  await expect(phone.getByText("已支付", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "返回电脑端" }).click();
+  await expect(page.locator(".sidebar")).toBeVisible();
+  await page.getByRole("button", { name: "手机 App", exact: true }).click();
+  await expect(phone).toBeVisible();
+});
+
+test("手机演示仅向学生开放，禁行停车点车辆不能开锁", async ({ page }) => {
+  let role = "ADMIN";
+  let writes = 0;
+  const data: any = structuredClone(regressionDashboard);
+  data.zones[0].restricted = 1;
+  await page.route("**/api/**", (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (route.request().method() === "POST") writes++;
+    if (path === "/api/auth/me")
+      return route.fulfill({ json: { user: { id: 1, name: "测试", role } } });
+    return route.fulfill({ json: data });
+  });
+  await page.goto("/?view=phone");
+  await expect(page.locator(".sidebar")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "手机 App", exact: true }),
+  ).toHaveCount(0);
+  role = "STUDENT";
+  await page.reload();
+  const phone = page.getByRole("region", { name: "青行手机 App" });
+  await expect(phone).toBeVisible();
+  await phone.getByLabel("车辆编号", { exact: true }).fill("QX-REGRESSION");
+  await phone.getByRole("button", { name: "开锁", exact: true }).click();
+  await expect(phone.getByRole("alert")).toContainText("不可借用");
+  expect(writes).toBe(0);
+});
+
+test("手机演示请求期间阻止重复开锁，刷新失败后可恢复", async ({ page }) => {
+  let starts = 0;
+  let dashboardFails = false;
+  let release: () => void = () => {};
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/auth/me")
+      return route.fulfill({
+        json: { user: { id: 2, name: "欧阳晨", role: "STUDENT" } },
+      });
+    if (path === "/api/dashboard")
+      return dashboardFails
+        ? route.fulfill({ status: 503, json: { error: "数据暂不可用" } })
+        : route.fulfill({ json: regressionDashboard });
+    if (path === "/api/rides/start") {
+      starts++;
+      await pending;
+      dashboardFails = true;
+      return route.fulfill({ json: {} });
+    }
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/?view=phone");
+  const phone = page.getByRole("region", { name: "青行手机 App" });
+  await phone.getByLabel("车辆编号", { exact: true }).fill("QX-REGRESSION");
+  await phone.getByRole("button", { name: "开锁", exact: true }).click();
+  await expect.poll(() => starts).toBe(1);
+  await expect(
+    phone.getByRole("button", { name: "开锁", exact: true }),
+  ).toBeDisabled();
+  await expect(page.getByRole("button", { name: "返回电脑端" })).toBeDisabled();
+  release();
+  await expect(phone.getByRole("alert")).toContainText("数据暂不可用");
+  await expect(
+    phone.getByText("操作已保存，但页面刷新失败；请点击刷新数据获取最新状态"),
+  ).toBeVisible();
+  dashboardFails = false;
+  await phone.getByRole("button", { name: "刷新数据", exact: true }).click();
+  await expect(phone.getByRole("alert")).toHaveCount(0);
+  expect(starts).toBe(1);
+});
+
 test.describe("北京时间的运营分析", () => {
   test.use({ timezoneId: "America/Los_Angeles" });
 
